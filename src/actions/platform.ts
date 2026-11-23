@@ -291,6 +291,49 @@ export async function setFeatureOverrideAction(
   revalidatePath(`/platform/tenants/${tenantId}`);
 }
 
+export async function applyFeatureOverridesBatchAction(
+  tenantId: string,
+  overrides: Partial<Record<FeatureKey, boolean>>,
+  presetLabel: string
+) {
+  const ctx = await requirePlatformAdmin();
+  await withPlatformTx(async (client) => {
+    const res = await client.query<{
+      tier: TierKey;
+      feature_overrides: Partial<Record<FeatureKey, boolean>>;
+      max_branches: number;
+    }>("SELECT tier, feature_overrides, max_branches FROM public.tenants WHERE id = $1 FOR UPDATE", [tenantId]);
+    const t = res.rows[0];
+    if (!t) throw new Error("Tenant not found");
+
+    const wasStockEnabled = isFeatureEnabled(t, "dynamic_stock_matrix");
+    const nextOverrides: Partial<Record<FeatureKey, boolean>> = { ...overrides };
+
+    let nextMaxBranches = t.max_branches;
+    if (isFeatureEnabled({ tier: t.tier, feature_overrides: nextOverrides }, "stock_transfers") && nextMaxBranches < 2) {
+      nextMaxBranches = 2;
+    }
+
+    const nowStockEnabled = isFeatureEnabled({ tier: t.tier, feature_overrides: nextOverrides }, "dynamic_stock_matrix");
+    const showOutdated = !wasStockEnabled && nowStockEnabled;
+
+    await client.query(
+      `UPDATE public.tenants
+       SET feature_overrides = $1, max_branches = $2, stock_outdated_banner = stock_outdated_banner OR $3
+       WHERE id = $4`,
+      [JSON.stringify(nextOverrides), nextMaxBranches, showOutdated, tenantId]
+    );
+
+    await client.query(
+      `INSERT INTO public.audit_logs (tenant_id, actor_id, action, entity_type, entity_id, metadata)
+       VALUES ($1, $2, 'platform.feature_preset_applied', 'tenant', $1::text, $3)`,
+      [tenantId, ctx.user.id, JSON.stringify({ presetLabel, overrideCount: Object.keys(nextOverrides).length })]
+    );
+  });
+  revalidatePath(`/platform/tenants/${tenantId}`);
+  revalidatePath("/platform/tenants");
+}
+
 export async function updateTenantQuotasAndStatusAction(
   tenantId: string,
   input: {

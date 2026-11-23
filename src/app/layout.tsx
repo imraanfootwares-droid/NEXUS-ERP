@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk, Syne } from "next/font/google";
 import { Toaster } from "sonner";
 import { DevPreviewSwitcher } from "@/components/dev/dev-preview-switcher";
+import { NavigationProgress } from "@/components/ui/navigation-progress";
 import { isDevPreviewAllowed } from "@/lib/dev/preview";
 import "./globals.css";
 
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable} ${syne.variable}`}>
       <body className="font-sans antialiased bg-[#F8F9FB] text-slate-900">
+        <NavigationProgress />
         {children}
         {isDevPreviewAllowed() && <DevPreviewSwitcher />}
         <Toaster position="top-right" richColors closeButton />

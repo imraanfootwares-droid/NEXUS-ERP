@@ -1,9 +1,11 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Badge } from "@/components/ui/primitives";
 import { withPlatformTx } from "@/lib/db";
 import type { TenantRow } from "@/types/database";
-import { TenantDetailControls } from "@/app/platform/_client";
+import {
+  TenantStudioClient,
+  type TenantStudioStats,
+  type TenantStudioUser,
+} from "@/app/platform/_tenant-studio-client";
 
 export const dynamic = "force-dynamic";
 
@@ -14,45 +16,34 @@ export default async function PlatformTenantDetailPage({
 }) {
   const { id } = await params;
 
+  // Fetch tenant, users, and live telemetry in one parallel pipelined batch
   const data = await withPlatformTx(async (client) => {
-    const tRes = await client.query<TenantRow>("SELECT * FROM public.tenants WHERE id = $1", [id]);
+    const [tRes, uRes, statsRes] = await Promise.all([
+      client.query<TenantRow>("SELECT * FROM public.tenants WHERE id = $1", [id]),
+      client.query<TenantStudioUser>(
+        "SELECT id, full_name, username, email, role, is_active FROM public.profiles WHERE tenant_id = $1 ORDER BY role, created_at",
+        [id]
+      ),
+      client.query<{ branch_count: string; product_count: string; invoice_count: string }>(
+        `SELECT
+           (SELECT COUNT(*) FROM public.branches WHERE tenant_id = $1)::text AS branch_count,
+           (SELECT COUNT(*) FROM public.products WHERE tenant_id = $1 AND is_active = true)::text AS product_count,
+           (SELECT COUNT(*) FROM public.invoices WHERE tenant_id = $1 AND status <> 'cancelled')::text AS invoice_count`,
+        [id]
+      ),
+    ]);
+
     if (tRes.rows.length === 0) return null;
-    const uRes = await client.query<{
-      id: string;
-      full_name: string;
-      username: string | null;
-      email: string | null;
-      role: string;
-      is_active: boolean;
-    }>(
-      "SELECT id, full_name, username, email, role, is_active FROM public.profiles WHERE tenant_id = $1 ORDER BY role, created_at",
-      [id]
-    );
-    return { tenant: tRes.rows[0], users: uRes.rows };
+    const s = statsRes.rows[0];
+    const stats: TenantStudioStats = {
+      branchCount: Number(s?.branch_count ?? 0),
+      productCount: Number(s?.product_count ?? 0),
+      invoiceCount: Number(s?.invoice_count ?? 0),
+    };
+    return { tenant: tRes.rows[0], users: uRes.rows, stats };
   });
 
   if (!data) notFound();
 
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <Link href="/platform/tenants" className="text-xs text-sky-600 hover:underline">
-            ← Back to Tenants
-          </Link>
-          <div className="flex items-center gap-2 mt-1">
-            <h1 className="font-display text-2xl font-bold text-slate-900">{data.tenant.name}</h1>
-            <Badge variant={data.tenant.status === "active" ? "success" : "danger"}>
-              {data.tenant.status}
-            </Badge>
-          </div>
-          <p className="text-xs text-slate-500">
-            Slug: <code>{data.tenant.slug}</code> • Vertical: {data.tenant.vertical_key}
-          </p>
-        </div>
-      </div>
-
-      <TenantDetailControls tenant={data.tenant} users={data.users} />
-    </div>
-  );
+  return <TenantStudioClient tenant={data.tenant} users={data.users} stats={data.stats} />;
 }

@@ -25,8 +25,8 @@ function createPool(): Pool {
   }
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
-    max: 5,
-    idleTimeoutMillis: 10_000,
+    max: 10,
+    idleTimeoutMillis: 20_000,
     connectionTimeoutMillis: 10_000,
     ssl: env.DATABASE_URL.includes("localhost") || env.DATABASE_URL.includes("127.0.0.1")
       ? false
@@ -63,11 +63,14 @@ export async function withTenantTx<T>(
     return fn(createMockClient());
   }
   const client = await getPool().connect();
-  await client.query("BEGIN");
-  await client.query(
-    "SELECT set_config('app.tenant_id', $1, true), set_config('app.is_platform_admin', $2, true)",
-    [ctx.tenantId ?? "", ctx.isPlatformAdmin ? "true" : "false"]
-  );
+  // Pipeline BEGIN + transaction-local RLS GUC setup in a single network round-trip
+  await Promise.all([
+    client.query("BEGIN"),
+    client.query(
+      "SELECT set_config('app.tenant_id', $1, true), set_config('app.is_platform_admin', $2, true)",
+      [ctx.tenantId ?? "", ctx.isPlatformAdmin ? "true" : "false"]
+    ),
+  ]);
   try {
     const result = await fn(client);
     await client.query("COMMIT");
