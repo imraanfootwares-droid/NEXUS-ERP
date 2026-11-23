@@ -197,6 +197,7 @@ export async function deleteProductAction(productId: string) {
   revalidatePath("/dashboard/stock");
   revalidatePath("/dashboard/billing/new");
   revalidatePath("/dashboard/storefront");
+  revalidatePath(`/s/${ctx.tenant.slug}`);
 }
 
 export async function restoreProductAction(productId: string) {
@@ -207,7 +208,7 @@ export async function restoreProductAction(productId: string) {
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
       await client.query(
-        "UPDATE public.products SET is_active = true WHERE id = $1 AND tenant_id = $2",
+        "UPDATE public.products SET is_active = true, is_published_web = true WHERE id = $1 AND tenant_id = $2",
         [productId, ctx.tenant.id]
       );
       await client.query(
@@ -219,6 +220,7 @@ export async function restoreProductAction(productId: string) {
   revalidatePath("/dashboard/stock");
   revalidatePath("/dashboard/billing/new");
   revalidatePath("/dashboard/storefront");
+  revalidatePath(`/s/${ctx.tenant.slug}`);
 }
 
 export async function updateSupplierAction(input: {

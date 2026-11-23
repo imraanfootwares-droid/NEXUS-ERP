@@ -71,7 +71,8 @@ export function ErpShell({
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
-  const [pwOpen, setPwOpen] = useState(ctx.user.must_change_password);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwBannerDismissed, setPwBannerDismissed] = useState(false);
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
@@ -272,6 +273,34 @@ export function ErpShell({
         </div>
       )}
 
+      {ctx.user.must_change_password && !ctx.impersonation && !pwBannerDismissed && (
+        <div className="no-print bg-amber-50 border-b border-amber-200 text-amber-950 px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-2">
+            <KeyRound className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+            <span>
+              You are signed in with a temporary password. Replace it anytime for better account security.
+            </span>
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPwOpen(true)}
+              className="rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-700 cursor-pointer"
+            >
+              Set New Password
+            </button>
+            <button
+              type="button"
+              onClick={() => setPwBannerDismissed(true)}
+              aria-label="Dismiss password reminder"
+              className="rounded-lg p-1 text-amber-800 hover:bg-amber-200/70 cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {tenant.stock_outdated_banner && (
         <div className="no-print bg-amber-100 border-b border-amber-300 text-amber-950 px-4 py-2 text-xs flex items-center justify-between">
           <span>Stock tracking was re-enabled. Please run a Stock Count in Stock &amp; Matrix to verify physical balances.</span>
@@ -373,10 +402,10 @@ export function ErpShell({
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400">
-                <span className="font-medium text-slate-500">{tenant.name}</span>
-                <ChevronRight className="h-3.5 w-3.5" />
-                <span className="font-semibold text-slate-900">{currentSectionLabel}</span>
+              <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400 min-w-0">
+                <span className="font-medium text-slate-500 truncate max-w-[130px]">{tenant.name}</span>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                <span className="font-semibold text-slate-900 truncate">{currentSectionLabel}</span>
               </div>
               {ctx.branches.length > 0 && (
                 <Select
@@ -385,7 +414,7 @@ export function ErpShell({
                     setActiveBranchId(e.target.value);
                     window.localStorage.setItem(`nexus:branch:${tenant.id}`, e.target.value);
                   }}
-                  className="max-w-[165px] sm:max-w-[215px] min-h-[36px] text-xs bg-slate-50/70"
+                  className="w-[150px] sm:w-[190px] shrink-0 min-h-[36px] text-xs bg-slate-50/70"
                 >
                   {ctx.branches.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -396,7 +425,7 @@ export function ErpShell({
               )}
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-2.5">
+            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setSyncOpen(true)}
@@ -535,11 +564,9 @@ export function ErpShell({
       {/* Change Password Modal */}
       <Dialog
         open={pwOpen}
-        onClose={() => {
-          if (!ctx.user.must_change_password) setPwOpen(false);
-        }}
+        onClose={() => setPwOpen(false)}
         title={ctx.user.must_change_password ? "Set Your New Password" : "Change Password"}
-        subtitle={ctx.user.must_change_password ? "Please replace your temporary password to continue." : ""}
+        subtitle={ctx.user.must_change_password ? "Replace your temporary password with a personal password." : ""}
       >
         <form onSubmit={handlePasswordChange} className="space-y-3">
           <div>
@@ -550,9 +577,14 @@ export function ErpShell({
             <Label>New Password (min 8 chars)</Label>
             <Input type="password" minLength={8} value={newPw} onChange={(e) => setNewPw(e.target.value)} required />
           </div>
-          <Button type="submit" className="w-full" disabled={pwBusy}>
-            Update Password
-          </Button>
+          <div className="flex items-center gap-2 pt-1">
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setPwOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="flex-1" disabled={pwBusy}>
+              {pwBusy ? "Updating..." : "Update Password"}
+            </Button>
+          </div>
         </form>
       </Dialog>
     </div>
