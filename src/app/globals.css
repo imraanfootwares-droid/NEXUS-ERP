@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-logo: var(--font-logo), ui-sans-serif, system-ui, sans-serif;
+}
+
+.font-logo {
+  font-family: var(--font-logo), sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-display), sans-serif;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  @page {
+    margin: 6mm;
+  }
+  .print-80mm {
+    width: 76mm !important;
+    margin: 0 auto !important;
+    font-size: 11px !important;
+  }
+  .print-58mm {
+    width: 54mm !important;
+    margin: 0 auto !important;
+    font-size: 10px !important;
+  }
+}

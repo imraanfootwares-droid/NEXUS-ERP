@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Next.js build & caches
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local environment & secrets (never commit to public repos)
+.env
+.env*.local
+.env.development
+.env.production
+!.env.example
+
+# Platform & Neon local links
+.neon
+.vercel/
+
+# Testing & logs
+coverage/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
