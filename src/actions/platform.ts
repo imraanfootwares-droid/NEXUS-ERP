@@ -171,7 +171,7 @@ export async function provisionTenantAction(input: {
 
     await client.query(
       `INSERT INTO public.audit_logs (tenant_id, actor_id, action, entity_type, entity_id, metadata)
-       VALUES ($1, $2, 'platform.tenant_provisioned', 'tenant', $1::text, $3)`,
+       VALUES ($1, $2, 'platform.tenant_provisioned', 'tenant', ($1::uuid)::text, $3)`,
       [tid, ctx.user.id, JSON.stringify({ tier: input.tier, vertical: input.verticalKey })]
     );
 
@@ -220,7 +220,7 @@ export async function updateTenantTierAction(tenantId: string, nextTier: TierKey
 
     await client.query(
       `INSERT INTO public.audit_logs (tenant_id, actor_id, action, entity_type, entity_id, metadata)
-       VALUES ($1, $2, 'platform.tier_changed', 'tenant', $1::text, $3)`,
+       VALUES ($1, $2, 'platform.tier_changed', 'tenant', ($1::uuid)::text, $3)`,
       [tenantId, ctx.user.id, JSON.stringify({ from: old.tier, to: nextTier })]
     );
   });
@@ -284,7 +284,7 @@ export async function setFeatureOverrideAction(
 
     await client.query(
       `INSERT INTO public.audit_logs (tenant_id, actor_id, action, entity_type, entity_id, metadata)
-       VALUES ($1, $2, 'platform.feature_override', 'tenant', $1::text, $3)`,
+       VALUES ($1, $2, 'platform.feature_override', 'tenant', ($1::uuid)::text, $3)`,
       [tenantId, ctx.user.id, JSON.stringify({ featureKey, mode })]
     );
   });
@@ -326,7 +326,7 @@ export async function applyFeatureOverridesBatchAction(
 
     await client.query(
       `INSERT INTO public.audit_logs (tenant_id, actor_id, action, entity_type, entity_id, metadata)
-       VALUES ($1, $2, 'platform.feature_preset_applied', 'tenant', $1::text, $3)`,
+       VALUES ($1, $2, 'platform.feature_preset_applied', 'tenant', ($1::uuid)::text, $3)`,
       [tenantId, ctx.user.id, JSON.stringify({ presetLabel, overrideCount: Object.keys(nextOverrides).length })]
     );
   });
@@ -375,7 +375,7 @@ export async function updateTenantQuotasAndStatusAction(
 
     await client.query(
       `INSERT INTO public.audit_logs (tenant_id, actor_id, action, entity_type, entity_id, metadata)
-       VALUES ($1, $2, 'platform.tenant_updated', 'tenant', $1::text, $3)`,
+       VALUES ($1, $2, 'platform.tenant_updated', 'tenant', ($1::uuid)::text, $3)`,
       [tenantId, ctx.user.id, JSON.stringify({ status: input.status, maxBranches: input.maxBranches })]
     );
   });
@@ -521,7 +521,7 @@ export async function startImpersonationAction(tenantId: string, mode: "read" | 
   await withPlatformTx(async (client) => {
     await client.query(
       `INSERT INTO public.audit_logs (tenant_id, actor_id, action, entity_type, entity_id, metadata)
-       VALUES ($1, $2, 'platform.impersonation_started', 'tenant', $1::text, $3)`,
+       VALUES ($1, $2, 'platform.impersonation_started', 'tenant', ($1::uuid)::text, $3)`,
       [tenantId, ctx.user.id, JSON.stringify({ mode })]
     );
   });

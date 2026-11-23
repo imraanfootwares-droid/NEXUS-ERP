@@ -63,14 +63,11 @@ export async function withTenantTx<T>(
     return fn(createMockClient());
   }
   const client = await getPool().connect();
-  // Pipeline BEGIN + transaction-local RLS GUC setup in a single network round-trip
-  await Promise.all([
-    client.query("BEGIN"),
-    client.query(
-      "SELECT set_config('app.tenant_id', $1, true), set_config('app.is_platform_admin', $2, true)",
-      [ctx.tenantId ?? "", ctx.isPlatformAdmin ? "true" : "false"]
-    ),
-  ]);
+  await client.query("BEGIN");
+  await client.query(
+    "SELECT set_config('app.tenant_id', $1, true), set_config('app.is_platform_admin', $2, true)",
+    [ctx.tenantId ?? "", ctx.isPlatformAdmin ? "true" : "false"]
+  );
   try {
     const result = await fn(client);
     await client.query("COMMIT");
