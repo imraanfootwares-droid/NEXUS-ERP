@@ -9,7 +9,7 @@ import { GstinInput } from "@/components/ui/dynamic-fields";
 import { Button, Dialog, Form, Input, Label, Select, friendlyErrorMessage } from "@/components/ui/primitives";
 import { INDIAN_STATES } from "@/lib/constants/saas";
 import { PartyMoneyDialog, type PartyMoneyTarget } from "./party-money-dialog";
-import { PurchaseBillDialog, type PurchaseCatalogVariant } from "./purchase-bill-dialog";
+import { PurchaseBillDialog, type PurchaseCatalogVariant, type SizeRatioPreset } from "./purchase-bill-dialog";
 
 export type PartyDetails =
   | {
@@ -59,7 +59,11 @@ export function PartyActionsBar({
   tenantName: string;
   canEdit: boolean;
   /** Suppliers only: data for the New Purchase Bill popup. */
-  purchase?: { branches: Array<{ id: string; name: string }>; catalog: PurchaseCatalogVariant[] } | null;
+  purchase?: {
+    branches: Array<{ id: string; name: string }>;
+    catalog: PurchaseCatalogVariant[];
+    ratioPresets: SizeRatioPreset[];
+  } | null;
 }) {
   const router = useRouter();
   const isSup = details.type === "supplier";
@@ -165,6 +169,7 @@ export function PartyActionsBar({
           supplierName={details.name}
           branches={purchase.branches}
           catalog={purchase.catalog}
+          ratioPresets={purchase.ratioPresets}
         />
       )}
 

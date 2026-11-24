@@ -20,11 +20,46 @@ export interface PurchaseCatalogVariant {
 
 type PayMode = "cash" | "upi" | "bank_transfer" | "card";
 
+type EntryMode = "size" | "total" | "cartons";
+
 interface ProductBlock {
   key: string;
   productId: string;
   cost: string;
-  qty: Record<string, string>; // variant_id -> qty text
+  mode: EntryMode;
+  qty: Record<string, string>; // "size" mode: variant_id -> pairs typed
+  total: string; // "total" mode: all pairs together (mixed sizes)
+  cartons: string; // "cartons" mode
+  perCarton: string; // pairs in each carton
+  colour: string; // "" = all colours shared equally
+  split: string; // "equal" or a size-ratio preset name
+}
+
+export interface SizeRatioPreset {
+  name: string;
+  ratios: Record<string, number>;
+}
+
+const normSize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+
+/** Spread `total` pairs over variants by weight; whole pairs only, nothing lost. */
+function spread(total: number, targets: Array<{ id: string; w: number }>): Record<string, number> {
+  const out: Record<string, number> = {};
+  const live = targets.filter((t) => t.w > 0);
+  const sumW = live.reduce((s, t) => s + t.w, 0);
+  if (total <= 0 || sumW <= 0) return out;
+  const whole = Math.floor(total);
+  const raw = live.map((t) => ({ id: t.id, exact: (whole * t.w) / sumW }));
+  let given = 0;
+  for (const r of raw) {
+    out[r.id] = Math.floor(r.exact);
+    given += out[r.id];
+  }
+  raw
+    .sort((a, b) => (b.exact - Math.floor(b.exact)) - (a.exact - Math.floor(a.exact)))
+    .slice(0, whole - given)
+    .forEach((r) => (out[r.id] += 1));
+  return out;
 }
 
 interface OtherLine {
@@ -57,6 +92,7 @@ export function PurchaseBillDialog({
   supplierName,
   branches,
   catalog,
+  ratioPresets = [],
 }: {
   open: boolean;
   onClose: () => void;
@@ -64,6 +100,7 @@ export function PurchaseBillDialog({
   supplierName: string;
   branches: Array<{ id: string; name: string }>;
   catalog: PurchaseCatalogVariant[];
+  ratioPresets?: SizeRatioPreset[];
 }) {
   const router = useRouter();
   const [branchId, setBranchId] = useState(branches[0]?.id ?? "");
@@ -85,13 +122,34 @@ export function PurchaseBillDialog({
   }, [catalog, supplierId]);
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
+  /** Pairs per variant for a product, whatever way they were entered. */
+  const qtyFor = (b: ProductBlock): Record<string, number> => {
+    const p = productById.get(b.productId);
+    if (!p) return {};
+    if (b.mode === "size") {
+      const out: Record<string, number> = {};
+      for (const [vid, q] of Object.entries(b.qty)) if (num(q) > 0) out[vid] = num(q);
+      return out;
+    }
+    const total = b.mode === "cartons" ? num(b.cartons) * num(b.perCarton) : num(b.total);
+    const preset = ratioPresets.find((r) => r.name === b.split);
+    const ratioBySize = preset
+      ? new Map(Object.entries(preset.ratios).map(([k, v]) => [normSize(k), Number(v) || 0]))
+      : null;
+    let targets = p.variants
+      .filter((v) => !b.colour || attr(v.attributes, ["colour", "color"]) === b.colour)
+      .map((v) => ({ id: v.variant_id, w: ratioBySize ? ratioBySize.get(normSize(attr(v.attributes, ["size"]))) ?? 0 : 1 }));
+    if (targets.every((t) => t.w <= 0)) targets = targets.map((t) => ({ ...t, w: 1 }));
+    return spread(total, targets);
+  };
   const blockTotals = (b: ProductBlock) => {
-    const pairs = Object.values(b.qty).reduce((s, q) => s + num(q), 0);
+    const pairs = Object.values(qtyFor(b)).reduce((s, q) => s + q, 0);
     return { pairs, amount: pairs * num(b.cost) };
   };
-  const totalPairs = blocks.reduce((s, b) => s + blockTotals(b).pairs, 0) + others.reduce((s, o) => s + num(o.qty), 0);
+  const namedOthers = others.filter((o) => o.name.trim());
+  const totalPairs = blocks.reduce((s, b) => s + blockTotals(b).pairs, 0);
   const billTotal =
-    blocks.reduce((s, b) => s + blockTotals(b).amount, 0) + others.reduce((s, o) => s + num(o.qty) * num(o.rate), 0);
+    blocks.reduce((s, b) => s + blockTotals(b).amount, 0) + namedOthers.reduce((s, o) => s + num(o.qty) * num(o.rate), 0);
   const paidNum = Math.min(billTotal, num(paid));
 
   const reset = () => {
@@ -110,7 +168,21 @@ export function PurchaseBillDialog({
       toast.info(`${p.name} is already in this bill.`);
       return;
     }
-    setBlocks((prev) => [...prev, { key: nextKey(), productId, cost: String(p.variants[0]?.cost_price || ""), qty: {} }]);
+    setBlocks((prev) => [
+      ...prev,
+      {
+        key: nextKey(),
+        productId,
+        cost: String(p.variants[0]?.cost_price || ""),
+        mode: "size",
+        qty: {},
+        total: "",
+        cartons: "",
+        perCarton: "12",
+        colour: "",
+        split: "equal",
+      },
+    ]);
   };
 
   return (
@@ -122,8 +194,9 @@ export function PurchaseBillDialog({
           for (const b of blocks) {
             const p = productById.get(b.productId);
             if (!p) continue;
+            const qMap = qtyFor(b);
             for (const v of p.variants) {
-              const q = num(b.qty[v.variant_id] ?? "");
+              const q = qMap[v.variant_id] ?? 0;
               if (q <= 0) continue;
               const label = Object.values(v.attributes ?? {}).filter(Boolean).join(" / ");
               items.push({
@@ -218,14 +291,24 @@ export function PurchaseBillDialog({
             const colours = Array.from(new Set(p.variants.map((v) => attr(v.attributes, ["colour", "color"]))));
             const cell = new Map(p.variants.map((v) => [`${attr(v.attributes, ["colour", "color"])}|${attr(v.attributes, ["size"])}`, v]));
             const t = blockTotals(b);
+            const qMap = qtyFor(b);
+            const patch = (changes: Partial<ProductBlock>) =>
+              setBlocks((prev) => prev.map((x) => (x.key === b.key ? { ...x, ...changes } : x)));
             const setQty = (vid: string, val: string) =>
-              setBlocks((prev) => prev.map((x) => (x.key === b.key ? { ...x, qty: { ...x.qty, [vid]: val.replace(/[^0-9.]/g, "") } } : x)));
+              setBlocks((prev) => prev.map((x) => (x.key === b.key ? { ...x, qty: { ...x.qty, [vid]: val.replace(/[^0-9]/g, "") } } : x)));
+            const sizeSet = new Set(sizes.map(normSize));
+            const usablePresets = ratioPresets.filter((r) => Object.keys(r.ratios).some((k) => sizeSet.has(normSize(k))));
+            const editBySize = () => {
+              const q: Record<string, string> = {};
+              for (const [vid, n] of Object.entries(qMap)) if (n > 0) q[vid] = String(n);
+              patch({ mode: "size", qty: q });
+            };
             return (
               <div key={b.key} className="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-[14px] font-semibold text-slate-900">{p.name}</p>
-                    <p className="text-[11.5px] text-slate-500">{p.code} · type pairs for each size</p>
+                    <p className="text-[11.5px] text-slate-500">{p.code}</p>
                   </div>
                   <div className="flex items-end gap-2">
                     <div className="w-28">
@@ -246,6 +329,96 @@ export function PurchaseBillDialog({
                     </button>
                   </div>
                 </div>
+                <div className="grid grid-cols-3 gap-1 rounded-lg bg-[#ececee] p-[3px]" role="group" aria-label="How to enter quantity">
+                  {([
+                    ["size", "By size"],
+                    ["total", "Total pairs"],
+                    ["cartons", "Cartons"],
+                  ] as const).map(([m, label]) => (
+                    <button
+                      key={m}
+                      type="button"
+                      aria-pressed={b.mode === m}
+                      onClick={() => patch({ mode: m })}
+                      className={`min-h-[36px] cursor-pointer rounded-md px-2 text-[12.5px] font-semibold transition-all ${
+                        b.mode === m ? "bg-white text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,.1)]" : "text-[#55555b] hover:text-[#171717]"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {b.mode !== "size" && (
+                  <div className="space-y-2.5 rounded-lg bg-white p-2.5 shadow-[0_0_0_1px_rgba(0,0,0,.06)]">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {b.mode === "total" ? (
+                        <div className="col-span-2 sm:col-span-1">
+                          <Label>Total pairs</Label>
+                          <Input inputMode="numeric" value={b.total} onChange={(e) => patch({ total: e.target.value.replace(/[^0-9]/g, "") })} placeholder="e.g. 30" />
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <Label>Cartons</Label>
+                            <Input inputMode="numeric" value={b.cartons} onChange={(e) => patch({ cartons: e.target.value.replace(/[^0-9]/g, "") })} placeholder="e.g. 5" />
+                          </div>
+                          <div>
+                            <Label>Pairs in 1 carton</Label>
+                            <Input inputMode="numeric" value={b.perCarton} onChange={(e) => patch({ perCarton: e.target.value.replace(/[^0-9]/g, "") })} placeholder="e.g. 12" />
+                          </div>
+                        </>
+                      )}
+                      {colours.filter(Boolean).length > 1 && (
+                        <div>
+                          <Label>Colour</Label>
+                          <Select value={b.colour} onChange={(e) => patch({ colour: e.target.value })}>
+                            <option value="">Mixed colours</option>
+                            {colours.filter(Boolean).map((c) => (
+                              <option key={c} value={c}>{c} only</option>
+                            ))}
+                          </Select>
+                        </div>
+                      )}
+                      {sizes.filter(Boolean).length > 1 && (
+                        <div>
+                          <Label>Sizes</Label>
+                          <Select value={b.split} onChange={(e) => patch({ split: e.target.value })}>
+                            <option value="equal">Mixed (equal)</option>
+                            {usablePresets.map((r) => (
+                              <option key={r.name} value={r.name}>{r.name}</option>
+                            ))}
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                    {b.mode === "cartons" && num(b.cartons) > 0 && (
+                      <p className="text-[12.5px] font-medium text-slate-700">
+                        {num(b.cartons)} cartons × {num(b.perCarton)} pairs = <b>{(num(b.cartons) * num(b.perCarton)).toLocaleString("en-IN")} pairs</b>
+                      </p>
+                    )}
+                    {t.pairs > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[11.5px] text-slate-500">Goes into stock like this:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {p.variants
+                            .filter((v) => (qMap[v.variant_id] ?? 0) > 0)
+                            .sort((x, y) => sizeSort(attr(x.attributes, ["size"]), attr(y.attributes, ["size"])))
+                            .map((v) => (
+                              <span key={v.variant_id} className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11.5px] text-slate-700">
+                                {[attr(v.attributes, ["colour", "color"]), attr(v.attributes, ["size"])].filter(Boolean).join(" ")}: {qMap[v.variant_id]}
+                              </span>
+                            ))}
+                        </div>
+                        <button type="button" onClick={editBySize} className="cursor-pointer text-[12px] font-semibold text-sky-700 hover:underline">
+                          Change pairs size by size →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {b.mode === "size" && (
                 <div className="overflow-x-auto rounded-lg bg-white shadow-[0_0_0_1px_rgba(0,0,0,.06)]">
                   <table className="w-full text-[12.5px]">
                     <thead>
@@ -284,6 +457,7 @@ export function PurchaseBillDialog({
                     </tbody>
                   </table>
                 </div>
+                )}
                 <p className="text-right text-[12.5px] text-slate-600">
                   {t.pairs.toLocaleString("en-IN")} pairs × {money(num(b.cost))} = <span className="font-semibold text-slate-900">{money(t.amount)}</span>
                 </p>
@@ -326,7 +500,10 @@ export function PurchaseBillDialog({
 
         <div className="space-y-3 rounded-xl bg-[#171717] p-3.5 text-white">
           <div className="flex items-center justify-between text-[13px] text-white/70">
-            <span>{totalPairs.toLocaleString("en-IN")} pairs / items</span>
+            <span>
+              {totalPairs.toLocaleString("en-IN")} pairs into stock
+              {namedOthers.length > 0 ? ` · ${namedOthers.length} other item${namedOthers.length > 1 ? "s" : ""}` : ""}
+            </span>
             <span className="font-mono text-xl font-semibold text-white">{money(billTotal)}</span>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -351,7 +528,7 @@ export function PurchaseBillDialog({
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={billTotal <= 0 && totalPairs <= 0}>
+          <Button type="submit" disabled={totalPairs <= 0 && namedOthers.length === 0}>
             <PackagePlus className="h-4 w-4" /> Save Bill & Add Stock
           </Button>
         </div>

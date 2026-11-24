@@ -7,7 +7,7 @@ import { withTenantTx } from "@/lib/db";
 import { resolveLedgerConfig } from "@/lib/ledger/defaults";
 import { loadPartyLedger, type PartyType } from "@/lib/ledger/party-ledger";
 import { PartyActionsBar, type PartyDetails } from "@/components/ledger/party-actions-bar";
-import type { PurchaseCatalogVariant } from "@/components/ledger/purchase-bill-dialog";
+import type { PurchaseCatalogVariant, SizeRatioPreset } from "@/components/ledger/purchase-bill-dialog";
 import { PartyLedgerClient } from "./page-client";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +59,7 @@ export default async function PartyLedgerPage({
         if (r.rows[0]) details = { type: "supplier", ...r.rows[0] };
       }
       let catalog: PurchaseCatalogVariant[] = [];
+      let ratioPresets: SizeRatioPreset[] = [];
       if (partyType === "supplier") {
         const v = await client.query<PurchaseCatalogVariant>(
           `SELECT pv.id AS variant_id, p.id AS product_id, p.name AS product_name, p.model_code,
@@ -71,13 +72,18 @@ export default async function PartyLedgerPage({
           [ctx.tenant!.id]
         );
         catalog = v.rows;
+        const ax = await client.query<{ ratio_presets: SizeRatioPreset[] | null }>(
+          "SELECT ratio_presets FROM public.variant_axis_definitions WHERE tenant_id = $1",
+          [ctx.tenant!.id]
+        );
+        ratioPresets = ax.rows.flatMap((a) => (Array.isArray(a.ratio_presets) ? a.ratio_presets : []));
       }
-      return { statement, details, catalog };
+      return { statement, details, catalog, ratioPresets };
     }
   );
 
   if (!loaded) notFound();
-  const { statement, details, catalog } = loaded;
+  const { statement, details, catalog, ratioPresets } = loaded;
   const purchase =
     partyType === "supplier"
       ? {
@@ -85,6 +91,7 @@ export default async function PartyLedgerPage({
             .filter((b) => !b.is_read_only)
             .map((b) => ({ id: b.id, name: b.name })),
           catalog,
+          ratioPresets,
         }
       : null;
 
