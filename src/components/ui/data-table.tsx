@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronsUpDown, Search } from "lucide-react";
 import { Pager } from "./pagination";
 import { Input } from "./primitives";
@@ -24,6 +25,7 @@ export function DataTable<T>({
   pageSize = 20,
   emptyMessage = "No records found.",
   actions,
+  rowHref,
 }: {
   data: T[];
   columns: ColumnDef<T>[];
@@ -33,7 +35,18 @@ export function DataTable<T>({
   pageSize?: number;
   emptyMessage?: string;
   actions?: React.ReactNode;
+  /** When set, tapping a row (outside its buttons/links) opens this page. */
+  rowHref?: (row: T) => string;
 }) {
+  const router = useRouter();
+  const openRow = (row: T, e: React.MouseEvent<HTMLElement>) => {
+    if (!rowHref) return;
+    const el = e.target as HTMLElement;
+    if (el.closest("a,button,input,select,textarea,label,[role='button']")) return;
+    const href = rowHref(row);
+    if (e.metaKey || e.ctrlKey) window.open(href, "_blank");
+    else router.push(href);
+  };
   const [query, setQuery] = useState("");
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
@@ -129,7 +142,11 @@ export function DataTable<T>({
               </tr>
             ) : (
               paginated.map((row) => (
-                <tr key={rowKey(row)}>
+                <tr
+                  key={rowKey(row)}
+                  onClick={rowHref ? (e) => openRow(row, e) : undefined}
+                  className={rowHref ? "cursor-pointer transition-colors hover:bg-[#fafafa]" : undefined}
+                >
                   {columns.map((col) => (
                     <td key={col.key} className={`px-4 py-2.5 text-[#27272a] ${col.className ?? ""}`}>
                       {col.render(row)}
@@ -153,7 +170,11 @@ export function DataTable<T>({
             const primary = columns.find((c) => c.mobilePrimary) ?? columns[0];
             const rest = columns.filter((c) => c.key !== primary.key && !c.hideOnMobile);
             return (
-              <div key={rowKey(row)} className="ui-surface p-3.5 space-y-2">
+              <div
+                key={rowKey(row)}
+                onClick={rowHref ? (e) => openRow(row, e) : undefined}
+                className={`ui-surface p-3.5 space-y-2 ${rowHref ? "cursor-pointer active:bg-[#fafafa]" : ""}`}
+              >
                 <div className="font-medium text-slate-900">{primary.render(row)}</div>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
                   {rest.map((col) => (

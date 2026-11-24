@@ -39,11 +39,14 @@ export function PartyLedgerClient({
   statement,
   ledgerConfig,
   canEdit,
+  actions,
 }: {
   tenantName: string;
   statement: PartyLedgerStatement;
   ledgerConfig: LedgerConfig;
   canEdit: boolean;
+  /** Add / Deduct, Remind, Edit, Delete — rendered under the party name. */
+  actions?: React.ReactNode;
 }) {
   const router = useRouter();
   const { party, rows, totalDebit, totalCredit, closingBalance } = statement;
@@ -182,6 +185,7 @@ export function PartyLedgerClient({
             {party.gstin ? ` • GSTIN: ${party.gstin}` : ""}
             {party.address ? ` • ${party.address}` : ""}
           </p>
+          {actions ? <div className="pt-1">{actions}</div> : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

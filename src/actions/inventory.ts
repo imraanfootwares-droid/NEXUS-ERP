@@ -309,16 +309,25 @@ export async function deleteSupplierAction(supplierId: string) {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "suppliers.manage", { isMutation: true });
 
-  await withTenantTx(
-    { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
-    async (client) => {
-      await client.query("DELETE FROM public.suppliers WHERE id = $1 AND tenant_id = $2", [
-        supplierId,
-        ctx.tenant.id,
-      ]);
+  try {
+    await withTenantTx(
+      { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
+      async (client) => {
+        await client.query("DELETE FROM public.suppliers WHERE id = $1 AND tenant_id = $2", [
+          supplierId,
+          ctx.tenant.id,
+        ]);
+      }
+    );
+  } catch (err) {
+    if ((err as { code?: string })?.code === "23503") {
+      return { ok: false as const, error: "This supplier has purchase bills or payments, so it can't be deleted." };
     }
-  );
+    throw err;
+  }
   revalidatePath("/dashboard/operations");
+  revalidatePath("/dashboard/customers");
+  return { ok: true as const };
 }
 
 export async function createProductWithVariantsAction(input: {

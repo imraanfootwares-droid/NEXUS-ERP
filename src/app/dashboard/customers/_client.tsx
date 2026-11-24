@@ -4,21 +4,12 @@ import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { History, MessageCircle, Package, Pencil, Plus, Trash2, Wallet, X } from "lucide-react";
-import { Paged } from "@/components/ui/pagination";
+import { ChevronRight, Package, Plus, X } from "lucide-react";
 import { toast } from "sonner";
-import { InlineRowsSkeleton } from "@/components/ui/page-skeletons";
 import { TierLockOverlay } from "@/components/ui/kpi-grid";
-import { collectCustomerDueAction } from "@/actions/billing";
-import { recordPartyMoneyTransactionAction } from "@/actions/party-ledger";
 import {
   createCustomerAction,
   createSupplierAction,
-  deleteCustomerAction,
-  deleteSupplierAction,
-  getCustomerHistoryAction,
-  getSupplierHistoryAction,
-  recordSupplierPaymentAction,
   updateCustomerAction,
   updateSupplierAction,
 } from "@/actions/inventory";
@@ -26,7 +17,7 @@ import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 import { GstinInput } from "@/components/ui/dynamic-fields";
 import { Form, Badge, Button, Dialog, Input, Label, Select, Tabs } from "@/components/ui/primitives";
 import { StatTray } from "@/components/ui/spark";
-import type { CustomerRow, PaymentMode } from "@/types/database";
+import type { CustomerRow } from "@/types/database";
 
 type CustomerWithStats = CustomerRow & { total_spent: string; oldest_due_days: number };
 
@@ -46,14 +37,6 @@ export interface SupplierLedgerRow {
   bill_count: number;
 }
 
-function normalizeIndiaPhone(phone: string | null): string | null {
-  if (!phone) return null;
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length === 10) return `91${digits}`;
-  if (digits.length >= 11) return digits;
-  return null;
-}
-
 export function CustomersClient({
   customers,
   suppliers = [],
@@ -63,7 +46,6 @@ export function CustomersClient({
   canManage,
   canManageSuppliers = false,
   initialTab = "customers",
-  tenantName,
 }: {
   customers: CustomerWithStats[];
   suppliers?: SupplierLedgerRow[];
@@ -96,43 +78,7 @@ export function CustomersClient({
     setAddOpen(true);
   };
 
-  const openEditCustomer = (c: CustomerWithStats) => {
-    setEditingId(c.id);
-    setName(c.name);
-    setPhone(c.phone ?? "");
-    setGstin(c.gstin ?? "");
-    setStateCode(c.state_code ?? "33");
-    setCustType(c.customer_type);
-    setDiscPct(Number(c.default_discount_pct ?? 0));
-    setCreditLimit(Number(c.credit_limit ?? 0));
-    setAddOpen(true);
-  };
 
-  const [payTarget, setPayTarget] = useState<CustomerWithStats | null>(null);
-  const [payAmt, setPayAmt] = useState(0);
-  const [payMode, setPayMode] = useState<PaymentMode>("upi");
-
-  const [histTarget, setHistTarget] = useState<CustomerWithStats | null>(null);
-  const [histLoading, setHistLoading] = useState(false);
-  const [histRows, setHistRows] = useState<
-    Array<{ id: string; invoice_number: string | null; invoice_type: string; grand_total: string; paid_amount: string; due_amount: string; status: string; created_at: string }>
-  >([]);
-
-  const openHistory = async (c: CustomerWithStats) => {
-    setHistTarget(c);
-    setHistLoading(true);
-    try {
-      const rows = await getCustomerHistoryAction(c.id);
-      setHistRows(rows);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load history");
-      setHistTarget(null);
-    } finally {
-      setHistLoading(false);
-    }
-  };
-
-  // Supplier right-sidebar states
   const [supModalOpen, setSupModalOpen] = useState(false);
   const [editSupId, setEditSupId] = useState<string | null>(null);
   const [supName, setSupName] = useState("");
@@ -170,45 +116,6 @@ export function CustomersClient({
     setSupProducts((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const [supPayTarget, setSupPayTarget] = useState<SupplierLedgerRow | null>(null);
-  const [supPayAmt, setSupPayAmt] = useState(0);
-  const [supPayMode, setSupPayMode] = useState<PaymentMode>("bank_transfer");
-  const [supPayRef, setSupPayRef] = useState("");
-
-  const [supHistTarget, setSupHistTarget] = useState<SupplierLedgerRow | null>(null);
-  const [supHistLoading, setSupHistLoading] = useState(false);
-  const [supHistRows, setSupHistRows] = useState<
-    Array<{ id: string; bill_number: string | null; purchase_type: string; total_amount: string; paid_amount: string; created_at: string }>
-  >([]);
-
-  // Unified Add / Deduct Money transaction modal (works for both Customer & Supplier!)
-  const [txTarget, setTxTarget] = useState<{
-    partyType: "customer" | "supplier";
-    id: string;
-    name: string;
-    currentDue: number;
-  } | null>(null);
-  const [txDirection, setTxDirection] = useState<"add" | "deduct">("deduct");
-  const [txAmount, setTxAmount] = useState("");
-  const [txMode, setTxMode] = useState<PaymentMode>("cash");
-  const [txVoucher, setTxVoucher] = useState("");
-  const [txNote, setTxNote] = useState("");
-  const [txSaving, setTxSaving] = useState(false);
-
-  const openMoneyTx = (
-    partyType: "customer" | "supplier",
-    id: string,
-    name: string,
-    currentDue: number
-  ) => {
-    setTxTarget({ partyType, id, name, currentDue });
-    setTxDirection(currentDue > 0 ? "deduct" : "add");
-    setTxAmount("");
-    setTxMode("cash");
-    setTxVoucher("");
-    setTxNote("");
-  };
-
   const openCreateSupplier = () => {
     setEditSupId(null);
     setSupName("");
@@ -220,33 +127,6 @@ export function CustomersClient({
     setSupProducts([]);
     setSupProductInput("");
     setSupModalOpen(true);
-  };
-
-  const openEditSupplier = (s: SupplierLedgerRow) => {
-    setEditSupId(s.id);
-    setSupName(s.name);
-    setSupPhone(s.phone ?? "");
-    setSupGstin(s.gstin ?? "");
-    setSupStateCode(s.state_code ?? "33");
-    setSupAddress(s.address ?? "");
-    setSupMat(s.material_type ?? "");
-    setSupProducts(Array.isArray(s.supplied_products) ? [...s.supplied_products] : []);
-    setSupProductInput("");
-    setSupModalOpen(true);
-  };
-
-  const openSupplierHistory = async (s: SupplierLedgerRow) => {
-    setSupHistTarget(s);
-    setSupHistLoading(true);
-    try {
-      const rows = await getSupplierHistoryAction(s.id);
-      setSupHistRows(rows);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load supplier history");
-      setSupHistTarget(null);
-    } finally {
-      setSupHistLoading(false);
-    }
   };
 
   const customerColumns: ColumnDef<CustomerWithStats>[] = [
@@ -299,70 +179,16 @@ export function CustomersClient({
     },
     {
       key: "actions",
-      header: "Actions",
-      render: (r) => {
-        const waPhone = normalizeIndiaPhone(r.phone);
-        const due = Number(r.current_due);
-        return (
-          <div className="flex flex-wrap gap-1.5">
-            <Link
-              href={`/dashboard/customers/ledger/customer/${r.id}`}
-              className="inline-flex items-center gap-1 rounded-[10px] border border-sky-300 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-100"
-            >
-              Transactions
-            </Link>
-            {canManage && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => openMoneyTx("customer", r.id, r.name, due)}
-              >
-                <Wallet className="h-3.5 w-3.5" /> Add / Deduct ₹
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" onClick={() => openHistory(r)}>
-              <History className="h-3.5 w-3.5" /> Bills
-            </Button>
-            {due > 0 && waPhone && (
-              <a
-                href={`https://wa.me/${waPhone}?text=${encodeURIComponent(
-                  `Hello ${r.name}, gentle reminder from ${tenantName}: your pending balance is ₹${due.toLocaleString("en-IN")}. Please share payment update. Thank you!`
-                )}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-[10px] border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
-              >
-                <MessageCircle className="h-3.5 w-3.5" /> Remind
-              </a>
-            )}
-            {canManage && (
-              <>
-                <button
-                  type="button"
-                  title="Edit Customer"
-                  onClick={() => openEditCustomer(r)}
-                  className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="Delete Customer"
-                  onClick={async () => {
-                    if (!confirm(`Archive customer "${r.name}"?`)) return;
-                    await deleteCustomerAction(r.id);
-                    toast.success(`Archived ${r.name}`);
-                    router.refresh();
-                  }}
-                  className="cursor-pointer rounded-lg bg-white p-1.5 text-rose-600 shadow-[0_0_0_1px_rgba(0,0,0,.08)] transition-colors hover:bg-rose-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-          </div>
-        );
-      },
+      header: "",
+      className: "w-[1%] whitespace-nowrap text-right",
+      render: (r) => (
+        <Link
+          href={`/dashboard/customers/ledger/customer/${r.id}`}
+          className="inline-flex min-h-[36px] items-center gap-1 rounded-lg bg-[#171717] px-3 text-xs font-semibold text-white hover:bg-[#2a2a2a]"
+        >
+          Open <ChevronRight className="h-3.5 w-3.5" />
+        </Link>
+      ),
     },
   ];
 
@@ -379,17 +205,7 @@ export function CustomersClient({
         return (
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-1.5">
-              {canManageSuppliers ? (
-                <button
-                  type="button"
-                  onClick={() => openEditSupplier(s)}
-                  className="cursor-pointer text-left font-semibold text-slate-900 hover:text-sky-700 hover:underline"
-                >
-                  {s.name}
-                </button>
-              ) : (
-                <span className="font-semibold text-slate-900">{s.name}</span>
-              )}
+              <span className="font-semibold text-slate-900">{s.name}</span>
               {s.material_type && <Badge variant="default">{s.material_type}</Badge>}
             </div>
             <div className="text-[11px] text-slate-500">
@@ -447,61 +263,16 @@ export function CustomersClient({
     },
     {
       key: "actions",
-      header: "Actions",
-      render: (s) => {
-        const due = Number(s.current_due);
-        return (
-          <div className="flex flex-wrap gap-1.5">
-            <Link
-              href={`/dashboard/customers/ledger/supplier/${s.id}`}
-              className="inline-flex items-center gap-1 rounded-[10px] border border-sky-300 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-100"
-            >
-              Transactions
-            </Link>
-            {canManageSuppliers && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => openMoneyTx("supplier", s.id, s.name, due)}
-              >
-                <Wallet className="h-3.5 w-3.5" /> Add / Deduct ₹
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" onClick={() => openSupplierHistory(s)}>
-              <History className="h-3.5 w-3.5" /> Bills
-            </Button>
-            {canManageSuppliers && (
-              <>
-                <button
-                  type="button"
-                  title="Edit Supplier"
-                  onClick={() => openEditSupplier(s)}
-                  className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="Delete Supplier"
-                  onClick={async () => {
-                    if (!confirm(`Delete supplier "${s.name}"?`)) return;
-                    try {
-                      await deleteSupplierAction(s.id);
-                      toast.success(`Deleted ${s.name}`);
-                      router.refresh();
-                    } catch (err) {
-                      toast.error(err instanceof Error ? err.message : "Could not delete supplier.");
-                    }
-                  }}
-                  className="cursor-pointer rounded-lg bg-white p-1.5 text-rose-600 shadow-[0_0_0_1px_rgba(0,0,0,.08)] transition-colors hover:bg-rose-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-          </div>
-        );
-      },
+      header: "",
+      className: "w-[1%] whitespace-nowrap text-right",
+      render: (s) => (
+        <Link
+          href={`/dashboard/customers/ledger/supplier/${s.id}`}
+          className="inline-flex min-h-[36px] items-center gap-1 rounded-lg bg-[#171717] px-3 text-xs font-semibold text-white hover:bg-[#2a2a2a]"
+        >
+          Open <ChevronRight className="h-3.5 w-3.5" />
+        </Link>
+      ),
     },
   ];
 
@@ -545,6 +316,7 @@ export function CustomersClient({
               data={customers}
               columns={customerColumns}
               rowKey={(r) => r.id}
+              rowHref={(r) => `/dashboard/customers/ledger/customer/${r.id}`}
               searchPlaceholder="Search customer name, phone or GSTIN..."
               searchFilter={(r, q) =>
                 r.name.toLowerCase().includes(q) ||
@@ -585,6 +357,7 @@ export function CustomersClient({
             data={suppliers}
             columns={supplierColumns}
             rowKey={(s) => s.id}
+            rowHref={(s) => `/dashboard/customers/ledger/supplier/${s.id}`}
             searchPlaceholder="Search supplier name, product, phone, material or GSTIN..."
             searchFilter={(s, q) =>
               s.name.toLowerCase().includes(q) ||
@@ -681,79 +454,6 @@ export function CustomersClient({
         </Form>
       </Dialog>
 
-      <Dialog
-        open={Boolean(payTarget)}
-        onClose={() => setPayTarget(null)}
-        title={`Collect Due — ${payTarget?.name ?? ""}`}
-      >
-        <Form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (!payTarget) return;
-            await collectCustomerDueAction({ customerId: payTarget.id, amount: payAmt, mode: payMode });
-            toast.success("Payment collected.");
-            setPayTarget(null);
-            router.refresh();
-          }}
-          className="space-y-3"
-        >
-          <div><Label>Amount Received ₹</Label><Input type="number" min={1} value={payAmt} onChange={(e) => setPayAmt(Number(e.target.value))} required /></div>
-          <div>
-            <Label>Payment Mode</Label>
-            <Select value={payMode} onChange={(e) => setPayMode(e.target.value as PaymentMode)}>
-              <option value="upi">UPI</option>
-              <option value="cash">Cash</option>
-              <option value="bank_transfer">Bank Transfer</option>
-              <option value="card">Card</option>
-            </Select>
-          </div>
-          <Button type="submit" className="w-full">Record Collection</Button>
-        </Form>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(histTarget)}
-        onClose={() => setHistTarget(null)}
-        title={`Purchase & Return History — ${histTarget?.name ?? ""}`}
-        subtitle={histTarget ? `Total Spent: ₹${Number(histTarget.total_spent).toLocaleString("en-IN")} • Due: ₹${Number(histTarget.current_due).toLocaleString("en-IN")}` : ""}
-        maxWidth="max-w-xl"
-      >
-        {histLoading ? (
-          <InlineRowsSkeleton label="Loading customer ledger" />
-        ) : histRows.length === 0 ? (
-          <p className="py-6 text-center text-xs text-slate-500">No invoices recorded for this customer yet.</p>
-        ) : (
-          <div className="max-h-80 space-y-2 overflow-y-auto">
-            <Paged items={histRows} size={8}>{(pagedRows) => pagedRows.map((inv) => (
-              <div key={inv.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-xs">
-                <div>
-                  <p className="font-semibold text-slate-900">
-                    {inv.invoice_number || "DRAFT"}{" "}
-                    {inv.invoice_type === "return_credit_note" && <Badge variant="info">Credit Note</Badge>}
-                  </p>
-                  <p className="text-slate-500">
-                    {new Date(inv.created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })} • {inv.status}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-right">
-                    <p className="font-bold">₹{Number(inv.grand_total).toLocaleString("en-IN")}</p>
-                    {Number(inv.due_amount) > 0 && (
-                      <p className="text-[10px] text-rose-600">Due ₹{Number(inv.due_amount).toLocaleString("en-IN")}</p>
-                    )}
-                  </div>
-                  <Link
-                    href={`/dashboard/billing/${inv.id}/print`}
-                    className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50"
-                  >
-                    View
-                  </Link>
-                </div>
-              </div>
-            ))}</Paged>
-          </div>
-        )}
-      </Dialog>
 
       {/* Supplier Right-Side Sidebar Drawer */}
       {supModalOpen && typeof document !== "undefined" && (() => {
@@ -1009,235 +709,7 @@ export function CustomersClient({
         );
       })()}
 
-      <Dialog
-        open={Boolean(supPayTarget)}
-        onClose={() => setSupPayTarget(null)}
-        title={`Pay Supplier Due — ${supPayTarget?.name ?? ""}`}
-      >
-        <Form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (!supPayTarget) return;
-            await recordSupplierPaymentAction({
-              supplierId: supPayTarget.id,
-              amount: supPayAmt,
-              mode: supPayMode,
-              referenceNo: supPayRef || undefined,
-            });
-            toast.success("Supplier payment recorded.");
-            setSupPayTarget(null);
-            router.refresh();
-          }}
-          className="space-y-3"
-        >
-          <div><Label>Amount Paid ₹</Label><Input type="number" min={1} value={supPayAmt} onChange={(e) => setSupPayAmt(Number(e.target.value))} required /></div>
-          <div>
-            <Label>Payment Mode</Label>
-            <Select value={supPayMode} onChange={(e) => setSupPayMode(e.target.value as PaymentMode)}>
-              <option value="bank_transfer">Bank Transfer</option>
-              <option value="upi">UPI</option>
-              <option value="cash">Cash</option>
-              <option value="card">Card</option>
-            </Select>
-          </div>
-          <div><Label>Reference / UTR (optional)</Label><Input value={supPayRef} onChange={(e) => setSupPayRef(e.target.value)} placeholder="UTR / cheque / receipt no." /></div>
-          <Button type="submit" className="w-full">Record Payment</Button>
-        </Form>
-      </Dialog>
 
-      <Dialog
-        open={Boolean(supHistTarget)}
-        onClose={() => setSupHistTarget(null)}
-        title={`Supplier Bills — ${supHistTarget?.name ?? ""}`}
-        subtitle={supHistTarget ? `Total Billed: ₹${Number(supHistTarget.total_purchased).toLocaleString("en-IN")} • Due: ₹${Number(supHistTarget.current_due).toLocaleString("en-IN")}` : ""}
-        maxWidth="max-w-xl"
-      >
-        {supHistLoading ? (
-          <InlineRowsSkeleton label="Loading supplier ledger" />
-        ) : supHistRows.length === 0 ? (
-          <p className="py-6 text-center text-xs text-slate-500">No purchase bills recorded for this supplier yet.</p>
-        ) : (
-          <div className="max-h-80 space-y-2 overflow-y-auto">
-            <Paged items={supHistRows} size={8}>{(pagedRows) => pagedRows.map((po) => {
-              const due = Math.max(0, Number(po.total_amount) - Number(po.paid_amount));
-              return (
-                <div key={po.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-xs">
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      {po.bill_number || "Purchase Bill"}{" "}
-                      <Badge variant="default">{po.purchase_type.replace("_", " ")}</Badge>
-                    </p>
-                    <p className="text-slate-500">
-                      {new Date(po.created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold">₹{Number(po.total_amount).toLocaleString("en-IN")}</p>
-                    <p className="text-[10px] text-slate-500">
-                      Paid ₹{Number(po.paid_amount).toLocaleString("en-IN")}
-                      {due > 0 ? ` • Due ₹${due.toLocaleString("en-IN")}` : ""}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}</Paged>
-          </div>
-        )}
-      </Dialog>
-
-      {/* Unified Add / Deduct Money Transaction Dialog (Customer & Supplier) */}
-      <Dialog
-        open={Boolean(txTarget)}
-        onClose={() => setTxTarget(null)}
-        title={
-          txTarget
-            ? `${txTarget.partyType === "supplier" ? "Supplier" : "Customer"} Payment / Entry — ${txTarget.name}`
-            : "Record Transaction"
-        }
-        subtitle={
-          txTarget
-            ? `Current Balance Due: ₹${txTarget.currentDue.toLocaleString("en-IN")}`
-            : undefined
-        }
-      >
-        {txTarget && (() => {
-          const amtNum = Number(txAmount || 0);
-          const nextBal = Math.max(
-            0,
-            txTarget.currentDue + (txDirection === "add" ? amtNum : -amtNum)
-          );
-          const isSup = txTarget.partyType === "supplier";
-          return (
-            <Form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!amtNum || amtNum <= 0) {
-                  toast.error("Enter a valid amount.");
-                  return;
-                }
-                setTxSaving(true);
-                try {
-                  await recordPartyMoneyTransactionAction({
-                    partyType: txTarget.partyType,
-                    partyId: txTarget.id,
-                    direction: txDirection,
-                    amount: amtNum,
-                    mode: txMode,
-                    voucherNo: txVoucher || undefined,
-                    note: txNote || undefined,
-                  });
-                  toast.success(
-                    txDirection === "add"
-                      ? `Added ₹${amtNum.toLocaleString("en-IN")} to ${txTarget.name}'s balance.`
-                      : `Deducted ₹${amtNum.toLocaleString("en-IN")} (${isSup ? "paid to supplier" : "received from customer"}).`
-                  );
-                  setTxTarget(null);
-                  router.refresh();
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Could not save transaction.");
-                } finally {
-                  setTxSaving(false);
-                }
-              }}
-              className="space-y-4"
-            >
-              {/* Sleek Add vs Deduct Segmented Switch */}
-              <div className="grid grid-cols-2 gap-1 rounded-xl bg-[#f1f1f2] p-1">
-                <button
-                  type="button"
-                  onClick={() => setTxDirection("deduct")}
-                  className={`rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer transition-all ${
-                    txDirection === "deduct"
-                      ? "bg-white text-emerald-700 shadow-[0_1px_2px_rgba(0,0,0,.08)]"
-                      : "text-[#55555b] hover:text-[#171717]"
-                  }`}
-                >
-                  {isSup ? "− I Paid Supplier" : "− Customer Paid Me"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTxDirection("add")}
-                  className={`rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer transition-all ${
-                    txDirection === "add"
-                      ? "bg-white text-rose-700 shadow-[0_1px_2px_rgba(0,0,0,.08)]"
-                      : "text-[#55555b] hover:text-[#171717]"
-                  }`}
-                >
-                  {isSup ? "+ Add Goods / Bill" : "+ Add Bill / Due"}
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <Label>Amount (₹) *</Label>
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    value={txAmount}
-                    onChange={(e) => setTxAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-                    placeholder="e.g. 50000"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label>Payment Mode</Label>
-                  <Select value={txMode} onChange={(e) => setTxMode(e.target.value as PaymentMode)}>
-                    <option value="cash">Cash</option>
-                    <option value="upi">UPI</option>
-                    <option value="bank_transfer">Bank Transfer / NEFT</option>
-                    <option value="card">Card</option>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <Label>Bill / Voucher No. (Optional)</Label>
-                  <Input
-                    value={txVoucher}
-                    onChange={(e) => setTxVoucher(e.target.value)}
-                    placeholder={txDirection === "deduct" ? "e.g. R1" : "e.g. B.No. 99"}
-                  />
-                </div>
-                <div>
-                  <Label>Note / Particulars (Optional)</Label>
-                  <Input
-                    value={txNote}
-                    onChange={(e) => setTxNote(e.target.value)}
-                    placeholder="e.g. Paid by cash S.C / 10 cartons"
-                  />
-                </div>
-              </div>
-
-              {amtNum > 0 && (
-                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs">
-                  <span className="text-slate-600">Updated Balance Due</span>
-                  <span className="font-mono font-bold text-slate-900">
-                    ₹{txTarget.currentDue.toLocaleString("en-IN")} → ₹{nextBal.toLocaleString("en-IN")}
-                  </span>
-                </div>
-              )}
-
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <Link
-                  href={`/dashboard/customers/ledger/${txTarget.partyType}/${txTarget.id}`}
-                  className="text-xs font-semibold text-sky-700 hover:underline"
-                >
-                  View Full Transaction History →
-                </Link>
-                <div className="flex items-center gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => setTxTarget(null)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" size="sm" disabled={txSaving}>
-                    {txSaving ? "Saving..." : "Save Transaction"}
-                  </Button>
-                </div>
-              </div>
-            </Form>
-          );
-        })()}
-      </Dialog>
     </div>
   );
 }

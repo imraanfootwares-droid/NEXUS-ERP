@@ -5,6 +5,7 @@ import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import { resolveLedgerConfig } from "@/lib/ledger/defaults";
 import { loadPartyLedger, type PartyType } from "@/lib/ledger/party-ledger";
+import { PartyActionsBar, type PartyDetails } from "@/components/ledger/party-actions-bar";
 import { PartyLedgerClient } from "./page-client";
 
 export const dynamic = "force-dynamic";
@@ -31,12 +32,36 @@ export default async function PartyLedgerPage({
     }
   }
 
-  const statement = await withTenantTx(
+  const loaded = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
-    (client) => loadPartyLedger(client, ctx.tenant!.id, partyType, id)
+    async (client) => {
+      const statement = await loadPartyLedger(client, ctx.tenant!.id, partyType, id);
+      if (!statement) return null;
+      let details: PartyDetails | null = null;
+      if (partyType === "customer") {
+        const r = await client.query(
+          `SELECT id, name, phone, email, gstin, state_code, address, customer_type,
+                  default_discount_pct::float8 AS default_discount_pct, credit_limit::float8 AS credit_limit,
+                  COALESCE(credit_days, 0) AS credit_days
+           FROM public.customers WHERE id = $1 AND tenant_id = $2`,
+          [id, ctx.tenant!.id]
+        );
+        if (r.rows[0]) details = { type: "customer", ...r.rows[0] };
+      } else {
+        const r = await client.query(
+          `SELECT id, name, phone, gstin, state_code, address, material_type,
+                  COALESCE(supplied_products, '{}'::text[]) AS supplied_products
+           FROM public.suppliers WHERE id = $1 AND tenant_id = $2`,
+          [id, ctx.tenant!.id]
+        );
+        if (r.rows[0]) details = { type: "supplier", ...r.rows[0] };
+      }
+      return { statement, details };
+    }
   );
 
-  if (!statement) notFound();
+  if (!loaded) notFound();
+  const { statement, details } = loaded;
 
   const ledgerConfig = resolveLedgerConfig(ctx.tenant.brand_config);
   const canEdit =
@@ -50,6 +75,17 @@ export default async function PartyLedgerPage({
       statement={statement}
       ledgerConfig={ledgerConfig}
       canEdit={canEdit}
+      actions={
+        details ? (
+          <PartyActionsBar
+            key={`${details.id}-${statement.party.currentDue}`}
+            details={details}
+            currentDue={statement.party.currentDue}
+            tenantName={ctx.tenant.name}
+            canEdit={canEdit}
+          />
+        ) : null
+      }
     />
   );
 }
