@@ -5,6 +5,7 @@ import { canAccess, assertAccess } from "@/lib/auth/access";
 import { linkWalkInCustomer } from "@/lib/billing/walk-in-customer";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
+import { loadInvoiceRenderProps } from "@/lib/billing/invoice-render-props";
 import type { BillTemplateConfig, PaymentMode } from "@/types/database";
 
 export async function createOrFinalizeInvoiceAction(payload: Record<string, unknown>) {
@@ -398,4 +399,17 @@ export async function closeDayCashAction(input: {
     }
   );
   revalidatePath("/dashboard/reports");
+}
+
+/** Data for the bill Preview popup on the Billing & Ledger page (same design as Print). */
+export async function getInvoicePreviewAction(invoiceId: string) {
+  const ctx = await getServerSessionContext();
+  assertAccess(ctx, "billing.view");
+  const tenant = ctx.tenant;
+  const props = await withTenantTx(
+    { tenantId: tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
+    (client) => loadInvoiceRenderProps(client, tenant, invoiceId)
+  );
+  if (!props) return { ok: false as const, error: "This bill was not found. It may have been deleted." };
+  return { ok: true as const, ...props };
 }

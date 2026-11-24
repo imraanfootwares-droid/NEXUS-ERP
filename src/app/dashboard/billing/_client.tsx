@@ -3,13 +3,15 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, Edit, Printer, RotateCcw, Trash2 } from "lucide-react";
+import { Ban, Download, Edit, Eye, Loader2, Printer, RotateCcw, Trash2 } from "lucide-react";
+import { InvoiceRenderer } from "@/components/billing/invoice-renderer";
 import { toast } from "sonner";
 import { InlineRowsSkeleton } from "@/components/ui/page-skeletons";
 import {
   cancelInvoiceAction,
   deleteDraftInvoiceAction,
   getInvoiceItemsForReturnAction,
+  getInvoicePreviewAction,
   processReturnOrExchangeAction,
 } from "@/actions/billing";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
@@ -63,6 +65,26 @@ export function BillingLedgerClient({
   const router = useRouter();
   const [onlyOversold, setOnlyOversold] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<InvoiceListRow | null>(null);
+  const [previewRow, setPreviewRow] = useState<InvoiceListRow | null>(null);
+  const [previewData, setPreviewData] = useState<Awaited<ReturnType<typeof getInvoicePreviewAction>> | null>(null);
+  const previewReqRef = React.useRef(0);
+
+  const openPreview = async (r: InvoiceListRow) => {
+    const req = ++previewReqRef.current;
+    setPreviewRow(r);
+    setPreviewData(null);
+    try {
+      const res = await getInvoicePreviewAction(r.id);
+      if (req === previewReqRef.current) setPreviewData(res);
+    } catch {
+      if (req === previewReqRef.current) setPreviewData({ ok: false, error: "Could not open the preview. Please try again." });
+    }
+  };
+  const closePreview = () => {
+    previewReqRef.current++;
+    setPreviewRow(null);
+    setPreviewData(null);
+  };
   const [cancelReason, setCancelReason] = useState("");
 
   const [returnTarget, setReturnTarget] = useState<InvoiceListRow | null>(null);
@@ -227,11 +249,20 @@ export function BillingLedgerClient({
               <button
                 type="button"
                 title="Delete Draft"
-                onClick={async () => {
+                onClick={async (e) => {
+                  const btn = e.currentTarget;
+                  if (btn.disabled) return;
                   if (!confirm("Delete this draft bill permanently?")) return;
-                  await deleteDraftInvoiceAction(r.id);
-                  toast.success("Draft deleted.");
-                  router.refresh();
+                  btn.disabled = true;
+                  try {
+                    await deleteDraftInvoiceAction(r.id);
+                    toast.success("Draft deleted.");
+                    router.refresh();
+                  } catch {
+                    toast.error("Could not delete this draft. Please try again.");
+                  } finally {
+                    btn.disabled = false;
+                  }
                 }}
                 className="inline-flex items-center rounded-lg bg-white p-1.5 text-rose-600 shadow-[0_0_0_1px_rgba(0,0,0,.08)] transition-colors hover:bg-rose-50 cursor-pointer"
               >
@@ -239,6 +270,14 @@ export function BillingLedgerClient({
               </button>
             </>
           )}
+          <button
+            type="button"
+            onClick={() => void openPreview(r)}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+            title="See the bill before printing"
+          >
+            <Eye className="h-3.5 w-3.5" /> Preview
+          </button>
           <Link
             href={`/dashboard/billing/${r.id}/print`}
             className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
@@ -283,6 +322,48 @@ export function BillingLedgerClient({
           ) : undefined
         }
       />
+
+      <Dialog
+        open={Boolean(previewRow)}
+        onClose={closePreview}
+        title={`Bill Preview — ${previewRow?.invoice_number || "Draft"}`}
+        maxWidth="max-w-4xl"
+      >
+        <div className="space-y-3">
+          <div className="max-h-[70dvh] overflow-auto rounded-xl bg-slate-100 p-2 sm:p-4">
+            {!previewData ? (
+              <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin" /> Opening bill…
+              </div>
+            ) : previewData.ok ? (
+              <InvoiceRenderer format={previewData.format} config={previewData.config} data={previewData.data} />
+            ) : (
+              <p className="py-16 text-center text-sm text-rose-600">{previewData.error}</p>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="outline" onClick={closePreview}>Close</Button>
+            {previewRow && (
+              <>
+                <a
+                  href={`/api/documents/invoice/${previewRow.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-white px-3.5 text-[13px] font-medium text-[#27272a] shadow-[0_1px_2px_rgba(0,0,0,.05),0_0_0_1px_rgba(0,0,0,.08)] hover:bg-[#fafafa] md:min-h-[34px]"
+                >
+                  <Download className="h-4 w-4" /> Download PDF
+                </a>
+                <Link
+                  href={`/dashboard/billing/${previewRow.id}/print`}
+                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-[#171717] px-3.5 text-[13px] font-medium text-white hover:bg-[#2a2a2a] md:min-h-[34px]"
+                >
+                  <Printer className="h-4 w-4" /> Print
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      </Dialog>
 
       <Dialog
         open={Boolean(cancelTarget)}
