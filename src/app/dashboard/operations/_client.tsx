@@ -621,11 +621,11 @@ export function OperationsHubClient({
       {tab === "purchase" && suppliersEnabled && (
         <div className="max-w-2xl space-y-4">
           <Alert variant="info">
-            To add, edit, or see supplier dues &amp; payments, go to{" "}
+            <b>Bought many products or sizes in one bill?</b> Open the supplier in{" "}
             <Link href="/dashboard/customers?tab=suppliers" className="font-semibold underline">
               Customer &amp; Supplier Ledger →
-            </Link>
-            . Use this form only when you want to record a purchase bill and add stock directly into a branch.
+            </Link>{" "}
+            and tap <b>New Purchase Bill</b>. This quick form is for one item only. Both add stock automatically.
           </Alert>
 
           <Card>
@@ -656,7 +656,7 @@ export function OperationsHubClient({
                     }
                     setPoSaving(true);
                     try {
-                      await recordPurchaseAction({
+                      const res = await recordPurchaseAction({
                         branchId: poBranchId,
                         supplierId: poSupplierId,
                         billNumber: poBillNo || undefined,
@@ -676,6 +676,10 @@ export function OperationsHubClient({
                           },
                         ],
                       });
+                      if (!res.ok) {
+                        toast.error(res.error);
+                        return;
+                      }
                       toast.success("Purchase bill saved & stock added!");
                       setPoBillNo("");
                       setPoPaid("0");

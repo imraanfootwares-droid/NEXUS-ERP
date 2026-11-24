@@ -643,40 +643,99 @@ export async function recordPurchaseAction(input: {
   billNumber?: string;
   purchaseType: "finished_goods" | "raw_material";
   paidAmount: number;
+  /** How the "paid today" money was given. Defaults to cash. */
+  paidMode?: "cash" | "upi" | "bank_transfer" | "card";
   itcCgst: number;
   itcSgst: number;
   itcIgst: number;
+  notes?: string;
   items: Array<{ variant_id?: string | null; item_description: string; qty: number; unit_cost: number; gst_rate: number; line_total: number }>;
 }) {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "suppliers.manage", { branchId: input.branchId, isMutation: true });
 
-  const totalAmount = input.items.reduce((s, i) => s + i.line_total, 0);
-  await withTenantTx(
-    { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
-    async (client) => {
-      await client.query("SELECT public.record_purchase_atomic($1, $2::jsonb)", [
-        ctx.tenant.id,
-        JSON.stringify({
-          idempotency_key: crypto.randomUUID(),
-          branch_id: input.branchId,
-          supplier_id: input.supplierId,
-          bill_number: input.billNumber ?? null,
-          purchase_type: input.purchaseType,
-          total_amount: totalAmount,
-          itc_cgst: input.itcCgst,
-          itc_sgst: input.itcSgst,
-          itc_igst: input.itcIgst,
-          paid_amount: input.paidAmount,
-          created_by: ctx.user.id,
-          items: input.items,
-        }),
-      ]);
+  const items = (input.items ?? []).filter((i) => Number(i.qty) > 0);
+  if (!input.supplierId) return { ok: false as const, error: "Choose the supplier." };
+  if (!input.branchId) return { ok: false as const, error: "Choose the branch that receives the goods." };
+  if (items.length === 0) return { ok: false as const, error: "Add at least one item with quantity." };
+  for (const i of items) {
+    if (!i.item_description?.trim()) return { ok: false as const, error: "Every item needs a name." };
+    if (!Number.isFinite(Number(i.qty)) || !Number.isFinite(Number(i.unit_cost)) || Number(i.unit_cost) < 0) {
+      return { ok: false as const, error: "Check the quantity and price of each item." };
     }
-  );
-  revalidatePath("/dashboard/operations");
-  revalidatePath("/dashboard/stock");
-  revalidatePath("/dashboard/customers");
+  }
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const cleanItems = items.map((i) => ({
+    ...i,
+    qty: Number(i.qty),
+    unit_cost: round2(Number(i.unit_cost)),
+    gst_rate: Math.min(40, Math.max(0, Number(i.gst_rate) || 0)),
+    line_total: round2(Number(i.qty) * Number(i.unit_cost)),
+  }));
+  const totalAmount = round2(cleanItems.reduce((s, i) => s + i.line_total, 0));
+  const paid = round2(Math.min(totalAmount, Math.max(0, Number(input.paidAmount) || 0)));
+
+  try {
+    const poId = await withTenantTx(
+      { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
+      async (client) => {
+        const sup = await client.query("SELECT 1 FROM public.suppliers WHERE id = $1 AND tenant_id = $2", [
+          input.supplierId,
+          ctx.tenant.id,
+        ]);
+        if (!sup.rowCount) throw Object.assign(new Error("supplier"), { code: "23503" });
+
+        const res = await client.query<{ id: string }>("SELECT public.record_purchase_atomic($1, $2::jsonb) AS id", [
+          ctx.tenant.id,
+          JSON.stringify({
+            idempotency_key: crypto.randomUUID(),
+            branch_id: input.branchId,
+            supplier_id: input.supplierId,
+            bill_number: input.billNumber?.trim() || null,
+            purchase_type: input.purchaseType,
+            total_amount: totalAmount,
+            itc_cgst: input.itcCgst,
+            itc_sgst: input.itcSgst,
+            itc_igst: input.itcIgst,
+            paid_amount: paid,
+            notes: input.notes?.trim() || null,
+            created_by: ctx.user.id,
+            items: cleanItems,
+          }),
+        ]);
+        const id = res.rows[0].id;
+        // The RPC already lowers the supplier due by the paid amount; record that money
+        // as a payment row too so the supplier ledger shows it.
+        if (paid > 0) {
+          await client.query(
+            `INSERT INTO public.supplier_payments (tenant_id, supplier_id, purchase_order_id, mode, amount, reference_no, notes, recorded_by)
+             VALUES ($1, $2, $3, $4, $5, $6, 'Paid with purchase bill', $7)`,
+            [ctx.tenant.id, input.supplierId, id, input.paidMode ?? "cash", paid, input.billNumber?.trim() || null, ctx.user.id]
+          );
+        }
+        // Remember where each product comes from (only when not already set).
+        const variantIds = cleanItems.map((i) => i.variant_id).filter((v): v is string => Boolean(v));
+        if (variantIds.length > 0) {
+          await client.query(
+            `UPDATE public.products p SET supplier_id = $1
+             WHERE p.tenant_id = $2 AND p.supplier_id IS NULL
+               AND p.id IN (SELECT pv.product_id FROM public.product_variants pv WHERE pv.id = ANY($3::uuid[]) AND pv.tenant_id = $2)`,
+            [input.supplierId, ctx.tenant.id, variantIds]
+          );
+        }
+        return id;
+      }
+    );
+    revalidatePath("/dashboard/operations");
+    revalidatePath("/dashboard/stock");
+    revalidatePath("/dashboard/customers");
+    revalidatePath(`/dashboard/customers/ledger/supplier/${input.supplierId}`);
+    return { ok: true as const, purchaseId: poId, total: totalAmount };
+  } catch (err) {
+    const msg = pgFriendlyMessage(err);
+    if (msg) return { ok: false as const, error: msg };
+    throw err;
+  }
 }
 
 export async function recordSupplierPaymentAction(input: {

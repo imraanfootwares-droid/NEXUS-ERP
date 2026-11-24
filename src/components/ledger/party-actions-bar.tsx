@@ -2,13 +2,14 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MessageCircle, Pencil, Trash2, Wallet } from "lucide-react";
+import { MessageCircle, PackagePlus, Pencil, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { deleteCustomerAction, deleteSupplierAction, updateCustomerAction, updateSupplierAction } from "@/actions/inventory";
 import { GstinInput } from "@/components/ui/dynamic-fields";
 import { Button, Dialog, Form, Input, Label, Select, friendlyErrorMessage } from "@/components/ui/primitives";
 import { INDIAN_STATES } from "@/lib/constants/saas";
 import { PartyMoneyDialog, type PartyMoneyTarget } from "./party-money-dialog";
+import { PurchaseBillDialog, type PurchaseCatalogVariant } from "./purchase-bill-dialog";
 
 export type PartyDetails =
   | {
@@ -51,16 +52,20 @@ export function PartyActionsBar({
   currentDue,
   tenantName,
   canEdit,
+  purchase,
 }: {
   details: PartyDetails;
   currentDue: number;
   tenantName: string;
   canEdit: boolean;
+  /** Suppliers only: data for the New Purchase Bill popup. */
+  purchase?: { branches: Array<{ id: string; name: string }>; catalog: PurchaseCatalogVariant[] } | null;
 }) {
   const router = useRouter();
   const isSup = details.type === "supplier";
   const [moneyTarget, setMoneyTarget] = useState<PartyMoneyTarget | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const [name, setName] = useState(details.name);
@@ -81,6 +86,15 @@ export function PartyActionsBar({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
+        {isSup && canEdit && purchase && (
+          <button
+            type="button"
+            onClick={() => setPurchaseOpen(true)}
+            className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}
+          >
+            <PackagePlus className="h-4 w-4" /> New Purchase Bill
+          </button>
+        )}
         {canEdit && (
           <button
             type="button"
@@ -142,6 +156,17 @@ export function PartyActionsBar({
           </button>
         )}
       </div>
+
+      {isSup && purchase && (
+        <PurchaseBillDialog
+          open={purchaseOpen}
+          onClose={() => setPurchaseOpen(false)}
+          supplierId={details.id}
+          supplierName={details.name}
+          branches={purchase.branches}
+          catalog={purchase.catalog}
+        />
+      )}
 
       <PartyMoneyDialog key={moneyTarget?.id ?? "none"} target={moneyTarget} onClose={() => setMoneyTarget(null)} showHistoryLink={false} />
 

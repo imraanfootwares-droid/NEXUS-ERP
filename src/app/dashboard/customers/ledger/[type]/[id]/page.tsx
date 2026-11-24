@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import { TierLockOverlay } from "@/components/ui/kpi-grid";
 import { canAccess } from "@/lib/auth/access";
+import { getBranchScope } from "@/lib/auth/active-branch";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import { resolveLedgerConfig } from "@/lib/ledger/defaults";
 import { loadPartyLedger, type PartyType } from "@/lib/ledger/party-ledger";
 import { PartyActionsBar, type PartyDetails } from "@/components/ledger/party-actions-bar";
+import type { PurchaseCatalogVariant } from "@/components/ledger/purchase-bill-dialog";
 import { PartyLedgerClient } from "./page-client";
 
 export const dynamic = "force-dynamic";
@@ -56,12 +58,35 @@ export default async function PartyLedgerPage({
         );
         if (r.rows[0]) details = { type: "supplier", ...r.rows[0] };
       }
-      return { statement, details };
+      let catalog: PurchaseCatalogVariant[] = [];
+      if (partyType === "supplier") {
+        const v = await client.query<PurchaseCatalogVariant>(
+          `SELECT pv.id AS variant_id, p.id AS product_id, p.name AS product_name, p.model_code,
+                  p.supplier_id, pv.attributes, pv.cost_price::float8 AS cost_price, p.gst_rate::float8 AS gst_rate
+           FROM public.product_variants pv
+           JOIN public.products p ON p.id = pv.product_id
+           WHERE pv.tenant_id = $1 AND pv.is_active = true AND p.is_active = true
+           ORDER BY p.name, pv.sku
+           LIMIT 3000`,
+          [ctx.tenant!.id]
+        );
+        catalog = v.rows;
+      }
+      return { statement, details, catalog };
     }
   );
 
   if (!loaded) notFound();
-  const { statement, details } = loaded;
+  const { statement, details, catalog } = loaded;
+  const purchase =
+    partyType === "supplier"
+      ? {
+          branches: (await getBranchScope(ctx)).ordered
+            .filter((b) => !b.is_read_only)
+            .map((b) => ({ id: b.id, name: b.name })),
+          catalog,
+        }
+      : null;
 
   const ledgerConfig = resolveLedgerConfig(ctx.tenant.brand_config);
   const canEdit =
@@ -83,6 +108,7 @@ export default async function PartyLedgerPage({
             currentDue={statement.party.currentDue}
             tenantName={ctx.tenant.name}
             canEdit={canEdit}
+            purchase={purchase}
           />
         ) : null
       }
