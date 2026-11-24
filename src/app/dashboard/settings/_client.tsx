@@ -929,7 +929,7 @@ export function SettingsHubClient({
                       setSavingGstBranch(false);
                     }
                   }}
-                  className="grid grid-cols-1 items-end gap-3 sm:grid-cols-12"
+                  className="grid grid-cols-1 items-start gap-3 sm:grid-cols-12"
                 >
                   <div className="sm:col-span-4">
                     <Label>Branch</Label>
@@ -958,7 +958,7 @@ export function SettingsHubClient({
                       onStateDetected={setGstBranchState}
                     />
                   </div>
-                  <div className="sm:col-span-3">
+                  <div className="sm:col-span-3 sm:pt-[22px]">
                     <Button
                       type="submit"
                       className="w-full"

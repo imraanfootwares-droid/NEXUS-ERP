@@ -86,6 +86,7 @@ interface CartLine {
   unit_price: number;
   line_discount_amount: number;
   fallback_gst_rate: number;
+  custom_gst?: boolean;
 }
 
 type QuickPayMode = "cash" | "upi" | "card";
@@ -337,7 +338,7 @@ export function PosTerminal({
         qty: c.qty,
         unit_price: c.unit_price,
         line_discount_amount: discountsEnabled ? c.line_discount_amount : 0,
-        hsn_rule: c.fallback_gst_rate === 0 ? undefined : c.hsn_code ? hsnMap.get(c.hsn_code) : undefined,
+        hsn_rule: c.custom_gst || c.fallback_gst_rate === 0 ? undefined : c.hsn_code ? hsnMap.get(c.hsn_code) : undefined,
         fallback_gst_rate: c.fallback_gst_rate,
       })),
     });
@@ -1060,6 +1061,51 @@ export function PosTerminal({
                       >
                         Box/Ctn
                       </button>
+                      <label className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-[#55555b]" title="Edit HSN code">
+                        <span className="text-[10px] text-[#77777d]">HSN</span>
+                        <input
+                          type="text"
+                          aria-label={`HSN code for ${c.product_name}`}
+                          value={c.hsn_code ?? ""}
+                          placeholder="—"
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9A-Za-z]/g, "").slice(0, 8);
+                            setCart((prev) =>
+                              prev.map((it) => (it.key === c.key ? { ...it, hsn_code: val || null } : it))
+                            );
+                          }}
+                          className="h-6 w-14 bg-transparent text-right font-mono text-xs font-medium text-[#171717] focus:outline-none"
+                        />
+                      </label>
+                      <label className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-[#55555b]" title="Edit GST percentage">
+                        <span className="text-[10px] text-[#77777d]">GST</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label={`GST percentage for ${c.product_name}`}
+                          value={String(c.custom_gst ? c.fallback_gst_rate : gstCalc.items[idx]?.gst_rate ?? c.fallback_gst_rate)}
+                          onFocus={(e) => e.currentTarget.select()}
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(/[^0-9.]/g, "");
+                            const parsed = Number(cleaned);
+                            if (cleaned === "" || (Number.isFinite(parsed) && parsed >= 0 && parsed <= 40)) {
+                              setCart((prev) =>
+                                prev.map((it) =>
+                                  it.key === c.key
+                                    ? {
+                                        ...it,
+                                        fallback_gst_rate: cleaned === "" ? 0 : parsed,
+                                        custom_gst: true,
+                                      }
+                                    : it
+                                )
+                              );
+                            }
+                          }}
+                          className="h-6 w-10 bg-transparent text-right font-mono text-xs font-semibold text-[#171717] focus:outline-none"
+                        />
+                        <span className="text-[10px] text-[#77777d]">%</span>
+                      </label>
                     </div>
                     {discountsEnabled && lineDiscOpen ? (
                       <label className="flex items-center gap-1.5 text-[11px] text-[#77777d]">
