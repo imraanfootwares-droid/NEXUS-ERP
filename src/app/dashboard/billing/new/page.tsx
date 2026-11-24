@@ -5,7 +5,7 @@ import { canAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import { deriveThumbKey, getPublicAssetUrl } from "@/lib/storage/s3-client";
-import type { CustomerRow, HsnCodeRow, RatioPreset, VariantAxisRow } from "@/types/database";
+import type { BillTemplateRow, CustomerRow, HsnCodeRow, RatioPreset, VariantAxisRow } from "@/types/database";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +31,7 @@ export default async function PosNewBillPage({
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
       const defaultBranchId = scope.ordered[0]?.id;
-      const [varsRes, custRes, hsnRes, axesRes] = await Promise.all([
+      const [varsRes, custRes, hsnRes, axesRes, tplRes] = await Promise.all([
         stockEnabled && defaultBranchId
           ? client.query<PosVariantItem & { primary_image_key: string | null }>(
               `SELECT pv.id AS variant_id, p.id AS product_id, p.name AS product_name, p.model_code,
@@ -60,6 +60,10 @@ export default async function PosNewBillPage({
         ),
         client.query<VariantAxisRow>(
           "SELECT * FROM public.variant_axis_definitions WHERE tenant_id = $1 ORDER BY sort_order",
+          [ctx.tenant!.id]
+        ),
+        client.query<BillTemplateRow>(
+          "SELECT * FROM public.bill_templates WHERE tenant_id = $1 ORDER BY is_default DESC, created_at ASC LIMIT 1",
           [ctx.tenant!.id]
         ),
       ]);
@@ -102,9 +106,20 @@ export default async function PosNewBillPage({
         ...v,
         thumb_url: v.primary_image_key ? getPublicAssetUrl(deriveThumbKey(v.primary_image_key)) : null,
       }));
-      return { variants, customers: custRes.rows, hsn: hsnRes.rows, ratioPresets, draftToEdit };
+      return {
+        variants,
+        customers: custRes.rows,
+        hsn: hsnRes.rows,
+        ratioPresets,
+        draftToEdit,
+        defaultTemplate: tplRes.rows[0] ?? null,
+      };
     }
   );
+
+  const logoUrl = ctx.tenant.brand_config?.logo_key
+    ? getPublicAssetUrl(ctx.tenant.brand_config.logo_key)
+    : ctx.tenant.brand_config?.logo_pdf_data_url ?? null;
 
   return (
     <PosTerminal
@@ -117,6 +132,8 @@ export default async function PosNewBillPage({
       initialCustomers={data.customers}
       initialHsn={data.hsn}
       ratioPresets={data.ratioPresets}
+      defaultTemplate={data.defaultTemplate}
+      logoUrl={logoUrl}
       stockEnabled={stockEnabled}
       crmEnabled={crmEnabled}
       discountsEnabled={discountsEnabled}

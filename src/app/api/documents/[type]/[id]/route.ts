@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { assertAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
+import { INDIAN_STATES } from "@/lib/constants/saas";
 import { withTenantTx } from "@/lib/db";
 import { renderCataloguePdfBuffer, renderChallanPdfBuffer, renderInvoicePdfBuffer } from "@/lib/pdf/documents";
 import { fetchImageForPdf } from "@/lib/pdf/image-helper";
@@ -87,6 +88,12 @@ export async function GET(
       customerName: inv.customer_snapshot?.name || "Walk-In Customer",
       customerPhone: inv.customer_snapshot?.phone,
       customerGstin: inv.customer_snapshot?.gstin,
+      customerAddress: inv.customer_snapshot?.address || null,
+      placeOfSupply: inv.customer_snapshot?.state_code
+        ? INDIAN_STATES[inv.customer_snapshot.state_code]
+          ? `${INDIAN_STATES[inv.customer_snapshot.state_code]} (${inv.customer_snapshot.state_code})`
+          : inv.customer_snapshot.state_code
+        : null,
       supplyType: inv.supply_type,
       subtotal: Number(inv.subtotal),
       discountAmount: Number(inv.discount_amount),

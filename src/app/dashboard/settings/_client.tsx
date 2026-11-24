@@ -235,6 +235,10 @@ export function SettingsHubClient({
   const [allowNegStock, setAllowNegStock] = useState(tenant.tax_config.allow_negative_stock);
   const [hsnDigits, setHsnDigits] = useState<4 | 6>(tenant.tax_config.hsn_digits ?? 4);
   const [stateCode, setStateCode] = useState(tenant.tax_config.default_state_code ?? "33");
+  const [gstBranchId, setGstBranchId] = useState(branches[0]?.id ?? "");
+  const [gstBranchNumber, setGstBranchNumber] = useState(branches[0]?.gstin ?? "");
+  const [gstBranchState, setGstBranchState] = useState(branches[0]?.state_code ?? "33");
+  const [savingGstBranch, setSavingGstBranch] = useState(false);
 
   // Schema state
   const [axisName, setAxisName] = useState("");
@@ -887,6 +891,86 @@ export function SettingsHubClient({
               </div>
             </div>
           </div>
+
+          {/* Inline Shop / Branch GST Number Editor */}
+          {branches.length > 0 && (
+            <Card>
+              <CardHeader>
+                <h3 className="text-sm font-semibold">Shop / Branch GST Number (GSTIN)</h3>
+                <p className="mt-0.5 text-xs text-[#77777d]">
+                  Set or change the GSTIN printed on your GST Tax Invoices. Leave empty if a branch does not have a GST number.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const b = branches.find((x) => x.id === gstBranchId);
+                    if (!b) return;
+                    setSavingGstBranch(true);
+                    try {
+                      await updateBranchAction({
+                        id: b.id,
+                        name: b.name,
+                        code: b.code,
+                        type: b.type,
+                        gstin: gstBranchNumber.trim() || undefined,
+                        stateCode: gstBranchState || b.state_code,
+                      });
+                      toast.success(
+                        gstBranchNumber.trim()
+                          ? `GSTIN updated for ${b.name}!`
+                          : `GSTIN cleared for ${b.name}.`
+                      );
+                      router.refresh();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Could not update GSTIN.");
+                    } finally {
+                      setSavingGstBranch(false);
+                    }
+                  }}
+                  className="grid grid-cols-1 items-end gap-3 sm:grid-cols-12"
+                >
+                  <div className="sm:col-span-4">
+                    <Label>Branch</Label>
+                    <Select
+                      value={gstBranchId}
+                      onChange={(e) => {
+                        const nextId = e.target.value;
+                        setGstBranchId(nextId);
+                        const found = branches.find((x) => x.id === nextId);
+                        setGstBranchNumber(found?.gstin ?? "");
+                        setGstBranchState(found?.state_code ?? "33");
+                      }}
+                    >
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="sm:col-span-5">
+                    <Label>GST Number (15-digit GSTIN)</Label>
+                    <GstinInput
+                      value={gstBranchNumber}
+                      onChange={setGstBranchNumber}
+                      onStateDetected={setGstBranchState}
+                    />
+                  </div>
+                  <div className="sm:col-span-3">
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={!permissions["settings.tax_and_hsn"] || savingGstBranch}
+                    >
+                      {savingGstBranch ? "Saving..." : "Save GST Number"}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

@@ -3,6 +3,7 @@ import { InvoiceRenderer, PrintShareToolbar } from "@/components/billing/invoice
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import { getPublicAssetUrl } from "@/lib/storage/s3-client";
+import { INDIAN_STATES } from "@/lib/constants/saas";
 import type { BillTemplateRow } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -89,6 +90,12 @@ export default async function InvoicePrintPage({
           customerName: inv.customer_snapshot?.name || "Walk-In Customer",
           customerPhone: inv.customer_snapshot?.phone,
           customerGstin: inv.customer_snapshot?.gstin,
+          customerAddress: inv.customer_snapshot?.address || null,
+          placeOfSupply: inv.customer_snapshot?.state_code
+            ? INDIAN_STATES[inv.customer_snapshot.state_code]
+              ? `${INDIAN_STATES[inv.customer_snapshot.state_code]} (${inv.customer_snapshot.state_code})`
+              : inv.customer_snapshot.state_code
+            : null,
           taxableAmount: Number(inv.taxable_amount),
           cgstAmount: Number(inv.cgst_amount),
           sgstAmount: Number(inv.sgst_amount),

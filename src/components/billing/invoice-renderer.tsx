@@ -91,6 +91,8 @@ export interface InvoicePreviewData {
   customerName: string;
   customerPhone?: string | null;
   customerGstin?: string | null;
+  customerAddress?: string | null;
+  placeOfSupply?: string | null;
   taxableAmount: number;
   cgstAmount: number;
   sgstAmount: number;
@@ -230,16 +232,24 @@ export function InvoiceRenderer({
         {/* Buyer (Billed To) */}
         <div className="border-b border-slate-900 bg-slate-50/70 px-3.5 py-2.5 text-xs">
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Billed To</p>
-          <div className="mt-0.5 flex flex-wrap items-center justify-between gap-2">
+          <div className="mt-0.5 flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="font-bold text-slate-900">{data.customerName}</p>
               {data.customerPhone && <p className="text-[11px] text-slate-600">Phone: {data.customerPhone}</p>}
+              {data.customerAddress && <p className="text-[11px] text-slate-600">{data.customerAddress}</p>}
             </div>
-            {config.show_gst_summary && data.customerGstin && (
-              <p className="font-mono text-[11px] font-semibold text-slate-900">
-                Buyer GSTIN: {data.customerGstin}
-              </p>
-            )}
+            <div className="text-right">
+              {config.show_gst_summary && data.customerGstin && (
+                <p className="font-mono text-[11px] font-semibold text-slate-900">
+                  Buyer GSTIN: {data.customerGstin}
+                </p>
+              )}
+              {config.show_gst_summary && data.placeOfSupply && (
+                <p className="text-[11px] text-slate-600">
+                  Place of Supply: <strong>{data.placeOfSupply}</strong>
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -473,8 +483,12 @@ export function InvoiceRenderer({
             <strong className="text-slate-900">{data.customerName}</strong>
           </p>
           {data.customerPhone && <p className="text-slate-600">Ph: {data.customerPhone}</p>}
+          {data.customerAddress && <p className="text-slate-600">{data.customerAddress}</p>}
           {config.show_gst_summary && data.customerGstin && (
             <p className="text-slate-600">GSTIN: {data.customerGstin}</p>
+          )}
+          {config.show_gst_summary && data.placeOfSupply && (
+            <p className="text-slate-600">Place of Supply: {data.placeOfSupply}</p>
           )}
         </div>
 

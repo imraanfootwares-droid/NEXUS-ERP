@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   CreditCard,
+  Eye,
   Layers,
   Loader2,
   Plus,
@@ -24,6 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { createOrFinalizeInvoiceAction } from "@/actions/billing";
+import { InvoiceRenderer } from "@/components/billing/invoice-renderer";
 import { PosProductCard, QtyStepper, money } from "@/components/billing/pos-parts";
 import { normalizeGstin, normalizePhone } from "@/lib/billing/walk-in-identity";
 import { readCachedBlock } from "@/lib/offline/access-block";
@@ -45,6 +47,8 @@ import {
   saveFormDraft,
 } from "@/lib/offline/sync-engine";
 import type {
+  BillTemplateConfig,
+  BillTemplateRow,
   BranchRow,
   CustomerRow,
   HsnCodeRow,
@@ -98,6 +102,8 @@ export function PosTerminal({
   initialCustomers,
   initialHsn,
   ratioPresets = [],
+  defaultTemplate = null,
+  logoUrl = null,
   stockEnabled,
   crmEnabled,
   discountsEnabled,
@@ -113,6 +119,8 @@ export function PosTerminal({
   initialCustomers: CustomerRow[];
   initialHsn: HsnCodeRow[];
   ratioPresets?: RatioPreset[];
+  defaultTemplate?: BillTemplateRow | null;
+  logoUrl?: string | null;
   stockEnabled: boolean;
   crmEnabled: boolean;
   discountsEnabled: boolean;
@@ -121,7 +129,7 @@ export function PosTerminal({
     id: string;
     branch_id: string;
     customer_id: string | null;
-    customer_snapshot?: { name?: string | null; phone?: string | null; gstin?: string | null; state_code?: string | null } | null;
+    customer_snapshot?: { name?: string | null; phone?: string | null; gstin?: string | null; state_code?: string | null; address?: string | null } | null;
     invoice_type: InvoiceType;
     tax_mode: TaxMode;
     items: CartLine[];
@@ -142,6 +150,7 @@ export function PosTerminal({
   const [walkInPhone, setWalkInPhone] = useState(draftWalkIn?.phone || "");
   const [walkInGstin, setWalkInGstin] = useState(draftWalkIn?.gstin || "");
   const [walkInState, setWalkInState] = useState(draftWalkIn?.state_code || branches[0]?.state_code || "33");
+  const [walkInAddress, setWalkInAddress] = useState(draftWalkIn?.address || "");
 
   const [invoiceType, setInvoiceType] = useState<InvoiceType>(draftToEdit?.invoice_type ?? "sale");
   const [taxMode, setTaxMode] = useState<TaxMode>(
@@ -175,6 +184,7 @@ export function PosTerminal({
   const [sizeRunOpen, setSizeRunOpen] = useState(false);
   const [sizeRunModel, setSizeRunModel] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const lastSyncRef = useRef<string>(new Date().toISOString());
   const initialBranchRef = useRef<string>(startBranchId);
@@ -309,12 +319,14 @@ export function PosTerminal({
     return m;
   }, [hsnList]);
 
+  const effectivePlaceOfSupply = walkInState || selectedCustomer?.state_code || activeBranch?.state_code || "33";
+
   const gstCalc = useMemo(() => {
     return calculateInvoiceGst({
       invoice_type: invoiceType,
       tax_mode: invoiceType === "estimate_bill_of_supply" ? "none" : taxMode,
       branch_state_code: activeBranch?.state_code ?? "33",
-      place_of_supply_state_code: selectedCustomer?.state_code || walkInState || activeBranch?.state_code || "33",
+      place_of_supply_state_code: effectivePlaceOfSupply,
       bill_discount_type: discountsEnabled && billDiscVal > 0 ? billDiscType : null,
       bill_discount_value: discountsEnabled ? billDiscVal : 0,
       items: cart.map((c) => ({
@@ -329,7 +341,7 @@ export function PosTerminal({
         fallback_gst_rate: c.fallback_gst_rate,
       })),
     });
-  }, [cart, invoiceType, taxMode, activeBranch, selectedCustomer, walkInState, billDiscType, billDiscVal, discountsEnabled, hsnMap]);
+  }, [cart, invoiceType, taxMode, activeBranch, effectivePlaceOfSupply, billDiscType, billDiscVal, discountsEnabled, hsnMap]);
 
   const creditBalance = Number(selectedCustomer?.credit_balance ?? 0);
   const appliedCredit = Math.min(creditRedeem, creditBalance, gstCalc.grand_total);
@@ -425,6 +437,19 @@ export function PosTerminal({
     const next = customers.find((c) => c.id === id) ?? null;
     setCustomerId(id);
     setCreditRedeem(0);
+    if (next) {
+      setWalkInName(next.name);
+      setWalkInPhone(next.phone ?? "");
+      setWalkInGstin(next.gstin ?? "");
+      setWalkInState(next.state_code || activeBranch?.state_code || "33");
+      setWalkInAddress(next.address ?? "");
+    } else {
+      setWalkInName("Walk-In Customer");
+      setWalkInPhone("");
+      setWalkInGstin("");
+      setWalkInState(activeBranch?.state_code || "33");
+      setWalkInAddress("");
+    }
     // Keep catalog lines on the right retail or wholesale price for this customer.
     setCart((prev) =>
       prev.map((line) => {
@@ -455,6 +480,8 @@ export function PosTerminal({
     setWalkInName("Walk-In Customer");
     setWalkInPhone("");
     setWalkInGstin("");
+    setWalkInState(activeBranch?.state_code || "33");
+    setWalkInAddress("");
     setDetailsOpen(false);
   };
 
@@ -603,16 +630,18 @@ export function PosTerminal({
       customer_id: crmEnabled && customerId ? customerId : null,
       customer_snapshot: selectedCustomer
         ? {
-            name: selectedCustomer.name,
-            phone: selectedCustomer.phone,
-            gstin: selectedCustomer.gstin,
-            state_code: selectedCustomer.state_code,
+            name: walkInName.trim() || selectedCustomer.name,
+            phone: walkInPhone.trim() || selectedCustomer.phone,
+            gstin: walkInGstin.trim().toUpperCase() || selectedCustomer.gstin,
+            state_code: effectivePlaceOfSupply,
+            address: walkInAddress.trim() || selectedCustomer.address || null,
           }
         : {
-            name: walkInName || "Walk-In Customer",
-            phone: walkInPhone || null,
-            gstin: walkInGstin || null,
-            state_code: walkInState || activeBranch?.state_code || "33",
+            name: walkInName.trim() || "Walk-In Customer",
+            phone: walkInPhone.trim() || null,
+            gstin: walkInGstin.trim().toUpperCase() || null,
+            state_code: effectivePlaceOfSupply,
+            address: walkInAddress.trim() || null,
           },
       tax_mode: invoiceType === "estimate_bill_of_supply" ? "none" : taxMode,
       supply_type: gstCalc.supply_type,
@@ -707,12 +736,36 @@ export function PosTerminal({
         />
         <Input aria-label="Customer phone" placeholder="Phone number" inputMode="tel" value={walkInPhone} onChange={(e) => setWalkInPhone(e.target.value)} />
       </div>
-      {detailsOpen ? (
-        <div className="ui-page grid grid-cols-2 gap-2">
-          <GstinInput value={walkInGstin} onChange={setWalkInGstin} onStateDetected={setWalkInState} />
-          <Select aria-label="Place of supply" value={walkInState} onChange={(e) => setWalkInState(e.target.value)}>
-            {stateOptions}
-          </Select>
+      {detailsOpen || invoiceType === "sale" ? (
+        <div className="ui-page space-y-2 rounded-xl border border-[#ececee] bg-[#fafafa] p-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <span className="text-[10.5px] font-semibold text-[#55555b]">
+              Receiving Party GST Details <span className="font-normal text-[#77777d]">(Optional · Recommended)</span>
+            </span>
+            <span
+              className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold ${
+                gstCalc.supply_type === "inter_state"
+                  ? "bg-sky-100 text-sky-800"
+                  : "bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              {gstCalc.supply_type === "inter_state"
+                ? `Inter-State (${INDIAN_STATES[effectivePlaceOfSupply] || effectivePlaceOfSupply}) → IGST`
+                : `Same State → CGST + SGST`}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <GstinInput value={walkInGstin} onChange={setWalkInGstin} onStateDetected={setWalkInState} />
+            <Select aria-label="Place of supply" value={effectivePlaceOfSupply} onChange={(e) => setWalkInState(e.target.value)}>
+              {stateOptions}
+            </Select>
+          </div>
+          <Input
+            aria-label="Receiving party address"
+            placeholder="Company / Delivery Address (Recommended)"
+            value={walkInAddress}
+            onChange={(e) => setWalkInAddress(e.target.value)}
+          />
         </div>
       ) : null}
       {crmEnabled ? (
@@ -754,6 +807,53 @@ export function PosTerminal({
           </Select>
         ) : null}
         {!customerId ? customerFields : null}
+        {customerId && invoiceType === "sale" ? (
+          <div className="ui-page space-y-2 rounded-xl border border-[#ececee] bg-[#fafafa] p-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <span className="text-[10.5px] font-semibold text-[#55555b]">
+                Buyer GST &amp; Delivery <span className="font-normal text-[#77777d]">(Optional · Recommended)</span>
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold ${
+                  gstCalc.supply_type === "inter_state"
+                    ? "bg-sky-100 text-sky-800"
+                    : "bg-emerald-50 text-emerald-700"
+                }`}
+              >
+                {gstCalc.supply_type === "inter_state"
+                  ? `Inter-State (${INDIAN_STATES[effectivePlaceOfSupply] || effectivePlaceOfSupply}) → IGST`
+                  : `Same State → CGST + SGST`}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Input
+                aria-label="Buyer company name"
+                placeholder="Company / Party Name"
+                value={walkInName}
+                onChange={(e) => setWalkInName(e.target.value)}
+              />
+              <Input
+                aria-label="Buyer phone"
+                placeholder="Phone number"
+                inputMode="tel"
+                value={walkInPhone}
+                onChange={(e) => setWalkInPhone(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <GstinInput value={walkInGstin} onChange={setWalkInGstin} onStateDetected={setWalkInState} />
+              <Select aria-label="Place of supply" value={effectivePlaceOfSupply} onChange={(e) => setWalkInState(e.target.value)}>
+                {stateOptions}
+              </Select>
+            </div>
+            <Input
+              aria-label="Buyer address"
+              placeholder="Billing / Delivery Address (Recommended)"
+              value={walkInAddress}
+              onChange={(e) => setWalkInAddress(e.target.value)}
+            />
+          </div>
+        ) : null}
         {selectedCustomer && creditBalance > 0 && (
           <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 px-2.5 py-2 text-xs text-emerald-800">
             <span>Credit available {money(creditBalance)}</span>
@@ -782,12 +882,24 @@ export function PosTerminal({
       </section>
 
       <section className="space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <p className="ui-eyebrow">Bill Mode</p>
           {invoiceType === "sale" && (
-            <span className="font-mono text-[10px] font-semibold text-sky-700">
-              {activeBranch?.gstin ? `GSTIN: ${activeBranch.gstin}` : "GST Setup Needed"}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {activeBranch?.gstin && (
+                <span className="font-mono text-[10px] font-semibold text-[#55555b]">
+                  {activeBranch.gstin}
+                </span>
+              )}
+              <Link
+                href="/dashboard/settings?tab=tax"
+                className="inline-flex items-center gap-1 rounded-md bg-[#f1f1f2] px-1.5 py-0.5 text-[10px] font-semibold text-[#171717] transition-colors hover:bg-[#e4e4e7]"
+                title="Set or change GST number & tax settings"
+              >
+                <Settings className="h-2.5 w-2.5" />
+                GST Settings
+              </Link>
+            </div>
           )}
         </div>
         <div className="grid grid-cols-2 gap-1 rounded-xl bg-[#f1f1f2] p-[3px]">
@@ -1141,6 +1253,15 @@ export function PosTerminal({
             <Save className="h-4 w-4" /> Hold
           </Button>
         )}
+        <Button
+          variant="outline"
+          className="!min-h-[40px] flex-none"
+          disabled={submitting || cart.length === 0}
+          onClick={() => setPreviewOpen(true)}
+          title="Preview bill before printing"
+        >
+          <Eye className="h-4 w-4" /> Preview
+        </Button>
         <Button className="!min-h-[40px] flex-1" disabled={submitting || Boolean(finalizeBlock)} onClick={() => submitInvoice(false)}>
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
           {submitting ? "Saving..." : "Finalize & Print"}
@@ -1372,6 +1493,99 @@ export function PosTerminal({
           <div><Label>Unit Price ₹</Label><Input type="number" min={0} step="0.01" value={freeRate} onChange={(e) => setFreeRate(Number(e.target.value) || 0)} required /></div>
           <Button type="submit" className="w-full">Add to Bill</Button>
         </form>
+      </Dialog>
+
+      {/* Live Bill Preview Modal (before finalizing & printing) */}
+      <Dialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        title="Bill Preview"
+        subtitle="Check all details below. Close to edit, or click Finalize & Print to confirm."
+        maxWidth="max-w-3xl"
+      >
+        <div className="space-y-4">
+          <div className="max-h-[62vh] overflow-y-auto rounded-xl bg-[#f4f7fb] p-3">
+            <InvoiceRenderer
+              format={defaultTemplate?.format ?? "a4"}
+              config={
+                ({
+                  header_title: tenant.name.toUpperCase(),
+                  header_subtitle: invoiceType === "sale" ? "GST Tax Invoice" : "Cash Memo / Bill",
+                  footer_note: "Thank you for your business!",
+                  terms: "",
+                  accent_color: tenant.brand_config?.primary_color ?? "#171717",
+                  design_style: invoiceType === "sale" ? "gst_full" : "classic",
+                  show_logo: true,
+                  show_hsn: invoiceType === "sale",
+                  show_discount: true,
+                  show_custom_fields: false,
+                  show_upi_qr: true,
+                  ...(defaultTemplate?.config ?? {}),
+                  show_gst_summary:
+                    invoiceType === "estimate_bill_of_supply"
+                      ? false
+                      : defaultTemplate?.config?.show_gst_summary ?? true,
+                }) as BillTemplateConfig
+              }
+              data={{
+                logoUrl,
+                invoiceNumber: "PREVIEW",
+                invoiceType,
+                dateStr: new Date().toLocaleString("en-IN", {
+                  timeZone: "Asia/Kolkata",
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }),
+                branchName: activeBranch?.name ?? tenant.name,
+                branchAddress: activeBranch?.address ?? null,
+                branchGstin: activeBranch?.gstin ?? null,
+                customerName: walkInName.trim() || selectedCustomer?.name || "Walk-In Customer",
+                customerPhone: walkInPhone.trim() || selectedCustomer?.phone || null,
+                customerGstin: walkInGstin.trim().toUpperCase() || selectedCustomer?.gstin || null,
+                customerAddress: walkInAddress.trim() || selectedCustomer?.address || null,
+                placeOfSupply: INDIAN_STATES[effectivePlaceOfSupply]
+                  ? `${INDIAN_STATES[effectivePlaceOfSupply]} (${effectivePlaceOfSupply})`
+                  : effectivePlaceOfSupply,
+                taxableAmount: gstCalc.taxable_amount,
+                cgstAmount: gstCalc.cgst_amount,
+                sgstAmount: gstCalc.sgst_amount,
+                igstAmount: gstCalc.igst_amount,
+                roundOff: gstCalc.round_off,
+                grandTotal: gstCalc.grand_total,
+                paidAmount,
+                dueAmount: balanceDue,
+                items: gstCalc.items.map((it) => ({
+                  product_name: it.product_name,
+                  sku: it.sku,
+                  hsn_code: it.hsn_code,
+                  qty: it.qty,
+                  unit_price: it.unit_price,
+                  gst_rate: it.gst_rate,
+                  line_total: it.line_total,
+                })),
+              }}
+            />
+          </div>
+          {finalizeBlock && (
+            <p className="text-xs font-medium text-rose-600">{finalizeBlock}</p>
+          )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setPreviewOpen(false)}>
+              Close &amp; Edit Bill
+            </Button>
+            <Button
+              type="button"
+              disabled={submitting || Boolean(finalizeBlock)}
+              onClick={async () => {
+                setPreviewOpen(false);
+                await submitInvoice(false);
+              }}
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+              {submitting ? "Saving..." : "Finalize & Print"}
+            </Button>
+          </div>
+        </div>
       </Dialog>
 
       {scannerOpen && (

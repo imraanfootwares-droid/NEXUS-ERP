@@ -33,6 +33,8 @@ export interface InvoicePdfData {
   customerName: string;
   customerPhone?: string | null;
   customerGstin?: string | null;
+  customerAddress?: string | null;
+  placeOfSupply?: string | null;
   supplyType: string;
   subtotal: number;
   discountAmount: number;
@@ -118,7 +120,9 @@ export async function renderInvoicePdfBuffer(data: InvoicePdfData): Promise<Buff
         <View style={{ marginBottom: 10 }}>
           <Text style={{ fontWeight: "bold" }}>Billed To: {data.customerName}</Text>
           {data.customerPhone && <Text style={styles.subtitle}>Phone: {data.customerPhone}</Text>}
+          {data.customerAddress && <Text style={styles.subtitle}>Address: {data.customerAddress}</Text>}
           {allowGst && data.customerGstin && <Text style={styles.subtitle}>Customer GSTIN: {data.customerGstin}</Text>}
+          {allowGst && data.placeOfSupply && <Text style={styles.subtitle}>Place of Supply: {data.placeOfSupply}</Text>}
         </View>
 
         <View style={[styles.row, styles.th]}>
