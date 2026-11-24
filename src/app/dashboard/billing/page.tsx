@@ -1,3 +1,4 @@
+import { getBranchScope } from "@/lib/auth/active-branch";
 import Link from "next/link";
 import { TierLockOverlay } from "@/components/ui/kpi-grid";
 import { canAccess } from "@/lib/auth/access";
@@ -15,6 +16,7 @@ export default async function BillingLedgerPage() {
     return <TierLockOverlay featureKey="gst_billing_pdf" />;
   }
 
+  const scope = await getBranchScope(ctx);
   const invoices = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
@@ -30,17 +32,24 @@ export default async function BillingLedgerPage() {
         status: string;
         has_oversold: boolean;
         created_at: string;
+        creator_name: string | null;
+        creator_login: string | null;
+        creator_role: string | null;
       }>(
         `SELECT i.id, i.invoice_number, i.invoice_type, b.name AS branch_name,
                 COALESCE(i.customer_snapshot->>'name', 'Walk-In') AS customer_name,
                 i.grand_total::text, i.paid_amount::text, i.due_amount::text,
-                i.status, i.has_oversold, i.created_at
+                i.status, i.has_oversold, i.created_at,
+                p.full_name AS creator_name,
+                COALESCE(p.username, p.email) AS creator_login,
+                p.role AS creator_role
          FROM public.invoices i
          JOIN public.branches b ON b.id = i.branch_id
-         WHERE i.tenant_id = $1
+         LEFT JOIN public.profiles p ON p.id = i.created_by
+         WHERE i.tenant_id = $1 AND i.branch_id = ANY($2::uuid[])
          ORDER BY i.created_at DESC
          LIMIT 200`,
-        [ctx.tenant!.id]
+        [ctx.tenant!.id, scope.ids]
       );
       return res.rows;
     }
@@ -50,8 +59,8 @@ export default async function BillingLedgerPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="font-display text-2xl font-bold text-slate-900">Invoices &amp; Billing Ledger</h1>
-          <p className="text-sm text-slate-600">
+          <h1>Invoices &amp; Billing Ledger</h1>
+          <p className="mt-0.5 text-[12.5px] text-[#77777d]">
             Manage GST invoices, drafts, credit note returns, size exchanges &amp; oversold flags.
           </p>
         </div>

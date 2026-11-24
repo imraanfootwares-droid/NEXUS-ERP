@@ -9,6 +9,7 @@ export type PaymentMode = "cash" | "upi" | "card" | "bank_transfer";
 export type BranchType = "factory" | "retail" | "warehouse";
 export type VerticalKey = "footwear" | "apparel" | "electronics" | "fmcg" | "hardware" | "custom";
 export type PriceDisplayMode = "retail" | "wholesale" | "hide";
+export type EnquiryChannel = "inbox" | "whatsapp" | "both";
 export type ProductionStage = "cutting" | "stitching" | "lasting" | "finishing" | "packed";
 
 export interface PosUiConfig {
@@ -18,9 +19,30 @@ export interface PosUiConfig {
   quick_pay_modes: PaymentMode[];
 }
 
+export interface LedgerFieldDef {
+  key: string;
+  label: string;
+  enabled: boolean;
+  isCustom?: boolean;
+}
+
+export interface LedgerConfig {
+  item_columns: LedgerFieldDef[];
+  header_fields: LedgerFieldDef[];
+}
+
+export interface CategoryTemplate {
+  category: string;
+  default_sizes: string[];
+  default_colours: string[];
+  default_pieces_per_carton: number;
+  extra_fields: string[];
+}
+
 export interface BrandConfig {
   logo_key?: string | null;
   logo_thumb_key?: string | null;
+  logo_pdf_data_url?: string | null;
   primary_color?: string;
   ui_style?: UiStyleKey;
   tagline?: string;
@@ -30,6 +52,8 @@ export interface BrandConfig {
   manufacturer_info?: string;
   customer_care?: string;
   pos_ui?: PosUiConfig;
+  ledger_config?: LedgerConfig;
+  category_templates?: CategoryTemplate[];
 }
 
 export interface TaxConfig {
@@ -48,6 +72,34 @@ export interface StorefrontConfig {
   hero_title: string;
   hero_subtitle: string;
   catalogue_price_display?: PriceDisplayMode;
+  enquiry_channel?: EnquiryChannel;
+  show_sizes?: boolean;
+  show_brand?: boolean;
+  show_description?: boolean;
+  show_carton_info?: boolean;
+}
+
+export interface TenantEnquiryItem {
+  name: string;
+  sku?: string;
+  model_code?: string;
+  attrs?: string;
+  qty: number;
+  price?: number | null;
+}
+
+export interface TenantEnquiryRow {
+  id: string;
+  tenant_id: string;
+  branch_id: string | null;
+  customer_name: string;
+  customer_contact: string;
+  message: string | null;
+  items: TenantEnquiryItem[];
+  source: "catalogue" | "storefront" | "product";
+  channel: EnquiryChannel;
+  status: "new" | "contacted" | "closed";
+  created_at: string;
 }
 
 export interface TenantRow {
@@ -68,6 +120,11 @@ export interface TenantRow {
   tax_config: TaxConfig;
   storefront_config: StorefrontConfig;
   stock_outdated_banner: boolean;
+  access_blocked?: boolean;
+  access_block_message?: string | null;
+  access_block_amount?: number | string | null;
+  access_block_contact?: string | null;
+  access_blocked_at?: string | null;
   created_at: string;
 }
 
@@ -83,6 +140,13 @@ export interface ProfileRow {
   session_version: number;
   must_change_password: boolean;
   is_active: boolean;
+  /** Personal access tier. Null follows the business plan. */
+  tier_override?: TierKey | null;
+  access_blocked?: boolean;
+  access_block_message?: string | null;
+  access_block_amount?: number | string | null;
+  access_block_contact?: string | null;
+  access_blocked_at?: string | null;
   created_at: string;
 }
 
@@ -108,6 +172,15 @@ export interface ImpersonationState {
   expiresAt: number;
 }
 
+/** Why a business or person is paused, shown on their payment screen. */
+export interface AccessBlock {
+  scope: "business" | "user";
+  message: string | null;
+  amountDue: number | null;
+  contact: string | null;
+  blockedAt: string | null;
+}
+
 export interface SessionContext {
   user: ProfileRow;
   tenant: TenantRow | null;
@@ -116,6 +189,8 @@ export interface SessionContext {
   permissions: Record<PermissionKey, boolean>;
   enabledFeatures: Record<FeatureKey, boolean>;
   impersonation: ImpersonationState | null;
+  /** Set while a payment block applies. Support sessions are never blocked. */
+  accessBlock?: AccessBlock | null;
 }
 
 export interface HsnCodeRow {
@@ -215,12 +290,16 @@ export interface CustomerRow {
   updated_at: string;
 }
 
+export type BillFormat = "a4" | "a5" | "thermal_80mm" | "thermal_58mm";
+export type BillDesignStyle = "classic" | "modern" | "minimal" | "bordered" | "bold" | "gst_full";
+
 export interface BillTemplateConfig {
   header_title: string;
   header_subtitle: string;
   footer_note: string;
   terms: string;
   accent_color: string;
+  design_style?: BillDesignStyle;
   show_logo: boolean;
   show_hsn: boolean;
   show_gst_summary: boolean;
@@ -235,7 +314,7 @@ export interface BillTemplateRow {
   id: string;
   tenant_id: string;
   name: string;
-  format: "a4" | "thermal_80mm" | "thermal_58mm";
+  format: BillFormat;
   is_default: boolean;
   config: BillTemplateConfig;
 }

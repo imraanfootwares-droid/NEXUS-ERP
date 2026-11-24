@@ -1,12 +1,36 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, Layers, Plus, Printer, Save, Search, ShoppingCart, Trash2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Banknote,
+  Camera,
+  ChevronDown,
+  ChevronUp,
+  CreditCard,
+  Layers,
+  Loader2,
+  Plus,
+  Printer,
+  QrCode,
+  Save,
+  Search,
+  Settings,
+  ShoppingCart,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { createOrFinalizeInvoiceAction } from "@/actions/billing";
+import { PosProductCard, QtyStepper, money } from "@/components/billing/pos-parts";
+import { normalizeGstin, normalizePhone } from "@/lib/billing/walk-in-identity";
+import { readCachedBlock } from "@/lib/offline/access-block";
 import { GstinInput, SizeRunQuickFill } from "@/components/ui/dynamic-fields";
-import { Badge, Button, Card, CardContent, Dialog, Input, Label, Select } from "@/components/ui/primitives";
+import { Alert, Button, Card, CardContent, Dialog, Input, Label, Select } from "@/components/ui/primitives";
+import { Paged } from "@/components/ui/pagination";
+import { Segmented } from "@/components/ui/spark";
 import { INDIAN_STATES } from "@/lib/constants/saas";
 import { calculateInvoiceGst } from "@/lib/gst/calculator";
 import { getIndianFyCode } from "@/lib/catalog/verticals";
@@ -60,10 +84,16 @@ interface CartLine {
   fallback_gst_rate: number;
 }
 
+type QuickPayMode = "cash" | "upi" | "card";
+const PAY_LABEL: Record<QuickPayMode, string> = { cash: "Cash", upi: "UPI", card: "Card" };
+const PAY_ICON = { cash: Banknote, upi: QrCode, card: CreditCard } as const;
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 export function PosTerminal({
   tenant,
   userId,
   branches,
+  branchLocked = false,
   initialVariants,
   initialCustomers,
   initialHsn,
@@ -77,6 +107,8 @@ export function PosTerminal({
   tenant: TenantRow;
   userId: string;
   branches: BranchRow[];
+  /** True when the header branch switcher has already chosen one branch. */
+  branchLocked?: boolean;
   initialVariants: PosVariantItem[];
   initialCustomers: CustomerRow[];
   initialHsn: HsnCodeRow[];
@@ -89,23 +121,27 @@ export function PosTerminal({
     id: string;
     branch_id: string;
     customer_id: string | null;
+    customer_snapshot?: { name?: string | null; phone?: string | null; gstin?: string | null; state_code?: string | null } | null;
     invoice_type: InvoiceType;
     tax_mode: TaxMode;
     items: CartLine[];
   } | null;
 }) {
   const router = useRouter();
-  const [branchId, setBranchId] = useState(draftToEdit?.branch_id || branches[0]?.id || "");
+  const billableBranches = branches.filter((b) => !b.is_read_only);
+  const startBranchId = draftToEdit?.branch_id || (branchLocked ? branches[0]?.id : billableBranches[0]?.id) || "";
+  const [branchId, setBranchId] = useState(startBranchId);
   const [variants, setVariants] = useState<PosVariantItem[]>(initialVariants);
   const [customers, setCustomers] = useState<CustomerRow[]>(initialCustomers);
   const [hsnList, setHsnList] = useState<HsnCodeRow[]>(initialHsn);
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartLine[]>(draftToEdit?.items ?? []);
   const [customerId, setCustomerId] = useState<string>(draftToEdit?.customer_id ?? "");
-  const [walkInName, setWalkInName] = useState("Walk-In Customer");
-  const [walkInPhone, setWalkInPhone] = useState("");
-  const [walkInGstin, setWalkInGstin] = useState("");
-  const [walkInState, setWalkInState] = useState(branches[0]?.state_code ?? "33");
+  const draftWalkIn = draftToEdit && !draftToEdit.customer_id ? draftToEdit.customer_snapshot : null;
+  const [walkInName, setWalkInName] = useState(draftWalkIn?.name || "Walk-In Customer");
+  const [walkInPhone, setWalkInPhone] = useState(draftWalkIn?.phone || "");
+  const [walkInGstin, setWalkInGstin] = useState(draftWalkIn?.gstin || "");
+  const [walkInState, setWalkInState] = useState(draftWalkIn?.state_code || branches[0]?.state_code || "33");
 
   const [invoiceType, setInvoiceType] = useState<InvoiceType>(draftToEdit?.invoice_type ?? "sale");
   const [taxMode, setTaxMode] = useState<TaxMode>(
@@ -115,14 +151,22 @@ export function PosTerminal({
   const [billDiscVal, setBillDiscVal] = useState(0);
   const [creditRedeem, setCreditRedeem] = useState(0);
   const [ewayBillNo, setEwayBillNo] = useState("");
-  const [payCash, setPayCash] = useState<number | null>(null);
-  const [payUpi, setPayUpi] = useState(0);
-  const [payCard, setPayCard] = useState(0);
+  // A full-payment method follows the bill total; manual entry switches to split payment.
+  const [fullMode, setFullMode] = useState<QuickPayMode | null>("cash");
+  const [splitPay, setSplitPay] = useState<Record<QuickPayMode, number>>({ cash: 0, upi: 0, card: 0 });
+  const [detailsOpen, setDetailsOpen] = useState(Boolean(draftWalkIn?.gstin));
+  const [lineDiscOpen, setLineDiscOpen] = useState(false);
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const [modelFilter, setModelFilter] = useState("all");
+  const [online, setOnline] = useState(true);
 
   const [freeOpen, setFreeOpen] = useState(false);
   const [freeName, setFreeName] = useState("");
   const [freeHsn, setFreeHsn] = useState("6403");
   const [freeQty, setFreeQty] = useState(1);
+  const [cartonLineKey, setCartonLineKey] = useState<string | null>(null);
+  const [cartonCount, setCartonCount] = useState("1");
+  const [cartonPack, setCartonPack] = useState("20");
   const [freeRate, setFreeRate] = useState(0);
   const [freeGst, setFreeGst] = useState(5);
 
@@ -133,7 +177,7 @@ export function PosTerminal({
   const [submitting, setSubmitting] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const lastSyncRef = useRef<string>(new Date().toISOString());
-  const initialBranchRef = useRef<string>(draftToEdit?.branch_id || branches[0]?.id || "");
+  const initialBranchRef = useRef<string>(startBranchId);
 
   const posUi = tenant.brand_config?.pos_ui ?? {
     layout: "grid",
@@ -151,6 +195,7 @@ export function PosTerminal({
     }
     return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
   }, [variants]);
+  const sizeRunVariants = useMemo(() => variants.filter((v) => v.model_code === sizeRunModel), [variants, sizeRunModel]);
 
   // Register device, refresh stock when switching branch, & cache catalog snapshot
   useEffect(() => {
@@ -247,6 +292,17 @@ export function PosTerminal({
     return () => clearInterval(timer);
   }, [branchId]);
 
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    sync();
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
+
   const hsnMap = useMemo(() => {
     const m = new Map<string, HsnCodeRow>();
     for (const h of hsnList) m.set(h.code, h);
@@ -269,24 +325,66 @@ export function PosTerminal({
         qty: c.qty,
         unit_price: c.unit_price,
         line_discount_amount: discountsEnabled ? c.line_discount_amount : 0,
-        hsn_rule: c.hsn_code ? hsnMap.get(c.hsn_code) : undefined,
+        hsn_rule: c.fallback_gst_rate === 0 ? undefined : c.hsn_code ? hsnMap.get(c.hsn_code) : undefined,
         fallback_gst_rate: c.fallback_gst_rate,
       })),
     });
   }, [cart, invoiceType, taxMode, activeBranch, selectedCustomer, walkInState, billDiscType, billDiscVal, discountsEnabled, hsnMap]);
 
-  const effectivePayCash = payCash ?? Math.max(0, gstCalc.grand_total - payUpi - payCard - creditRedeem);
+  const creditBalance = Number(selectedCustomer?.credit_balance ?? 0);
+  const appliedCredit = Math.min(creditRedeem, creditBalance, gstCalc.grand_total);
+  const payable = round2(Math.max(0, gstCalc.grand_total - appliedCredit));
+  const payModes = (["cash", "upi", "card"] as const).filter(
+    (m) => !posUi.quick_pay_modes?.length || posUi.quick_pay_modes.includes(m)
+  );
+  const activeFullMode = fullMode && payModes.includes(fullMode) ? fullMode : fullMode ? payModes[0] ?? "cash" : null;
+  const payAmounts: Record<QuickPayMode, number> = activeFullMode
+    ? { cash: 0, upi: 0, card: 0, [activeFullMode]: payable }
+    : splitPay;
+  const digitalPaid = round2(payAmounts.upi + payAmounts.card);
+  const digitalOverpaid = digitalPaid > payable;
+  // Cash above the bill is change to hand back, so it is never recorded as revenue.
+  const recordedCash = round2(Math.min(payAmounts.cash, Math.max(0, payable - digitalPaid)));
+  const changeDue = round2(payAmounts.cash - recordedCash);
+  const paidAmount = round2(recordedCash + payAmounts.upi + payAmounts.card);
+  const balanceDue = round2(Math.max(0, payable - paidAmount));
 
-  const addVariantToCart = (v: PosVariantItem) => {
-    const isWholesale = selectedCustomer?.customer_type === "wholesale";
-    const price = isWholesale && v.wholesale_price > 0 ? Number(v.wholesale_price) : Number(v.selling_price);
+  const editPayment = (mode: QuickPayMode, amount: number) => {
+    // Typing into another method splits the bill: the full-payment method keeps the remainder.
+    const next: Record<QuickPayMode, number> = activeFullMode ? { cash: 0, upi: 0, card: 0 } : { ...splitPay };
+    if (activeFullMode && activeFullMode !== mode) next[activeFullMode] = round2(Math.max(0, payable - amount));
+    next[mode] = amount;
+    setSplitPay(next);
+    setFullMode(null);
+  };
+
+  const qtyByVariant = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of cart) if (c.variant_id) m.set(c.variant_id, (m.get(c.variant_id) ?? 0) + c.qty);
+    return m;
+  }, [cart]);
+  const itemCount = cart.reduce((sum, c) => sum + c.qty, 0);
+
+  /** Never block billing when physical stock exceeds system stock; warn only. */
+  const stockLimit = (_v: PosVariantItem): number | undefined => undefined;
+
+  const priceFor = (v: PosVariantItem, customer: CustomerRow | null = selectedCustomer) =>
+    customer?.customer_type === "wholesale" && v.wholesale_price > 0 ? Number(v.wholesale_price) : Number(v.selling_price);
+
+  const setVariantQty = (v: PosVariantItem, requested: number) => {
+    const qty = Math.max(0, requested);
+    const available = Math.max(0, Number(v.stock_qty));
+    if (stockEnabled && qty > available) {
+      toast.warning(
+        available === 0
+          ? `${v.sku} shows 0 stock in system — billing ${qty} anyway.`
+          : `Only ${available} in system for ${v.sku} — billing ${qty} anyway.`
+      );
+    }
     setCart((prev) => {
       const idx = prev.findIndex((c) => c.variant_id === v.variant_id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...next[idx], qty: next[idx].qty + 1 };
-        return next;
-      }
+      if (qty <= 0) return idx >= 0 ? prev.filter((_, i) => i !== idx) : prev;
+      if (idx >= 0) return prev.map((c, i) => (i === idx ? { ...c, qty } : c));
       return [
         ...prev,
         {
@@ -295,14 +393,107 @@ export function PosTerminal({
           product_name: `${v.product_name} (${Object.values(v.attributes).join(" / ")})`,
           sku: v.sku,
           hsn_code: v.hsn_code,
-          qty: 1,
-          unit_price: price,
+          qty,
+          unit_price: priceFor(v),
           line_discount_amount: 0,
-          fallback_gst_rate: Number(v.gst_rate ?? 5),
+          fallback_gst_rate: Number(v.gst_rate ?? 0),
         },
       ];
     });
   };
+
+  const addVariantToCart = (v: PosVariantItem): boolean => {
+    const current = qtyByVariant.get(v.variant_id) ?? 0;
+    setVariantQty(v, current + 1);
+    return true;
+  };
+
+  const setLineQty = (key: string, requested: number) => {
+    const line = cart.find((c) => c.key === key);
+    const variant = line?.variant_id ? variants.find((v) => v.variant_id === line.variant_id) : undefined;
+    if (variant) {
+      setVariantQty(variant, requested);
+      return;
+    }
+    setCart((prev) =>
+      requested <= 0 ? prev.filter((c) => c.key !== key) : prev.map((c) => (c.key === key ? { ...c, qty: requested } : c))
+    );
+  };
+
+  const chooseCustomer = (id: string) => {
+    const previous = selectedCustomer;
+    const next = customers.find((c) => c.id === id) ?? null;
+    setCustomerId(id);
+    setCreditRedeem(0);
+    // Keep catalog lines on the right retail or wholesale price for this customer.
+    setCart((prev) =>
+      prev.map((line) => {
+        const v = line.variant_id ? variants.find((x) => x.variant_id === line.variant_id) : undefined;
+        return v ? { ...line, unit_price: priceFor(v, next) } : line;
+      })
+    );
+    if (next?.customer_type === "wholesale") {
+      setTaxMode(tenant.tax_config.gst_enabled ? "exclusive" : "none");
+      if (next.default_discount_pct > 0 && discountsEnabled) {
+        setBillDiscType("percent");
+        setBillDiscVal(Number(next.default_discount_pct));
+      }
+    } else if (previous?.customer_type === "wholesale") {
+      setTaxMode(tenant.tax_config.gst_enabled ? tenant.tax_config.default_tax_mode : "none");
+      if (previous.default_discount_pct > 0) setBillDiscVal(0);
+    }
+  };
+
+  const resetBill = () => {
+    setCart([]);
+    setBillDiscVal(0);
+    setCreditRedeem(0);
+    setEwayBillNo("");
+    setFullMode("cash");
+    setSplitPay({ cash: 0, upi: 0, card: 0 });
+    setCustomerId("");
+    setWalkInName("Walk-In Customer");
+    setWalkInPhone("");
+    setWalkInGstin("");
+    setDetailsOpen(false);
+  };
+
+  const clearBill = () => {
+    const saved = cart;
+    setCart([]);
+    toast("Bill cleared", { action: { label: "Undo", onClick: () => setCart(saved) } });
+  };
+
+  const overStockLine = cart.find((c) => {
+    const v = c.variant_id ? variants.find((x) => x.variant_id === c.variant_id) : undefined;
+    const limit = v ? stockLimit(v) : undefined;
+    return limit !== undefined && c.qty > limit;
+  });
+  const finalizeBlock =
+    cart.length === 0
+      ? "Add at least one item."
+      : activeBranch?.is_read_only
+      ? "This branch is read-only."
+      : overStockLine
+      ? "Reduce items that are over available stock."
+      : digitalOverpaid
+      ? "UPI and card are more than the bill amount."
+      : null;
+
+  const filteredVariants = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return variants
+      .filter(
+        (v) =>
+          (modelFilter === "all" || v.model_code === modelFilter) &&
+          (!q ||
+            v.product_name.toLowerCase().includes(q) ||
+            v.model_code.toLowerCase().includes(q) ||
+            v.sku.toLowerCase().includes(q) ||
+            (v.barcode && v.barcode.toLowerCase().includes(q)))
+      )
+      ;
+  }, [variants, search, modelFilter]);
 
   const handleBarcodeKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
@@ -311,11 +502,13 @@ export function PosTerminal({
     const exact = variants.find(
       (v) => v.barcode?.toLowerCase() === q || v.sku.toLowerCase() === q
     );
-    if (exact) {
+    const single = exact ?? (filteredVariants.length === 1 ? filteredVariants[0] : undefined);
+    if (single) {
       e.preventDefault();
-      addVariantToCart(exact);
-      setSearch("");
-      toast.success(`Added ${exact.sku}`);
+      if (addVariantToCart(single)) {
+        setSearch("");
+        toast.success(`Added ${single.sku}`);
+      }
     }
   };
 
@@ -338,8 +531,7 @@ export function PosTerminal({
               const raw = String(codes[0].rawValue).toLowerCase();
               const hit = variants.find((v) => v.barcode?.toLowerCase() === raw || v.sku.toLowerCase() === raw);
               if (hit) {
-                addVariantToCart(hit);
-                toast.success(`Scanned ${hit.sku}`);
+                if (addVariantToCart(hit)) toast.success(`Scanned ${hit.sku}`);
                 stopCameraScan();
                 return;
               }
@@ -359,8 +551,7 @@ export function PosTerminal({
               const raw = result.getText().toLowerCase();
               const hit = variants.find((v) => v.barcode?.toLowerCase() === raw || v.sku.toLowerCase() === raw);
               if (hit) {
-                addVariantToCart(hit);
-                toast.success(`Scanned ${hit.sku}`);
+                if (addVariantToCart(hit)) toast.success(`Scanned ${hit.sku}`);
                 stopCameraScan();
               }
             }
@@ -382,33 +573,26 @@ export function PosTerminal({
     setScannerOpen(false);
   };
 
-  const filteredVariants = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return variants.slice(0, 40);
-    return variants
-      .filter(
-        (v) =>
-          v.product_name.toLowerCase().includes(q) ||
-          v.model_code.toLowerCase().includes(q) ||
-          v.sku.toLowerCase().includes(q) ||
-          (v.barcode && v.barcode.toLowerCase().includes(q))
-      )
-      .slice(0, 40);
-  }, [variants, search]);
-
   const submitInvoice = async (isDraft: boolean) => {
     if (cart.length === 0) {
       toast.error("Add at least one item to the bill.");
       return;
     }
+    if (readCachedBlock(tenant.id, userId)) {
+      toast.error("Your access is paused. Pay the bill or contact the administrator.");
+      return;
+    }
+    if (!isDraft && finalizeBlock) {
+      toast.error(finalizeBlock);
+      return;
+    }
     setSubmitting(true);
     const idempotencyKey = crypto.randomUUID();
     const payments: Array<{ mode: PaymentMode; amount: number }> = [
-      { mode: "cash", amount: effectivePayCash },
-      { mode: "upi", amount: payUpi },
-      { mode: "card", amount: payCard },
+      { mode: "cash", amount: recordedCash },
+      { mode: "upi", amount: payAmounts.upi },
+      { mode: "card", amount: payAmounts.card },
     ];
-    const paidAmount = effectivePayCash + payUpi + payCard;
 
     const payload = {
       idempotency_key: idempotencyKey,
@@ -443,7 +627,7 @@ export function PosTerminal({
       round_off: gstCalc.round_off,
       grand_total: gstCalc.grand_total,
       paid_amount: paidAmount,
-      credit_redeemed: creditRedeem,
+      credit_redeemed: appliedCredit,
       eway_bill_no: ewayBillNo || null,
       items: gstCalc.items,
       payments,
@@ -464,13 +648,13 @@ export function PosTerminal({
           payload,
         });
         toast.success(`Saved offline as ${alloc.invoiceNumber}. Will auto-sync on reconnect.`);
-        setCart([]);
+        resetBill();
         return;
       }
 
       const invoiceId = await createOrFinalizeInvoiceAction(payload);
       toast.success(isDraft ? "Draft saved." : "Invoice finalized!");
-      setCart([]);
+      resetBill();
       router.push(isDraft ? "/dashboard/billing" : `/dashboard/billing/${invoiceId}/print`);
     } catch (err) {
       if (!isDraft && err instanceof Error && err.message.toLowerCase().includes("fetch")) {
@@ -487,7 +671,7 @@ export function PosTerminal({
           payload,
         });
         toast.warning(`Connection dropped — queued offline as ${alloc.invoiceNumber}`);
-        setCart([]);
+        resetBill();
       } else {
         toast.error(err instanceof Error ? err.message : "Failed to save invoice");
       }
@@ -496,242 +680,506 @@ export function PosTerminal({
     }
   };
 
-  const cartPanel = (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <Label>Invoice Type</Label>
-          <Select value={invoiceType} onChange={(e) => setInvoiceType(e.target.value as InvoiceType)}>
-            <option value="sale">GST Tax Invoice</option>
-            {tenant.tax_config.allow_estimate_mode && (
-              <option value="estimate_bill_of_supply">Estimate (Non-GST)</option>
-            )}
-          </Select>
-        </div>
-        <div>
-          <Label>Tax Mode</Label>
-          <Select
-            value={taxMode}
-            disabled={invoiceType === "estimate_bill_of_supply"}
-            onChange={(e) => setTaxMode(e.target.value as TaxMode)}
-          >
-            <option value="inclusive">Tax Inclusive (MRP)</option>
-            <option value="exclusive">Tax Exclusive (B2B)</option>
-            <option value="none">No Tax</option>
-          </Select>
-        </div>
-      </div>
+  const stateOptions = Object.entries(INDIAN_STATES).map(([c, n]) => (
+    <option key={c} value={c}>{c} — {n}</option>
+  ));
 
-      {crmEnabled ? (
-        <div className="space-y-2">
-          <div>
-            <Label>Customer / Wholesale Dealer</Label>
-            <Select
-              value={customerId}
-              onChange={(e) => {
-                const cid = e.target.value;
-                setCustomerId(cid);
-                setCreditRedeem(0);
-                const cust = customers.find((c) => c.id === cid);
-                if (cust?.customer_type === "wholesale") {
-                  setTaxMode(tenant.tax_config.gst_enabled ? "exclusive" : "none");
-                  if (cust.default_discount_pct > 0 && discountsEnabled) {
-                    setBillDiscType("percent");
-                    setBillDiscVal(Number(cust.default_discount_pct));
-                  }
-                }
-              }}
-            >
-              <option value="">Walk-In Customer</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.customer_type}) {c.current_due > 0 ? `• Due ₹${c.current_due}` : ""}
-                </option>
-              ))}
-            </Select>
-          </div>
-          {!customerId && (
-            <div className="grid grid-cols-2 gap-2">
-              <Input placeholder="Walk-In Name" value={walkInName} onChange={(e) => setWalkInName(e.target.value)} />
-              <Input placeholder="Phone" value={walkInPhone} onChange={(e) => setWalkInPhone(e.target.value)} />
-              <GstinInput value={walkInGstin} onChange={setWalkInGstin} onStateDetected={setWalkInState} />
-              <Select value={walkInState} onChange={(e) => setWalkInState(e.target.value)}>
-                {Object.entries(INDIAN_STATES).map(([c, n]) => (
-                  <option key={c} value={c}>{c} — {n}</option>
-                ))}
-              </Select>
-            </div>
-          )}
-          {selectedCustomer && Number(selectedCustomer.credit_balance) > 0 && (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 flex items-center justify-between gap-2 text-xs">
-              <span className="text-emerald-900 font-medium">
-                Credit Balance: ₹{Number(selectedCustomer.credit_balance).toLocaleString("en-IN")}
-              </span>
-              <div className="flex items-center gap-1">
-                <span>Redeem ₹</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={Math.min(Number(selectedCustomer.credit_balance), gstCalc.grand_total)}
-                  value={creditRedeem}
-                  onChange={(e) =>
-                    setCreditRedeem(
-                      Math.min(
-                        Number(selectedCustomer.credit_balance),
-                        gstCalc.grand_total,
-                        Math.max(0, Number(e.target.value) || 0)
-                      )
-                    )
-                  }
-                  className="w-20 rounded border border-emerald-300 bg-white px-2 py-1 text-right font-semibold"
-                />
-              </div>
-            </div>
-          )}
-          {selectedCustomer &&
-            selectedCustomer.credit_limit > 0 &&
-            selectedCustomer.current_due + gstCalc.grand_total > selectedCustomer.credit_limit && (
-              <p className="text-xs text-rose-600 mt-1 font-semibold">
-                Warning: Exceeds dealer credit limit (₹{selectedCustomer.credit_limit.toLocaleString("en-IN")})
-              </p>
-            )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
-          <Input placeholder="Customer Name" value={walkInName} onChange={(e) => setWalkInName(e.target.value)} />
-          <Input placeholder="Phone" value={walkInPhone} onChange={(e) => setWalkInPhone(e.target.value)} />
+  const walkInPhoneClean = normalizePhone(walkInPhone);
+  const walkInGstinClean = normalizeGstin(walkInGstin);
+  const matchedCustomer =
+    !customerId && (walkInPhoneClean || walkInGstinClean)
+      ? customers.find(
+          (c) =>
+            (walkInGstinClean && normalizeGstin(c.gstin) === walkInGstinClean) ||
+            (walkInPhoneClean && normalizePhone(c.phone) === walkInPhoneClean)
+        ) ?? null
+      : null;
+
+  const customerFields = (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <Input
+          aria-label="Customer name"
+          placeholder="Customer name"
+          value={walkInName}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => setWalkInName(e.target.value)}
+        />
+        <Input aria-label="Customer phone" placeholder="Phone number" inputMode="tel" value={walkInPhone} onChange={(e) => setWalkInPhone(e.target.value)} />
+      </div>
+      {detailsOpen ? (
+        <div className="ui-page grid grid-cols-2 gap-2">
           <GstinInput value={walkInGstin} onChange={setWalkInGstin} onStateDetected={setWalkInState} />
-          <Select value={walkInState} onChange={(e) => setWalkInState(e.target.value)}>
-            {Object.entries(INDIAN_STATES).map(([c, n]) => (
-              <option key={c} value={c}>{c} — {n}</option>
+          <Select aria-label="Place of supply" value={walkInState} onChange={(e) => setWalkInState(e.target.value)}>
+            {stateOptions}
+          </Select>
+        </div>
+      ) : null}
+      {crmEnabled ? (
+        matchedCustomer ? (
+          <button type="button" className="pos-link !text-emerald-700" onClick={() => chooseCustomer(matchedCustomer.id)}>
+            Existing customer: {matchedCustomer.name}. Tap to use their account
+          </button>
+        ) : walkInPhoneClean || walkInGstinClean ? (
+          <p className="text-[11px] font-medium text-emerald-700">Will be saved to Customers when finalized</p>
+        ) : walkInPhone.trim() ? (
+          <p className="text-[11px] font-medium text-amber-700">Enter a 10-digit phone number to save this customer</p>
+        ) : (
+          <p className="text-[11px] text-[#77777d]">Add a phone or GSTIN to save this customer</p>
+        )
+      ) : null}
+    </div>
+  );
+
+  const billBody = (
+    <div className="space-y-4 p-3.5">
+      <section className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="ui-eyebrow">Customer</p>
+          {!customerId && (
+            <button type="button" className="pos-link" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((v) => !v)}>
+              {detailsOpen ? "Hide GSTIN" : "GSTIN & state"}
+              <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${detailsOpen ? "rotate-180" : ""}`} />
+            </button>
+          )}
+        </div>
+        {crmEnabled ? (
+          <Select aria-label="Customer" value={customerId} onChange={(e) => chooseCustomer(e.target.value)}>
+            <option value="">Walk-In Customer</option>
+            {customers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.customer_type}) {c.current_due > 0 ? `• Due ₹${c.current_due}` : ""}
+              </option>
             ))}
           </Select>
-        </div>
-      )}
+        ) : null}
+        {!customerId ? customerFields : null}
+        {selectedCustomer && creditBalance > 0 && (
+          <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 px-2.5 py-2 text-xs text-emerald-800">
+            <span>Credit available {money(creditBalance)}</span>
+            <label className="flex items-center gap-1.5">
+              Use ₹
+              <input
+                type="number"
+                min={0}
+                max={Math.min(creditBalance, gstCalc.grand_total)}
+                value={creditRedeem}
+                onChange={(e) =>
+                  setCreditRedeem(Math.min(creditBalance, gstCalc.grand_total, Math.max(0, Number(e.target.value) || 0)))
+                }
+                className="h-7 w-20 rounded-md bg-white px-2 text-right font-mono font-medium shadow-[0_0_0_1px_rgba(5,150,105,.25)] focus:outline-none"
+              />
+            </label>
+          </div>
+        )}
+        {selectedCustomer &&
+          selectedCustomer.credit_limit > 0 &&
+          selectedCustomer.current_due + gstCalc.grand_total > selectedCustomer.credit_limit && (
+            <p className="text-xs font-medium text-rose-600">
+              Exceeds dealer credit limit of {money(selectedCustomer.credit_limit)}
+            </p>
+          )}
+      </section>
 
-      {/* Cart Items */}
-      <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto border rounded-xl border-slate-200 bg-slate-50/50">
-        {cart.length === 0 ? (
-          <p className="p-6 text-center text-xs text-slate-400">Scan barcode or tap items to add</p>
-        ) : (
-          cart.map((c, idx) => (
-            <div key={c.key} className="p-2.5 flex items-center justify-between gap-2 text-xs bg-white">
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-slate-900 truncate">{c.product_name}</p>
-                <p className="text-slate-500">
-                  ₹{c.unit_price}
-                  {posUi.show_hsn_col && (
-                    <> • HSN {c.hsn_code || "—"} • GST {gstCalc.items[idx]?.gst_rate ?? c.fallback_gst_rate}%</>
-                  )}
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {discountsEnabled && (
-                  <input
-                    type="number"
-                    min={0}
-                    title="Line Discount ₹"
-                    placeholder="Disc"
-                    value={c.line_discount_amount || ""}
-                    onChange={(e) => {
-                      const d = Math.max(0, Number(e.target.value) || 0);
-                      setCart((prev) => prev.map((it, i) => (i === idx ? { ...it, line_discount_amount: d } : it)));
-                    }}
-                    className="w-14 min-h-[36px] rounded border border-slate-300 text-center text-[11px]"
-                  />
-                )}
-                <input
-                  type="number"
-                  min={1}
-                  value={c.qty}
-                  onChange={(e) => {
-                    const q = Math.max(1, Number(e.target.value) || 1);
-                    setCart((prev) => prev.map((it, i) => (i === idx ? { ...it, qty: q } : it)));
-                  }}
-                  className="w-14 min-h-[36px] rounded border border-slate-300 text-center font-semibold"
-                />
-                <button
-                  type="button"
-                  onClick={() => setCart((prev) => prev.filter((_, i) => i !== idx))}
-                  className="p-1.5 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
+      <section className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="ui-eyebrow">Bill Mode</p>
+          {invoiceType === "sale" && (
+            <span className="font-mono text-[10px] font-semibold text-sky-700">
+              {activeBranch?.gstin ? `GSTIN: ${activeBranch.gstin}` : "GST Setup Needed"}
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-[#f1f1f2] p-[3px]">
+          <button
+            type="button"
+            onClick={() => {
+              setInvoiceType("estimate_bill_of_supply");
+              setTaxMode("none");
+            }}
+            className={`cursor-pointer rounded-[9px] px-3 py-1.5 text-xs font-semibold transition-all ${
+              invoiceType === "estimate_bill_of_supply"
+                ? "bg-white text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,.08)]"
+                : "text-[#55555b] hover:text-[#171717]"
+            }`}
+          >
+            Normal Bill
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setInvoiceType("sale");
+              setTaxMode(tenant.tax_config.default_tax_mode === "exclusive" ? "exclusive" : "inclusive");
+            }}
+            className={`cursor-pointer rounded-[9px] px-3 py-1.5 text-xs font-semibold transition-all ${
+              invoiceType === "sale"
+                ? "bg-[#171717] text-white shadow-[0_1px_2px_rgba(0,0,0,.18)]"
+                : "text-[#55555b] hover:text-[#171717]"
+            }`}
+          >
+            GST Bill
+          </button>
+        </div>
+
+        {invoiceType === "sale" && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-medium text-[#77777d]">Tax Calculation</span>
+              <div className="w-40">
+                <Select
+                  aria-label="Tax mode"
+                  value={taxMode}
+                  onChange={(e) => setTaxMode(e.target.value as TaxMode)}
+                  className="!min-h-[30px] !py-1 !text-[11.5px]"
                 >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                  <option value="inclusive">Inclusive (MRP)</option>
+                  <option value="exclusive">Exclusive (B2B)</option>
+                  <option value="none">No Tax (0%)</option>
+                </Select>
               </div>
             </div>
-          ))
-        )}
-      </div>
 
-      {discountsEnabled && (
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <Label>Bill Discount</Label>
-            <Select value={billDiscType} onChange={(e) => setBillDiscType(e.target.value as "percent" | "flat")}>
-              <option value="flat">Flat ₹</option>
-              <option value="percent">Percent %</option>
-            </Select>
+            {(!tenant.tax_config.gst_enabled || !activeBranch?.gstin) && (
+              <div className="flex items-start justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-900">
+                <div className="flex items-start gap-1.5">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                  <div>
+                    <p className="font-semibold">GST Bill details not set</p>
+                    <p className="text-[10.5px] text-amber-800">
+                      {!tenant.tax_config.gst_enabled && !activeBranch?.gstin
+                        ? "Turn on GST Billing and add your Branch GSTIN in Settings."
+                        : !activeBranch?.gstin
+                        ? `Add GSTIN for "${activeBranch?.name || "this branch"}" in Settings.`
+                        : "Turn on GST Billing in System Settings."}
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={!activeBranch?.gstin && tenant.tax_config.gst_enabled ? "/dashboard/settings?tab=branches" : "/dashboard/settings?tab=tax"}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-900 px-2.5 py-1.5 text-[10.5px] font-semibold text-white hover:bg-amber-950"
+                >
+                  <Settings className="h-3 w-3" /> Setup
+                </Link>
+              </div>
+            )}
           </div>
-          <div>
-            <Label>Value</Label>
-            <Input type="number" min={0} value={billDiscVal} onChange={(e) => setBillDiscVal(Number(e.target.value) || 0)} />
-          </div>
+        )}
+      </section>
+
+      <section>
+        <div className="mb-1.5 flex items-center justify-between">
+          <p className="ui-eyebrow">Items</p>
+          {discountsEnabled && cart.length > 0 ? (
+            <button type="button" className="pos-link" aria-pressed={lineDiscOpen} onClick={() => setLineDiscOpen((v) => !v)}>
+              {lineDiscOpen ? "Hide item discounts" : "Item discounts"}
+            </button>
+          ) : null}
         </div>
+        {cart.length === 0 ? (
+          <div className="pos-empty">
+            <ShoppingCart aria-hidden="true" />
+            <p>Your bill is empty</p>
+            <small>Tap a product or scan a barcode</small>
+          </div>
+        ) : (
+          <ul className="pos-lines">
+            {cart.map((c, idx) => {
+              const variant = c.variant_id ? variants.find((v) => v.variant_id === c.variant_id) : undefined;
+              const limit = variant ? stockLimit(variant) : undefined;
+              const systemStock = variant ? Math.max(0, Number(variant.stock_qty)) : undefined;
+              const lowWarning = stockEnabled && systemStock !== undefined && c.qty > systemStock;
+              const lineGross = c.qty * c.unit_price;
+              const lineNet = Math.max(0, lineGross - (discountsEnabled ? c.line_discount_amount : 0));
+              return (
+                <li key={c.key} className="pos-line">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-[12.5px] font-medium text-[#171717]" title={c.product_name}>{c.product_name}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-[#77777d]">
+                        {money(c.unit_price)} each
+                        {posUi.show_hsn_col ? ` · HSN ${c.hsn_code || "—"} · GST ${gstCalc.items[idx]?.gst_rate ?? c.fallback_gst_rate}%` : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 font-mono text-[12.5px] font-semibold text-[#171717]">{money(lineNet)}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <QtyStepper value={c.qty} max={limit} label={c.product_name} onChange={(q) => setLineQty(c.key, q)} />
+                      <label className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-[#55555b]" title="Edit price per piece">
+                        <span>₹</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label={`Unit price for ${c.product_name}`}
+                          value={String(c.unit_price)}
+                          onFocus={(e) => e.currentTarget.select()}
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(/[^0-9.]/g, "");
+                            const parsed = Number(cleaned);
+                            if (cleaned === "" || Number.isFinite(parsed)) {
+                              setCart((prev) =>
+                                prev.map((it) =>
+                                  it.key === c.key ? { ...it, unit_price: cleaned === "" ? 0 : Math.max(0, parsed) } : it
+                                )
+                              );
+                            }
+                          }}
+                          className="h-6 w-16 bg-transparent text-right font-mono text-xs font-semibold text-[#171717] focus:outline-none"
+                        />
+                        <span className="text-[10px] text-[#77777d]">/pc</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (cartonLineKey === c.key) {
+                            setCartonLineKey(null);
+                          } else {
+                            setCartonLineKey(c.key);
+                            setCartonCount("1");
+                            setCartonPack("20");
+                          }
+                        }}
+                        className={`rounded-md border px-2 py-1 text-[10.5px] font-semibold cursor-pointer ${
+                          cartonLineKey === c.key
+                            ? "border-[#171717] bg-[#171717] text-white"
+                            : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                        title="Enter quantity by Cartons / Boxes"
+                      >
+                        Box/Ctn
+                      </button>
+                    </div>
+                    {discountsEnabled && lineDiscOpen ? (
+                      <label className="flex items-center gap-1.5 text-[11px] text-[#77777d]">
+                        Discount ₹
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={c.line_discount_amount || ""}
+                          onFocus={(e) => e.currentTarget.select()}
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(/[^0-9.]/g, "");
+                            const d = Math.min(lineGross, Math.max(0, Number(cleaned) || 0));
+                            setCart((prev) => prev.map((it) => (it.key === c.key ? { ...it, line_discount_amount: d } : it)));
+                          }}
+                          className="h-7 w-16 rounded-md bg-white px-2 text-right font-mono text-[#171717] shadow-[0_0_0_1px_rgba(0,0,0,.1)] focus:shadow-[0_0_0_1px_#171717] focus:outline-none"
+                        />
+                      </label>
+                    ) : c.line_discount_amount > 0 && discountsEnabled ? (
+                      <span className="text-[11px] text-emerald-700">−{money(c.line_discount_amount)}</span>
+                    ) : null}
+                  </div>
+                  {cartonLineKey === c.key && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2 text-[11px]">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={cartonCount}
+                        onChange={(e) => setCartonCount(e.target.value.replace(/\D/g, ""))}
+                        className="h-7 w-14 rounded-md border border-slate-300 bg-white px-2 text-center font-mono text-xs"
+                        placeholder="Ctn"
+                        aria-label="Number of cartons"
+                      />
+                      <span className="text-slate-500">Ctn ×</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={cartonPack}
+                        onChange={(e) => setCartonPack(e.target.value.replace(/\D/g, ""))}
+                        className="h-7 w-14 rounded-md border border-slate-300 bg-white px-2 text-center font-mono text-xs"
+                        placeholder="Pcs"
+                        aria-label="Pieces per carton"
+                      />
+                      <span className="font-mono font-semibold text-slate-700">
+                        = {(Number(cartonCount || 0) * Number(cartonPack || 0)).toLocaleString("en-IN")} pcs
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const totalPcs = Number(cartonCount || 0) * Number(cartonPack || 0);
+                          if (totalPcs > 0) {
+                            setLineQty(c.key, totalPcs);
+                            setCartonLineKey(null);
+                          }
+                        }}
+                        className="ml-auto rounded-md bg-[#171717] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-slate-800 cursor-pointer"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  )}
+                  {lowWarning ? (
+                    <p className="mt-1.5 text-[11px] font-medium text-amber-700">
+                      Warning: Only {systemStock} recorded in system — you can still bill {c.qty}.
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      {discountsEnabled && cart.length > 0 && (
+        <section>
+          <p className="ui-eyebrow mb-1.5">Bill Discount</p>
+          <div className="flex gap-2">
+            <Segmented
+              label="Discount type"
+              options={["₹", "%"] as const}
+              value={billDiscType === "flat" ? "₹" : "%"}
+              onChange={(v) => {
+                setBillDiscType(v === "₹" ? "flat" : "percent");
+                setBillDiscVal(0);
+              }}
+            />
+            <Input
+              aria-label={billDiscType === "flat" ? "Discount in rupees" : "Discount percent"}
+              type="text"
+              inputMode="decimal"
+              placeholder="0"
+              value={billDiscVal || ""}
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => {
+                const cleaned = e.target.value.replace(/[^0-9.]/g, "");
+                const raw = Math.max(0, Number(cleaned) || 0);
+                setBillDiscVal(billDiscType === "percent" ? Math.min(100, raw) : raw);
+              }}
+              className="flex-1 font-mono"
+            />
+          </div>
+        </section>
       )}
 
-      {/* Totals */}
-      <div className="rounded-xl bg-slate-900 text-white p-3.5 space-y-1 text-xs">
-        <div className="flex justify-between text-slate-300">
-          <span>Taxable ({gstCalc.supply_type === "intra_state" ? "CGST+SGST" : "IGST"})</span>
-          <span>₹{gstCalc.taxable_amount.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-slate-300">
-          <span>Total GST</span>
-          <span>₹{(gstCalc.cgst_amount + gstCalc.sgst_amount + gstCalc.igst_amount).toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-base font-bold pt-1 border-t border-slate-700">
-          <span>Grand Total</span>
-          <span>₹{gstCalc.grand_total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-        </div>
-      </div>
-
-      {/* Split Payments */}
-      <div className="grid grid-cols-3 gap-2">
-        <div><Label>Cash ₹</Label><Input type="number" min={0} value={effectivePayCash} onChange={(e) => setPayCash(Number(e.target.value) || 0)} /></div>
-        <div><Label>UPI ₹</Label><Input type="number" min={0} value={payUpi} onChange={(e) => setPayUpi(Number(e.target.value) || 0)} /></div>
-        <div><Label>Card ₹</Label><Input type="number" min={0} value={payCard} onChange={(e) => setPayCard(Number(e.target.value) || 0)} /></div>
-      </div>
+      {cart.length > 0 && (
+        <section>
+          <div className="mb-1.5 flex items-center justify-between">
+            <p className="ui-eyebrow">Payment</p>
+            <span className="text-[11px] text-[#77777d]">Tap a method to pay in full</span>
+          </div>
+          <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${payModes.length}, minmax(0, 1fr))` }}>
+            {payModes.map((m) => {
+              const Icon = PAY_ICON[m];
+              const amount = payAmounts[m];
+              return (
+                <div key={m} className="pos-pay" data-active={amount > 0 || undefined}>
+                  <button type="button" onClick={() => setFullMode(m)} aria-pressed={fullMode === m} aria-label={`Pay full amount by ${PAY_LABEL[m]}`}>
+                    <Icon aria-hidden="true" />
+                    {PAY_LABEL[m]}
+                  </button>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    aria-label={`${PAY_LABEL[m]} amount`}
+                    value={amount || ""}
+                    placeholder="0"
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/[^0-9.]/g, "");
+                      editPayment(m, Math.max(0, Number(cleaned) || 0));
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          {changeDue > 0 ? <p className="mt-1.5 text-xs font-medium text-emerald-700">Return change: {money(changeDue)}</p> : null}
+          {digitalOverpaid ? <p className="mt-1.5 text-xs font-medium text-rose-600">UPI and card are more than the bill amount.</p> : null}
+          {balanceDue > 0 && !digitalOverpaid ? (
+            <p className="mt-1.5 text-xs font-medium text-amber-700">
+              {money(balanceDue)} will stay due{customerId ? " on this customer's account" : ". Select a customer to track it"}
+            </p>
+          ) : null}
+        </section>
+      )}
 
       {gstCalc.grand_total >= 50000 && (
-        <div>
-          <Label>E-Way Bill No (Recommended &gt;= ₹50,000)</Label>
-          <Input value={ewayBillNo} onChange={(e) => setEwayBillNo(e.target.value)} placeholder="12-digit EWB No" />
-        </div>
+        <section>
+          <p className="ui-eyebrow mb-1.5">E-Way Bill No</p>
+          <Input value={ewayBillNo} onChange={(e) => setEwayBillNo(e.target.value)} placeholder="12-digit EWB number" />
+        </section>
       )}
+    </div>
+  );
 
-      <div className="flex gap-2">
+  const billFooter = (
+    <div className="space-y-2 p-[3px] pt-1">
+      <div className="pos-total">
+        {showBreakdown ? (
+          <dl className="ui-page mb-2 space-y-1 border-b border-white/15 pb-2 text-[11.5px] text-white/70">
+            <div className="flex justify-between"><dt>Subtotal</dt><dd className="font-mono">{money(gstCalc.subtotal)}</dd></div>
+            {gstCalc.discount_amount > 0 ? <div className="flex justify-between"><dt>Discount</dt><dd className="font-mono">−{money(gstCalc.discount_amount)}</dd></div> : null}
+            <div className="flex justify-between"><dt>Taxable</dt><dd className="font-mono">{money(gstCalc.taxable_amount)}</dd></div>
+            {gstCalc.supply_type === "intra_state" ? (
+              <>
+                <div className="flex justify-between"><dt>CGST</dt><dd className="font-mono">{money(gstCalc.cgst_amount)}</dd></div>
+                <div className="flex justify-between"><dt>SGST</dt><dd className="font-mono">{money(gstCalc.sgst_amount)}</dd></div>
+              </>
+            ) : (
+              <div className="flex justify-between"><dt>IGST</dt><dd className="font-mono">{money(gstCalc.igst_amount)}</dd></div>
+            )}
+            {gstCalc.round_off !== 0 ? <div className="flex justify-between"><dt>Round off</dt><dd className="font-mono">{money(gstCalc.round_off)}</dd></div> : null}
+            {appliedCredit > 0 ? <div className="flex justify-between"><dt>Credit used</dt><dd className="font-mono">−{money(appliedCredit)}</dd></div> : null}
+          </dl>
+        ) : null}
+        <button type="button" className="flex w-full cursor-pointer items-center justify-between gap-2 text-left" aria-expanded={showBreakdown} onClick={() => setShowBreakdown((v) => !v)}>
+          <span>
+            <span className="flex items-center gap-1 text-[11px] text-white/65">
+              {itemCount} {itemCount === 1 ? "item" : "items"} · Tax details
+              <ChevronUp className={`h-3 w-3 transition-transform duration-200 ${showBreakdown ? "rotate-180" : ""}`} />
+            </span>
+            <span className="text-[13px] font-medium">Grand Total</span>
+          </span>
+          <span key={gstCalc.grand_total} className="pos-total-value">{money(gstCalc.grand_total)}</span>
+        </button>
+      </div>
+      {finalizeBlock && cart.length > 0 ? <p className="px-1 text-[11px] font-medium text-rose-600">{finalizeBlock}</p> : null}
+      <div className="flex gap-1.5">
         {canEditDraft && (
-          <Button variant="outline" className="flex-1" disabled={submitting} onClick={() => submitInvoice(true)}>
-            <Save className="h-4 w-4" /> Hold Draft
+          <Button variant="outline" className="!min-h-[40px] flex-none" disabled={submitting || cart.length === 0} onClick={() => submitInvoice(true)}>
+            <Save className="h-4 w-4" /> Hold
           </Button>
         )}
-        <Button className="flex-1" disabled={submitting} onClick={() => submitInvoice(false)}>
-          <Printer className="h-4 w-4" /> Finalize &amp; Print
+        <Button className="!min-h-[40px] flex-1" disabled={submitting || Boolean(finalizeBlock)} onClick={() => submitInvoice(false)}>
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+          {submitting ? "Saving..." : "Finalize & Print"}
         </Button>
       </div>
     </div>
   );
 
+  const billHeader = (
+    <header className="flex min-h-[38px] items-center justify-between gap-2 px-3 py-1.5">
+      <span className="ui-eyebrow flex min-w-0 items-center gap-2">
+        Current Bill
+        {itemCount > 0 ? <span key={itemCount} className="pos-header-count">{itemCount}</span> : null}
+      </span>
+      {cart.length > 0 ? (
+        <button type="button" className="pos-link pos-link--danger" onClick={clearBill}>
+          <Trash2 className="h-3 w-3" /> Clear
+        </button>
+      ) : null}
+    </header>
+  );
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="font-display text-xl font-bold text-slate-900">POS Billing Terminal</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="w-44">
-            {branches.filter((b) => !b.is_read_only).map((b) => (
-              <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
-            ))}
-          </Select>
+        <div>
+          <h1>POS Terminal</h1>
+          <p className="mt-0.5 text-[12.5px] text-[#77777d]">
+            Billing from <span className="font-medium text-[#27272a]">{activeBranch?.name ?? "no branch"}</span>
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {!branchLocked && billableBranches.length > 1 && (
+            <Select aria-label="Billing branch" value={branchId} onChange={(e) => setBranchId(e.target.value)} className="!w-48">
+              {billableBranches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+              ))}
+            </Select>
+          )}
           {stockEnabled && ratioPresets.length > 0 && productModels.length > 0 && (
             <Button
               variant="outline"
@@ -740,7 +1188,7 @@ export function PosTerminal({
                 setSizeRunOpen(true);
               }}
             >
-              <Layers className="h-4 w-4" /> Size-Run Carton
+              <Layers className="h-4 w-4" /> Size-Run
             </Button>
           )}
           <Button variant="outline" onClick={() => setFreeOpen(true)}>
@@ -749,117 +1197,105 @@ export function PosTerminal({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left: Search / Scan + Catalog */}
-        <div className="lg:col-span-7 space-y-3">
-          <div className="flex gap-2">
+      {activeBranch?.is_read_only ? (
+        <Alert variant="warning" title="This branch is read-only">
+          It is over the branch limit for this plan. Switch to another branch to create bills.
+        </Alert>
+      ) : null}
+
+      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_410px]">
+        <div className="min-w-0 space-y-3 pb-20 lg:pb-0">
+          <div className="ui-tray flex gap-1 !p-1">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[#a3a3a8]" />
               <Input
+                autoFocus
+                aria-label="Search or scan products"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={handleBarcodeKey}
-                placeholder="Scan barcode or search shoe model / SKU..."
-                className="pl-9"
+                placeholder="Scan barcode, or search name, model or SKU..."
+                className="!pl-8"
               />
             </div>
-            <Button variant="outline" onClick={startCameraScan} title="Camera Barcode Scanner">
+            <Button variant="outline" onClick={startCameraScan} title="Scan with camera" aria-label="Scan with camera">
               <Camera className="h-4 w-4" />
             </Button>
           </div>
 
-          {!stockEnabled || variants.length === 0 ? (
-            <Card>
-              <CardContent className="p-6 text-center space-y-3">
-                <p className="text-sm text-slate-600">
-                  {stockEnabled ? "No catalog items in this branch yet." : "Stock module is off — use Quick Item entry."}
-                </p>
-                <Button onClick={() => setFreeOpen(true)}>
-                  <Plus className="h-4 w-4" /> Add Free-Text Bill Item
-                </Button>
-              </CardContent>
-            </Card>
-          ) : posUi.layout === "list" ? (
-            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100">
-              {filteredVariants.map((v) => (
+          {productModels.length > 1 && (
+            <div className="no-scrollbar flex gap-1 overflow-x-auto" role="group" aria-label="Filter by product">
+              {[{ code: "all", name: "All products" }, ...productModels].map((m) => (
                 <button
-                  key={v.variant_id}
+                  key={m.code}
                   type="button"
-                  onClick={() => addVariantToCart(v)}
-                  className="w-full px-3 py-2.5 text-left hover:bg-sky-50 flex items-center justify-between gap-3 text-xs cursor-pointer"
+                  aria-pressed={modelFilter === m.code}
+                  onClick={() => setModelFilter(m.code)}
+                  className="pos-chip"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {posUi.show_thumbs && v.thumb_url && (
-                      <img src={v.thumb_url} alt={v.product_name} className="h-9 w-9 rounded object-cover shrink-0 border border-slate-200" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-900 truncate">{v.product_name}</p>
-                      <p className="text-[11px] text-slate-500 truncate">
-                        {v.sku} • {Object.values(v.attributes).join(" / ")}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-bold text-sky-700">₹{v.selling_price}</span>
-                    <Badge variant={v.stock_qty <= 0 ? "danger" : v.stock_qty <= 5 ? "warning" : "success"}>
-                      {v.stock_qty}
-                    </Badge>
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-              {filteredVariants.map((v) => (
-                <button
-                  key={v.variant_id}
-                  type="button"
-                  onClick={() => addVariantToCart(v)}
-                  className="rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-sky-500 hover:shadow-xs transition-all cursor-pointer flex flex-col justify-between min-h-[100px]"
-                >
-                  <div className="flex items-start gap-2">
-                    {posUi.show_thumbs && v.thumb_url && (
-                      <img src={v.thumb_url} alt={v.product_name} className="h-10 w-10 rounded-lg object-cover shrink-0 border border-slate-200" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-900 line-clamp-1">{v.product_name}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        {Object.values(v.attributes).join(" • ")}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-sm font-bold text-sky-700">₹{v.selling_price}</span>
-                    <Badge variant={v.stock_qty <= 0 ? "danger" : v.stock_qty <= 5 ? "warning" : "success"}>
-                      {v.stock_qty}
-                    </Badge>
-                  </div>
+                  {m.name}
                 </button>
               ))}
             </div>
           )}
+
+          {!stockEnabled || variants.length === 0 ? (
+            <Card>
+              <CardContent className="space-y-3 p-8 text-center">
+                <p className="text-[13px] text-[#77777d]">
+                  {stockEnabled ? "No products in this branch yet." : "Stock is off for your access. Use Quick Item to bill."}
+                </p>
+                <Button onClick={() => setFreeOpen(true)}>
+                  <Plus className="h-4 w-4" /> Add Quick Item
+                </Button>
+              </CardContent>
+            </Card>
+          ) : filteredVariants.length === 0 ? (
+            <div className="ui-tray"><p className="ui-surface p-8 text-center text-[13px] text-[#77777d]">No products match your search.</p></div>
+          ) : (
+            <div className={posUi.layout === "list" ? "grid grid-cols-1 gap-2" : "grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-3"}>
+              <Paged items={filteredVariants} size={12} key={`${search}|${modelFilter}`}>{(pagedRows) => pagedRows.map((v) => (
+                <PosProductCard
+                  key={v.variant_id}
+                  name={v.product_name}
+                  attributes={Object.values(v.attributes)}
+                  sku={v.sku}
+                  price={priceFor(v)}
+                  stock={v.stock_qty}
+                  trackStock={stockEnabled}
+                  qty={qtyByVariant.get(v.variant_id) ?? 0}
+                  limit={stockLimit(v)}
+                  thumb={posUi.show_thumbs ? v.thumb_url : null}
+                  onAdd={() => addVariantToCart(v)}
+                  onSetQty={(q) => setVariantQty(v, q)}
+                />
+              ))}</Paged>
+            </div>
+          )}
         </div>
 
-        {/* Right: Desktop Cart */}
-        <div className="hidden lg:block lg:col-span-5">
-          <Card className="sticky top-20">
-            <CardContent className="p-4">{cartPanel}</CardContent>
-          </Card>
-        </div>
+        <aside className="ui-tray sticky top-[64px] hidden max-h-[calc(100vh-76px)] flex-col lg:flex" aria-label="Current bill">
+          {billHeader}
+          <div className="ui-surface min-h-0 flex-1 overflow-y-auto">{billBody}</div>
+          {billFooter}
+        </aside>
       </div>
 
-      {/* Mobile Sticky Bottom Cart Trigger */}
-      <div className="lg:hidden fixed bottom-14 inset-x-3 z-20">
-        <Button className="w-full shadow-xl" size="lg" onClick={() => setMobileCartOpen(true)}>
-          <ShoppingCart className="h-4 w-4" />
-          Cart ({cart.length}) • ₹{gstCalc.grand_total.toLocaleString("en-IN")}
+      <div className="fixed inset-x-3 bottom-[60px] z-20 lg:hidden">
+        <Button className="w-full justify-between shadow-xl" size="lg" onClick={() => setMobileCartOpen(true)}>
+          <span className="inline-flex items-center gap-2">
+            <ShoppingCart className="h-4 w-4" /> {itemCount} {itemCount === 1 ? "item" : "items"}
+          </span>
+          <span className="font-mono">{money(gstCalc.grand_total)}</span>
         </Button>
       </div>
 
       <Dialog open={mobileCartOpen} onClose={() => setMobileCartOpen(false)} title="Current Bill">
-        {cartPanel}
+        <div className="-m-4 sm:-m-5">
+          {billBody}
+          <div className="sticky bottom-0 bg-white p-2">{billFooter}</div>
+        </div>
       </Dialog>
-
       <Dialog open={sizeRunOpen} onClose={() => setSizeRunOpen(false)} title="Wholesale Size-Run Carton Fill">
         <div className="space-y-4">
           <div>
@@ -872,20 +1308,12 @@ export function PosTerminal({
           </div>
           <SizeRunQuickFill
             presets={ratioPresets}
-            onApply={(ratios) => {
-              const matching = variants.filter((v) => v.model_code === sizeRunModel);
-              let added = 0;
+            variants={sizeRunVariants}
+            onApply={(hits) => {
               const isWholesale = selectedCustomer?.customer_type === "wholesale";
               setCart((prev) => {
                 const next = [...prev];
-                for (const [sizeKey, qty] of Object.entries(ratios)) {
-                  if (qty <= 0) continue;
-                  const hit = matching.find(
-                    (v) =>
-                      Object.values(v.attributes).some((av) => av.toLowerCase() === sizeKey.toLowerCase())
-                  );
-                  if (!hit) continue;
-                  added += qty;
+                for (const { variant: hit, qty } of hits) {
                   const price = isWholesale && hit.wholesale_price > 0 ? Number(hit.wholesale_price) : Number(hit.selling_price);
                   const idx = next.findIndex((c) => c.variant_id === hit.variant_id);
                   if (idx >= 0) {
@@ -906,7 +1334,6 @@ export function PosTerminal({
                 }
                 return next;
               });
-              toast.success(added > 0 ? `Added ${added} pair(s) via size-run preset.` : "No matching size variants found for this model.");
               setSizeRunOpen(false);
             }}
           />

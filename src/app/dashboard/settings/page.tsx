@@ -1,19 +1,35 @@
 import { getServerSessionContext } from "@/lib/auth/session";
-import { isFeatureEnabled } from "@/lib/auth/access";
 import { withTenantTx } from "@/lib/db";
 import type { CustomFieldRow, VariantAxisRow } from "@/types/database";
 import { SettingsHubClient } from "./_client";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const ctx = await getServerSessionContext();
   if (!ctx || !ctx.tenant) return null;
+  const sp = await searchParams;
+  const validTabs = new Set(["profile", "brand", "schema", "tax", "branches", "staff", "permissions", "devices", "backups"]);
+  const initialTab = sp.tab && validTabs.has(sp.tab) ? sp.tab : "brand";
 
   const data = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
-      const [axes, fields, staff, resets, perms, devices, backups] = await Promise.all([
+      const [meRes, axes, fields, staff, resets, perms, devices, backups] = await Promise.all([
+        client.query<{
+          id: string;
+          full_name: string;
+          username: string | null;
+          email: string | null;
+          phone: string | null;
+          role: "owner" | "branch_admin" | "worker";
+        }>("SELECT id, full_name, username, email, phone, role FROM public.profiles WHERE id = $1", [
+          ctx.user.id,
+        ]),
         client.query<VariantAxisRow>(
           "SELECT * FROM public.variant_axis_definitions WHERE tenant_id = $1 ORDER BY sort_order, name",
           [ctx.tenant!.id]
@@ -74,6 +90,14 @@ export default async function SettingsPage() {
       ]);
 
       return {
+        me: meRes.rows[0] ?? {
+          id: ctx.user.id,
+          full_name: ctx.user.full_name,
+          username: ctx.user.username,
+          email: ctx.user.email,
+          phone: null,
+          role: ctx.user.role,
+        },
         axes: axes.rows,
         fields: fields.rows,
         staff: staff.rows,
@@ -88,15 +112,17 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-2xl font-bold text-slate-900">Workspace Settings</h1>
-        <p className="text-sm text-slate-600">
-          Configure brand style, dynamic product schema, tax/HSN, branches, staff, permissions &amp; backups.
+        <h1>Workspace Settings</h1>
+        <p className="mt-0.5 text-[12.5px] text-[#77777d]">
+          Manage your profile, shop look, product fields, GST &amp; tax setup, branches, staff, permissions &amp; backups.
         </p>
       </div>
       <SettingsHubClient
         tenant={ctx.tenant}
         branches={ctx.branches}
         userRole={ctx.user.role}
+        currentUser={data.me}
+        initialTab={initialTab}
         permissions={ctx.permissions}
         axes={data.axes}
         fields={data.fields}
@@ -105,8 +131,8 @@ export default async function SettingsPage() {
         rolePermRows={data.perms}
         devices={data.devices}
         backups={data.backups}
-        stockEnabled={isFeatureEnabled(ctx.tenant, "dynamic_stock_matrix")}
-        backupsEnabled={isFeatureEnabled(ctx.tenant, "daily_backups")}
+        stockEnabled={ctx.enabledFeatures.dynamic_stock_matrix}
+        backupsEnabled={ctx.enabledFeatures.daily_backups}
       />
     </div>
   );

@@ -1,12 +1,18 @@
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import {
   IMPERSONATE_COOKIE_NAME,
+  PLATFORM_SESSION_COOKIE_NAME,
   SESSION_COOKIE_NAME,
   verifyImpersonationToken,
   verifySessionToken,
 } from "@/lib/auth/crypto";
-import { resolveAllFeatures, resolveRolePermissions } from "@/lib/auth/access";
+import {
+  resolveAccessBlock,
+  resolveAllFeatures,
+  resolveRolePermissions,
+  resolveUserFeatures,
+} from "@/lib/auth/access";
 import { getMockSessionContext, getMockState } from "@/lib/dev/mock-db";
 import { DEV_ROLE_COOKIE, isDevPreviewAllowed, parseDevPreviewRole } from "@/lib/dev/preview";
 import { isConfigured } from "@/lib/env";
@@ -19,12 +25,36 @@ import type {
   TenantRow,
 } from "@/types/database";
 
+export type SessionScope = "platform" | "tenant";
+
+async function detectSessionScope(): Promise<SessionScope> {
+  try {
+    const hdrs = await headers();
+    const explicit = hdrs.get("x-nexus-scope");
+    if (explicit === "platform" || explicit === "tenant") return explicit;
+    const referer = hdrs.get("referer");
+    if (referer) {
+      try {
+        const pathname = new URL(referer).pathname;
+        if (pathname.startsWith("/platform")) return "platform";
+      } catch {
+        // ignore malformed referer
+      }
+    }
+  } catch {
+    // headers() unavailable outside request context
+  }
+  return "tenant";
+}
+
 /**
  * Request-memoized via React `cache()` so layout.tsx + page.tsx share a single
  * DB lookup per navigation, and collapsed into a single CTE SQL query to
  * eliminate 5x sequential round-trips to Neon Postgres.
+ * Platform Admin and Tenant sessions are isolated in separate cookies so signing
+ * into both in different tabs never logs out the other.
  */
-export const getServerSessionContext = cache(async (): Promise<SessionContext | null> => {
+const loadSessionForScope = cache(async (scope: SessionScope): Promise<SessionContext | null> => {
   const cookieStore = await cookies();
 
   // Strictly dev-only mock session switcher (allows previewing all roles without a backend)
@@ -52,6 +82,7 @@ export const getServerSessionContext = cache(async (): Promise<SessionContext | 
               mode: impPayload.mode,
               expiresAt: (impPayload.exp ?? 0) * 1000,
             },
+            accessBlock: null,
           };
         }
       }
@@ -61,17 +92,24 @@ export const getServerSessionContext = cache(async (): Promise<SessionContext | 
 
   if (!isConfigured.db) return null;
 
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const impToken = cookieStore.get(IMPERSONATE_COOKIE_NAME)?.value;
+  let token: string | undefined;
+  if (scope === "platform") {
+    token = cookieStore.get(PLATFORM_SESSION_COOKIE_NAME)?.value;
+  } else {
+    token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    if (!token && impToken) {
+      token = cookieStore.get(PLATFORM_SESSION_COOKIE_NAME)?.value;
+    }
+  }
   if (!token) return null;
 
   const [jwt, impPayload] = await Promise.all([
     verifySessionToken(token),
-    (() => {
-      const impToken = cookieStore.get(IMPERSONATE_COOKIE_NAME)?.value;
-      return impToken ? verifyImpersonationToken(impToken) : Promise.resolve(null);
-    })(),
+    impToken ? verifyImpersonationToken(impToken) : Promise.resolve(null),
   ]);
   if (!jwt) return null;
+  if (scope === "platform" && !jwt.pa) return null;
 
   const impTenantId =
     impPayload && impPayload.adminId === jwt.sub ? impPayload.tenantId : null;
@@ -86,7 +124,9 @@ export const getServerSessionContext = cache(async (): Promise<SessionContext | 
     }>(
       `WITH u AS (
          SELECT id, tenant_id, is_platform_admin, role, full_name, email, username, phone,
-                session_version, must_change_password, is_active, created_at
+                session_version, must_change_password, is_active, tier_override,
+                access_blocked, access_block_message, access_block_amount, access_block_contact, access_blocked_at,
+                created_at
          FROM public.profiles
          WHERE id = $1
        ),
@@ -169,8 +209,19 @@ export const getServerSessionContext = cache(async (): Promise<SessionContext | 
       assignedBranchIds:
         effectiveRole === "owner" ? branches.map((b) => b.id) : assignedIds,
       permissions: resolveRolePermissions(effectiveRole, perms),
-      enabledFeatures: resolveAllFeatures(tenant),
+      // Support sessions see the whole business; everyone else is limited by their tier.
+      enabledFeatures: impersonation
+        ? resolveAllFeatures(tenant)
+        : resolveUserFeatures(tenant, user.tier_override),
       impersonation,
+      accessBlock: impersonation ? null : resolveAccessBlock(tenant, user),
     };
   });
 });
+
+export async function getServerSessionContext(
+  scope?: SessionScope
+): Promise<SessionContext | null> {
+  const resolvedScope = scope ?? (await detectSessionScope());
+  return loadSessionForScope(resolvedScope);
+}

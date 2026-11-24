@@ -1,3 +1,4 @@
+import { getBranchScope } from "@/lib/auth/active-branch";
 import { TierLockOverlay } from "@/components/ui/kpi-grid";
 import { canAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
@@ -32,16 +33,17 @@ export default async function StockImportPage() {
     }
   );
 
+  const scope = await getBranchScope(ctx);
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-2xl font-bold text-slate-900">Bulk Stock &amp; Price Import</h1>
-        <p className="text-sm text-slate-600">
+        <h1>Bulk Stock &amp; Price Import</h1>
+        <p className="mt-0.5 text-[12.5px] text-[#77777d]">
           Download your dynamic Excel template, validate rows client-side &amp; commit atomically in 500-row chunks.
         </p>
       </div>
       <StockImportClient
-        branches={ctx.branches}
+        branches={scope.ordered}
         axisNames={schema.axes.map((a) => a.name)}
         customFieldKeys={schema.fields.map((f) => f.field_key)}
       />

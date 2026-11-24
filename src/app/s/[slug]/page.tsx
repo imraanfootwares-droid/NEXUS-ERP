@@ -17,9 +17,7 @@ export default async function PublicStorefrontPage({
 
   const tRes = slug === "_host"
     ? { rows: [] }
-    : slug.includes(".")
-    ? await query("SELECT * FROM public.resolve_tenant_host($1)", [slug])
-    : await query("SELECT * FROM public.resolve_tenant_slug($1)", [slug]);
+    : await query("SELECT * FROM public.resolve_public_catalogue($1)", [slug]);
 
   const tenant = tRes.rows[0];
   if (!tenant || tenant.status !== "active" || !tenant.website_enabled) {
@@ -59,13 +57,26 @@ export default async function PublicStorefrontPage({
     };
   });
 
+  const sfCfg = tenant.storefront_config ?? {};
+  const logoUrl =
+    tenant.brand_config?.logo_pdf_data_url ||
+    (tenant.brand_config?.logo_key ? getPublicAssetUrl(tenant.brand_config.logo_key) : null);
+
   return (
     <StorefrontClient
       slug={tenant.slug}
       tenantName={tenant.name}
-      whatsappNumber={tenant.storefront_config?.whatsapp_number ?? ""}
-      heroTitle={tenant.storefront_config?.hero_title ?? "New Arrivals"}
-      heroSubtitle={tenant.storefront_config?.hero_subtitle ?? ""}
+      logoUrl={logoUrl}
+      whatsappNumber={sfCfg.whatsapp_number ?? ""}
+      enquiryChannel={sfCfg.enquiry_channel ?? (sfCfg.whatsapp_number ? "both" : "inbox")}
+      enquiriesEnabled={Boolean(tenant.enquiries_enabled)}
+      catalogueEnabled={Boolean(tenant.catalogue_enabled)}
+      heroTitle={sfCfg.hero_title ?? "New Arrivals"}
+      heroSubtitle={sfCfg.hero_subtitle ?? ""}
+      showSizes={sfCfg.show_sizes ?? true}
+      showBrand={sfCfg.show_brand ?? true}
+      showDescription={sfCfg.show_description ?? true}
+      showCartonInfo={sfCfg.show_carton_info ?? true}
       products={items}
     />
   );

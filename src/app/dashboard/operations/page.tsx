@@ -1,5 +1,6 @@
+import { getBranchScope } from "@/lib/auth/active-branch";
 import { TierLockOverlay } from "@/components/ui/kpi-grid";
-import { canAccess, isFeatureEnabled } from "@/lib/auth/access";
+import { canAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import type { RatioPreset, VariantAxisRow } from "@/types/database";
@@ -11,12 +12,13 @@ export default async function OperationsPage() {
   const ctx = await getServerSessionContext();
   if (!ctx || !ctx.tenant) return null;
 
-  const prodEnabled = isFeatureEnabled(ctx.tenant, "supplier_and_production");
-  const transferEnabled = isFeatureEnabled(ctx.tenant, "stock_transfers");
+  const prodEnabled = ctx.enabledFeatures.supplier_and_production;
+  const transferEnabled = ctx.enabledFeatures.stock_transfers;
   if (!prodEnabled && !transferEnabled) {
     return <TierLockOverlay featureKey="stock_transfers" />;
   }
 
+  const scope = await getBranchScope(ctx);
   const data = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
@@ -84,15 +86,14 @@ export default async function OperationsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-2xl font-bold text-slate-900">
-          Factory Production, Suppliers &amp; Branch Transfers
-        </h1>
-        <p className="text-sm text-slate-600">
-          Manage Karigar production batches, raw material suppliers &amp; GSTIN-aware Delhi → Chennai transfers.
+        <h1>Send Stock Between Branches</h1>
+        <p className="mt-0.5 text-[12.5px] text-[#77777d]">
+          Pick products in cartons or pairs, add transport / LR / vehicle details, and send stock to another branch.
         </p>
       </div>
       <OperationsHubClient
-        branches={ctx.branches}
+        key={scope.activeId}
+        branches={[...scope.ordered, ...ctx.branches.filter((b) => !scope.allowed.some((a) => a.id === b.id))]}
         variants={data.variants}
         suppliers={data.suppliers}
         batches={data.batches}

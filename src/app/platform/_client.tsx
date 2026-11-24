@@ -22,6 +22,7 @@ import {
   ShieldAlert,
   Sparkles,
 } from "lucide-react";
+import { Paged } from "@/components/ui/pagination";
 import { toast } from "sonner";
 import {
   adminSetUserPasswordAction,
@@ -59,19 +60,22 @@ import {
   Select,
   Tabs,
 } from "@/components/ui/primitives";
+import { TierManager, type TierPerson, type TierTenant } from "@/app/platform/_tier-manager";
 import type { HsnCodeRow, TenantRow, VerticalKey } from "@/types/database";
 
-export function PlatformLogoutButton() {
+export function PlatformLogoutButton({ fullWidth = false }: { fullWidth?: boolean }) {
   const router = useRouter();
   return (
     <button
       type="button"
       onClick={async () => {
-        await fetch("/api/auth", { method: "DELETE" });
-        router.push("/login");
+        await fetch("/api/auth?scope=platform", { method: "DELETE" });
+        router.push("/login?portal=super");
         router.refresh();
       }}
-      className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+      className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-[#55555b] hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer ${
+        fullWidth ? "w-full" : ""
+      }`}
     >
       <LogOut className="h-3.5 w-3.5" />
       <span className="hidden sm:inline">Sign Out</span>
@@ -92,6 +96,11 @@ export function PlatformAnalyticsCharts({
   }>;
   featureCoverage: Array<{ label: string; tierCount: number; overrideCount: number }>;
 }) {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <Card>
@@ -103,6 +112,8 @@ export function PlatformAnalyticsCharts({
         <CardContent className="h-72">
           {usersByTenant.length === 0 ? (
             <p className="text-xs text-slate-500 pt-10 text-center">No tenants provisioned yet.</p>
+          ) : !mounted ? (
+            <div className="h-full w-full rounded-[10px] bg-slate-50 animate-pulse" />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={usersByTenant}>
@@ -126,18 +137,22 @@ export function PlatformAnalyticsCharts({
             Feature Adoption &amp; Cross-Tier Overrides
           </h3>
         </CardHeader>
-        <CardContent className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={featureCoverage.slice(0, 7)} layout="vertical" margin={{ left: 12, right: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="label" width={150} tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="tierCount" stackId="b" fill="#0284c7" name="Via Tier" />
-              <Bar dataKey="overrideCount" stackId="b" fill="#f59e0b" name="Cross-Tier Override" />
-            </BarChart>
-          </ResponsiveContainer>
+        <CardContent className="h-72" style={{ height: 288 }}>
+          {!mounted ? (
+            <div className="h-full w-full rounded-[10px] bg-slate-50 animate-pulse" />
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={featureCoverage.slice(0, 7)} layout="vertical" margin={{ left: 12, right: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="label" width={150} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="tierCount" stackId="b" fill="#0284c7" name="Via Tier" />
+                <Bar dataKey="overrideCount" stackId="b" fill="#f59e0b" name="Cross-Tier Override" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -194,7 +209,7 @@ export function PasswordResetQueueCard({
             <p className="text-xs text-slate-500">No pending password reset requests.</p>
           ) : (
             <div className="space-y-2">
-              {requests.map((r) => (
+              <Paged items={requests} size={5}>{(pagedRows) => pagedRows.map((r) => (
                 <div
                   key={r.id}
                   className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs"
@@ -214,7 +229,7 @@ export function PasswordResetQueueCard({
                     Set New Password
                   </Button>
                 </div>
-              ))}
+              ))}</Paged>
             </div>
           )}
         </CardContent>
@@ -545,10 +560,10 @@ export function TenantDetailControls({
             const overrideVal = tenant.feature_overrides?.[fk];
             const mode = overrideVal === true ? "enable" : overrideVal === false ? "disable" : "inherit";
             return (
-              <div key={fk} className="rounded-xl border border-slate-200 p-3 flex flex-col justify-between gap-2">
+              <div key={fk} className="rounded-[10px] border border-slate-200 p-3 flex flex-col justify-between gap-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-xs font-bold text-slate-900">{meta.label}</p>
+                    <p className="text-xs font-semibold text-slate-900">{meta.label}</p>
                     <p className="text-[11px] text-slate-500">{meta.minTier.toUpperCase()} • {meta.category}</p>
                   </div>
                   <Badge variant={active ? "success" : "default"}>{active ? "Active" : "Locked"}</Badge>
@@ -618,7 +633,7 @@ export function TenantDetailControls({
           <h3 className="text-sm font-semibold text-slate-900">Tenant Users &amp; Direct Password Management</h3>
         </CardHeader>
         <CardContent className="space-y-2">
-          {users.map((u) => (
+          <Paged items={users} size={8}>{(pagedRows) => pagedRows.map((u) => (
             <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-xs">
               <div>
                 <p className="font-semibold text-slate-900">{u.full_name}</p>
@@ -631,7 +646,7 @@ export function TenantDetailControls({
                 Set / Replace Password
               </Button>
             </div>
-          ))}
+          ))}</Paged>
         </CardContent>
       </Card>
 
@@ -668,14 +683,16 @@ export function PlatformPermissionsAndHsnClient({
   globalDefaults,
   tenantOverrides,
   hsnCodes,
+  people,
 }: {
-  tenants: Array<{ id: string; name: string }>;
+  tenants: TierTenant[];
+  people: TierPerson[];
   globalDefaults: Record<string, { owner: boolean; branch_admin: boolean; worker: boolean }>;
   tenantOverrides: Record<string, Record<string, { owner: boolean; branch_admin: boolean; worker: boolean }>>;
   hsnCodes: HsnCodeRow[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState("matrix");
+  const [tab, setTab] = useState("tiers");
   const [scope, setScope] = useState<string>("global");
   const [hsnOpen, setHsnOpen] = useState(false);
   const [hCode, setHCode] = useState("");
@@ -705,75 +722,106 @@ export function PlatformPermissionsAndHsnClient({
         active={tab}
         onChange={setTab}
         tabs={[
-          { id: "matrix", label: "Role × Permission Matrix (30 Keys)" },
-          { id: "hsn", label: `Master Indian HSN / SAC (${hsnCodes.length})` },
+          { id: "tiers", label: "People & Tiers", badge: people.length },
+          { id: "matrix", label: "Role Permissions", badge: PERMISSION_DEFINITIONS.length },
+          { id: "hsn", label: "HSN / SAC Codes", badge: hsnCodes.length },
         ]}
       />
 
-      {tab === "matrix" ? (
-        <Card>
-          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">Permission Matrix</h3>
-              <p className="text-xs text-slate-500">Edit Global Defaults or override a specific Tenant.</p>
+      {tab === "tiers" ? (
+        <TierManager people={people} tenants={tenants} />
+      ) : tab === "matrix" ? (() => {
+        const grouped = new Map<string, Array<(typeof PERMISSION_DEFINITIONS)[number]>>();
+        for (const p of PERMISSION_DEFINITIONS) {
+          const list = grouped.get(p.module) ?? [];
+          list.push(p);
+          grouped.set(p.module, list);
+        }
+        const modules = Array.from(grouped.entries());
+
+        return (
+          <div className="space-y-3">
+            <div className="ui-tray">
+              <div className="ui-surface flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3">
+                <div>
+                  <h3 className="text-[13px] font-semibold text-[#171717]">
+                    Permission Matrix ({PERMISSION_DEFINITIONS.length} permissions · Single Page)
+                  </h3>
+                  <p className="text-[11.5px] text-[#77777d]">
+                    Click any box to allow or block a permission for Owner, Branch Admin, or Worker.
+                  </p>
+                </div>
+                <div className="w-full sm:w-64">
+                  <Select value={scope} onChange={(e) => setScope(e.target.value)}>
+                    <option value="global">All businesses (default)</option>
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
             </div>
-            <div className="w-full sm:w-64">
-              <Select value={scope} onChange={(e) => setScope(e.target.value)}>
-                <option value="global">Global Default Template</option>
-                {tenants.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="p-2.5">Module</th>
-                  <th className="p-2.5">Permission</th>
-                  <th className="p-2.5 text-center">Owner</th>
-                  <th className="p-2.5 text-center">Branch Admin</th>
-                  <th className="p-2.5 text-center">Worker</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {PERMISSION_DEFINITIONS.map((p) => {
-                  const row = activeMap[p.key] ?? {
-                    owner: p.owner,
-                    branch_admin: p.branch_admin,
-                    worker: p.worker,
-                  };
-                  return (
-                    <tr key={p.key} className="hover:bg-slate-50">
-                      <td className="p-2.5 font-medium text-slate-500">{p.module}</td>
-                      <td className="p-2.5">
-                        <div className="font-semibold text-slate-900">{p.label}</div>
-                        <div className="text-[10px] text-slate-400">{p.key} • {FEATURE_META[p.feature].minTier.toUpperCase()}</div>
-                      </td>
-                      {(["owner", "branch_admin", "worker"] as TenantRole[]).map((role) => (
-                        <td key={role} className="p-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => togglePerm(p.key, role, row[role])}
-                            className={`inline-flex h-7 w-7 items-center justify-center rounded-md border cursor-pointer ${
-                              row[role]
-                                ? "bg-emerald-600 border-emerald-600 text-white"
-                                : "bg-white border-slate-300 text-slate-300"
-                            }`}
+
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              {modules.map(([modName, perms]) => (
+                <div key={modName} className="ui-tray">
+                  <div className="ui-surface overflow-hidden">
+                    <div className="grid grid-cols-[1fr_52px_52px_52px] items-center border-b border-[#ececee] bg-[#fafafa] px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.05em] text-[#77777d]">
+                      <span className="text-[#171717]">
+                        {modName} <span className="font-normal text-[#a3a3a8]">({perms.length})</span>
+                      </span>
+                      <span className="text-center">Owner</span>
+                      <span className="text-center">Admin</span>
+                      <span className="text-center">Worker</span>
+                    </div>
+                    <div className="divide-y divide-[#f1f1f2]">
+                      {perms.map((p) => {
+                        const row = activeMap[p.key] ?? {
+                          owner: p.owner,
+                          branch_admin: p.branch_admin,
+                          worker: p.worker,
+                        };
+                        const tierBadge = FEATURE_META[p.feature].minTier.replace("tier_", "T");
+                        return (
+                          <div
+                            key={p.key}
+                            className="grid grid-cols-[1fr_52px_52px_52px] items-center px-3 py-1.5 text-xs hover:bg-[#fafafa]"
                           >
-                            <Check className="h-4 w-4" />
-                          </button>
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-      ) : (
+                            <div className="flex min-w-0 items-center gap-1.5 pr-2">
+                              <span className="truncate font-medium text-[#171717]">{p.label}</span>
+                              <span className="shrink-0 rounded bg-[#f1f1f2] px-1 py-px font-mono text-[9.5px] font-medium text-[#77777d]">
+                                {tierBadge}
+                              </span>
+                            </div>
+                            {(["owner", "branch_admin", "worker"] as TenantRole[]).map((role) => (
+                              <div key={role} className="flex justify-center">
+                                <button
+                                  type="button"
+                                  onClick={() => togglePerm(p.key, role, row[role])}
+                                  role="checkbox"
+                                  aria-checked={row[role]}
+                                  aria-label={`${p.label} for ${role.replace("_", " ")}`}
+                                  className={`inline-flex h-[18px] w-[18px] items-center justify-center rounded-[5px] cursor-pointer transition-all active:scale-90 ${
+                                    row[role]
+                                      ? "bg-[#171717] text-white shadow-2xs"
+                                      : "bg-white text-transparent shadow-[inset_0_0_0_1px_rgba(0,0,0,.18)] hover:bg-[#f4f4f5]"
+                                  }`}
+                                >
+                                  <Check className="h-3 w-3" strokeWidth={3} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })() : (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-900">Master HSN / SAC Directory</h3>
@@ -792,7 +840,7 @@ export function PlatformPermissionsAndHsnClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {hsnCodes.map((h) => (
+                <Paged items={hsnCodes} size={12} asRow>{(pagedRows) => pagedRows.map((h) => (
                   <tr key={h.id}>
                     <td className="p-2.5 font-bold">{h.code}</td>
                     <td className="p-2.5">{h.category}</td>
@@ -803,7 +851,7 @@ export function PlatformPermissionsAndHsnClient({
                         : `Flat ${h.default_gst_rate}%`}
                     </td>
                   </tr>
-                ))}
+                ))}</Paged>
               </tbody>
             </table>
           </CardContent>

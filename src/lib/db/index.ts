@@ -57,13 +57,15 @@ export interface DbContext {
  */
 export async function withTenantTx<T>(
   ctx: DbContext,
-  fn: (client: PoolClient) => Promise<T>
+  fn: (client: PoolClient) => Promise<T>,
+  options?: { snapshot?: boolean }
 ): Promise<T> {
   if (await shouldUseMockDb()) {
     return fn(createMockClient());
   }
   const client = await getPool().connect();
-  await client.query("BEGIN");
+  // A snapshot gives exports one consistent view without blocking people who are billing.
+  await client.query(options?.snapshot ? "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY" : "BEGIN");
   await client.query(
     "SELECT set_config('app.tenant_id', $1, true), set_config('app.is_platform_admin', $2, true)",
     [ctx.tenantId ?? "", ctx.isPlatformAdmin ? "true" : "false"]

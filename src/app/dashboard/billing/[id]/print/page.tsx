@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { InvoiceRenderer, PrintShareToolbar } from "@/components/billing/invoice-renderer";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
+import { getPublicAssetUrl } from "@/lib/storage/s3-client";
 import type { BillTemplateRow } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -20,9 +21,11 @@ export default async function InvoicePrintPage({
     async (client) => {
       const [invRes, itemsRes, tplRes] = await Promise.all([
         client.query(
-          `SELECT i.*, b.name AS branch_name, b.address AS branch_address, b.gstin AS branch_gstin
+          `SELECT i.*, b.name AS branch_name, b.address AS branch_address, b.gstin AS branch_gstin,
+                  p.full_name AS creator_name, COALESCE(p.username, p.email) AS creator_login
            FROM public.invoices i
            JOIN public.branches b ON b.id = i.branch_id
+           LEFT JOIN public.profiles p ON p.id = i.created_by
            WHERE i.id = $1 AND i.tenant_id = $2`,
           [id, ctx.tenant!.id]
         ),
@@ -71,6 +74,12 @@ export default async function InvoicePrintPage({
           }
         }
         data={{
+          logoUrl:
+            ctx.tenant.brand_config?.logo_pdf_data_url ||
+            (ctx.tenant.brand_config?.logo_key ? getPublicAssetUrl(ctx.tenant.brand_config.logo_key) : null),
+          builtBy: inv.creator_name
+            ? `${inv.creator_name}${inv.creator_login ? ` (@${inv.creator_login})` : ""}`
+            : null,
           invoiceNumber: inv.invoice_number || "DRAFT",
           invoiceType: inv.invoice_type,
           dateStr: new Date(inv.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),

@@ -1,43 +1,104 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { FlaskConical, KeyRound, Loader2, Lock, User } from "lucide-react";
+import { Crown, GitBranch, Server, Store, UserRound, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
-import { NexusLogo } from "@/components/brand/nexus-logo";
-import { Button, Card, CardContent, Dialog, Input, Label } from "@/components/ui/primitives";
-import type { DevPreviewRole } from "@/lib/dev/preview";
+import { AuthField, AuthSplitLayout, Spinner } from "@/components/auth/auth-split-layout";
+
+type ViewMode = "login" | "reset";
+
+const PORTALS = [
+  {
+    id: "super",
+    label: "Super Admin",
+    icon: Crown,
+    title: "Super Admin",
+    lead: "Full control of every business, plan, tier and person on Nexus ERP.",
+    placeholder: "Super admin email or username",
+  },
+  {
+    id: "platform",
+    label: "Platform",
+    icon: Server,
+    title: "Platform Admin",
+    lead: "Manage workspaces, infrastructure, roles and support requests.",
+    placeholder: "Platform admin email or username",
+  },
+  {
+    id: "owner",
+    label: "Owner",
+    icon: Store,
+    title: "Business Owner",
+    lead: "Run your whole business: branches, stock, billing, GST and reports.",
+    placeholder: "owner@company.in",
+  },
+  {
+    id: "branch",
+    label: "Branch",
+    icon: GitBranch,
+    title: "Branch Admin",
+    lead: "Manage your branch's sales, stock, transfers and daily closing.",
+    placeholder: "business-slug/username",
+  },
+  {
+    id: "staff",
+    label: "Staff",
+    icon: UserRound,
+    title: "Staff",
+    lead: "Open the counter, create bills and keep stock moving.",
+    placeholder: "business-slug/username",
+  },
+] as const satisfies ReadonlyArray<{
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  title: string;
+  lead: string;
+  placeholder: string;
+}>;
+
+type PortalId = (typeof PORTALS)[number]["id"];
 
 export default function LoginPage() {
+  // useSearchParams needs a Suspense boundary for this page to prerender.
+  return (
+    <Suspense fallback={null}>
+      <LoginView />
+    </Suspense>
+  );
+}
+
+function LoginView() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [portalId, setPortalId] = useState<PortalId>(() => {
+    const requested = PORTALS.find((x) => x.id === searchParams.get("portal"));
+    if (requested) return requested.id;
+    return searchParams.get("next")?.startsWith("/platform") ? "super" : "owner";
+  });
+  const portal = PORTALS.find((x) => x.id === portalId)!;
+  const choosePortal = (id: PortalId) => {
+    setPortalId(id);
+    setError("");
+    window.history.replaceState(null, "", `/login?portal=${id}`);
+  };
+  const [view, setView] = useState<ViewMode>("login");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const [resetOpen, setResetOpen] = useState(false);
   const [resetIdent, setResetIdent] = useState("");
-  const [resetSlug, setResetSlug] = useState("");
   const [resetNote, setResetNote] = useState("");
   const [resetBusy, setResetBusy] = useState(false);
-
-  const launchDevRole = async (role: DevPreviewRole, target: string) => {
-    const res = await fetch("/api/dev-preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role }),
-    });
-    if (!res.ok) {
-      toast.error("Dev preview is only available in development.");
-      return;
-    }
-    toast.success(`Entered Dev Preview (${role.replace("_", " ")})`);
-    router.push(target);
-    router.refresh();
-  };
+  const [resetDone, setResetDone] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
     setLoading(true);
     try {
       const res = await fetch("/api/auth", {
@@ -51,14 +112,18 @@ export default function LoginPage() {
           router.push("/suspended");
           return;
         }
-        toast.error(data.error || "Sign in failed");
+        const msg = data.error || "Sign in failed";
+        setError(msg);
+        toast.error(msg);
         return;
       }
       toast.success("Signed in");
       router.push(data.redirectTo || "/dashboard");
       router.refresh();
     } catch {
-      toast.error("Network error while signing in");
+      const msg = "Network error while signing in";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -66,6 +131,7 @@ export default function LoginPage() {
 
   const handleResetRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
     setResetBusy(true);
     try {
       const res = await fetch("/api/auth", {
@@ -74,171 +140,209 @@ export default function LoginPage() {
         body: JSON.stringify({
           action: "request_reset",
           identifier: resetIdent,
-          tenantSlug: resetSlug || undefined,
           note: resetNote || undefined,
         }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not submit reset request.");
+        return;
+      }
       toast.success(data.message || "Request submitted.");
-      setResetOpen(false);
-      setResetIdent("");
-      setResetNote("");
+      setResetDone(true);
     } catch {
+      setError("Could not submit reset request.");
       toast.error("Could not submit reset request.");
     } finally {
       setResetBusy(false);
     }
   };
 
+  const panel =
+    view === "reset"
+      ? {
+          title: "Reset your password",
+          lead: "Three quick steps to notify your workspace administrator.",
+          steps: [
+            { label: "Enter your username" },
+            { label: "Notify admin" },
+            { label: "Sign back in" },
+          ],
+          active: resetDone ? 1 : 0,
+        }
+      : {
+          title: portal.title,
+          lead: portal.lead,
+          steps: [
+            { label: "Enter your credentials" },
+            { label: "Verify workspace" },
+            { label: "Open Nexus ERP" },
+          ],
+          active: identifier.trim().length > 0 && password.length > 0 ? 1 : 0,
+        };
+
   return (
-    <div className="min-h-screen bg-[#0B1120] flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="flex flex-col items-center text-center">
-          <Link href="/">
-            <NexusLogo variant="light" size="lg" />
-          </Link>
-          <p className="text-slate-400 text-sm mt-2">
-            Sign in with your Email or Staff Username
+    <AuthSplitLayout
+      tone="vendor"
+      portal={portalId}
+      title={panel.title}
+      lead={panel.lead}
+      steps={panel.steps}
+      activeStep={panel.active}
+      backHref="/"
+      backLabel="Back to home"
+      footerLinks={[
+        { label: "Sign Up", href: "/signup" },
+        { label: "Home", href: "/" },
+      ]}
+    >
+      {view === "reset" ? (
+        <>
+          <h1 className="as-heading">Request Password Reset</h1>
+          <p className="as-sub">
+            Your Shop Owner or Nexus ERP Admin will set a temporary password for you.
           </p>
-        </div>
 
-        <Card className="border-slate-800 shadow-2xl">
-          <CardContent className="p-6">
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <Label>Email or Username</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="owner@company.in or imraan-footwear/chn_staff"
-                    className="pl-9"
-                    required
-                    autoComplete="username"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label>Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="pl-9"
-                    required
-                    autoComplete="current-password"
-                  />
-                </div>
-              </div>
-
-              <Button type="submit" className="w-full" size="lg" disabled={loading}>
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                Sign In to Nexus ERP
-              </Button>
-            </form>
-
-            <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-              <button
-                type="button"
-                onClick={() => setResetOpen(true)}
-                className="inline-flex items-center gap-1 text-sky-600 hover:underline font-medium cursor-pointer"
-              >
-                <KeyRound className="h-3.5 w-3.5" />
-                Forgot Password?
-              </button>
-              <Link href="/" className="hover:text-slate-800">
-                ← Back to Home
-              </Link>
+          {error ? <div className="as-alert">{error}</div> : null}
+          {resetDone ? (
+            <div className="as-alert as-alert--info">
+              <div className="as-alert__title">Request Submitted</div>
+              If the account exists, your administrator has been notified.
             </div>
-          </CardContent>
-        </Card>
+          ) : null}
 
-        {process.env.NODE_ENV !== "production" && (
-          <div className="rounded-2xl border border-amber-500/30 bg-slate-900/90 p-4 space-y-2.5 text-white">
-            <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
-              <FlaskConical className="h-4 w-4" />
-              Dev Preview Mode (No Backend Needed)
-            </div>
-            <p className="text-[11px] text-slate-400">
-              Preview every UI with mock Imraan Footwear data (New Delhi Factory + Chennai Shop):
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => launchDevRole("platform_admin", "/platform")}
-                className="rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs font-semibold hover:border-amber-400 cursor-pointer"
-              >
-                Platform Super Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => launchDevRole("owner", "/dashboard")}
-                className="rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs font-semibold hover:border-sky-400 cursor-pointer"
-              >
-                Shop Owner (Admin)
-              </button>
-              <button
-                type="button"
-                onClick={() => launchDevRole("branch_admin", "/dashboard")}
-                className="rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs font-semibold hover:border-emerald-400 cursor-pointer"
-              >
-                Branch Manager
-              </button>
-              <button
-                type="button"
-                onClick={() => launchDevRole("worker", "/dashboard/billing/new")}
-                className="rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs font-semibold hover:border-violet-400 cursor-pointer"
-              >
-                Counter Staff
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <Dialog
-        open={resetOpen}
-        onClose={() => setResetOpen(false)}
-        title="Request Password Reset"
-        subtitle="Your Shop Owner or Nexus ERP Admin will set a temporary password for you."
-      >
-        <form onSubmit={handleResetRequest} className="space-y-3">
-          <div>
-            <Label>Email or Staff Username *</Label>
-            <Input
+          <form onSubmit={handleResetRequest}>
+            <AuthField
+              label="Email or Staff Username"
+              name="resetIdent"
               value={resetIdent}
               onChange={(e) => setResetIdent(e.target.value)}
-              placeholder="e.g. chn_staff or imraan@company.in"
+              placeholder="e.g. chn_staff or owner@company.in"
               required
             />
-          </div>
-          <div>
-            <Label>Business Slug (optional)</Label>
-            <Input
-              value={resetSlug}
-              onChange={(e) => setResetSlug(e.target.value)}
-              placeholder="e.g. imraan-footwear"
-            />
-          </div>
-          <div>
-            <Label>Note (optional)</Label>
-            <Input
+            <AuthField
+              label="Note"
+              optional="(optional)"
+              name="resetNote"
               value={resetNote}
               onChange={(e) => setResetNote(e.target.value)}
-              placeholder="Chennai counter phone reset"
+              placeholder="Reason for reset"
             />
+            <button type="submit" disabled={resetBusy} className="as-btn as-btn--primary">
+              {resetBusy ? (
+                <>
+                  <Spinner /> Submitting...
+                </>
+              ) : (
+                "Notify Administrator"
+              )}
+            </button>
+          </form>
+
+          <div className="as-alt">
+            <button
+              type="button"
+              onClick={() => {
+                setView("login");
+                setError("");
+                setResetDone(false);
+              }}
+              className="as-btn as-btn--ghost as-btn--stacked"
+            >
+              <span className="as-btn__cap">Remembered your password?</span>
+              <span className="as-btn__label">Back to Log In</span>
+            </button>
           </div>
-          <Button type="submit" className="w-full" disabled={resetBusy}>
-            {resetBusy && <Loader2 className="h-4 w-4 animate-spin" />}
-            Notify Administrator
-          </Button>
-        </form>
-      </Dialog>
-    </div>
+        </>
+      ) : (
+        <>
+          <h1 className="as-heading">{portal.title} Login</h1>
+          <p className="as-sub">Choose your login type, then enter your details.</p>
+
+          <div className="as-portals" role="radiogroup" aria-label="Login type">
+            {PORTALS.map((x) => {
+              const Icon = x.icon;
+              return (
+                <button
+                  key={x.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={x.id === portalId}
+                  data-portal-option={x.id}
+                  onClick={() => choosePortal(x.id)}
+                  className="as-portal"
+                >
+                  <Icon aria-hidden="true" />
+                  <span>{x.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {error ? <div className="as-alert">{error}</div> : null}
+
+          <form onSubmit={handleLogin}>
+            <AuthField
+              label="Email or Staff Username"
+              name="identifier"
+              autoComplete="username"
+              value={identifier}
+              onChange={(e) => {
+                setIdentifier(e.target.value);
+                setError("");
+              }}
+              placeholder={portal.placeholder}
+              required
+            />
+
+            <AuthField
+              label="Password"
+              name="password"
+              autoComplete="current-password"
+              revealable
+              revealed={showPassword}
+              onToggleReveal={() => setShowPassword((v) => !v)}
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError("");
+              }}
+              placeholder="Enter your password"
+              required
+            />
+
+            <div style={{ display: "flex", justifyContent: "flex-end", margin: "-4px 0 20px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setView("reset");
+                  setError("");
+                }}
+                className="as-link"
+              >
+                Forgot password?
+              </button>
+            </div>
+
+            <button type="submit" disabled={loading} className="as-btn as-btn--primary">
+              {loading ? (
+                <>
+                  <Spinner /> Authenticating...
+                </>
+              ) : (
+                "Log In"
+              )}
+            </button>
+          </form>
+
+          <div className="as-alt">
+            <Link href="/signup" className="as-btn as-btn--ghost as-btn--stacked">
+              <span className="as-btn__cap">Don&apos;t have an account?</span>
+              <span className="as-btn__label">Sign up</span>
+            </Link>
+          </div>
+        </>
+      )}
+    </AuthSplitLayout>
   );
 }

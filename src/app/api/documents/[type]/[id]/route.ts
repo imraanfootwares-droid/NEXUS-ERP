@@ -3,6 +3,7 @@ import { assertAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import { renderCataloguePdfBuffer, renderChallanPdfBuffer, renderInvoicePdfBuffer } from "@/lib/pdf/documents";
+import { fetchImageForPdf } from "@/lib/pdf/image-helper";
 import { deriveThumbKey, getPublicAssetUrl } from "@/lib/storage/s3-client";
 
 export const runtime = "nodejs";
@@ -27,33 +28,62 @@ export async function GET(
     const invData = await withTenantTx(
       { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
       async (client) => {
-        const invRes = await client.query(
-          `SELECT i.*, b.name AS branch_name, b.address AS branch_address, b.gstin AS branch_gstin
-           FROM public.invoices i
-           JOIN public.branches b ON b.id = i.branch_id
-           WHERE i.id = $1 AND i.tenant_id = $2`,
-          [id, ctx.tenant!.id]
-        );
+        const [invRes, itemsRes, tplRes] = await Promise.all([
+          client.query(
+            `SELECT i.*, b.name AS branch_name, b.address AS branch_address, b.gstin AS branch_gstin,
+                    p.full_name AS creator_name, COALESCE(p.username, p.email) AS creator_login
+             FROM public.invoices i
+             JOIN public.branches b ON b.id = i.branch_id
+             LEFT JOIN public.profiles p ON p.id = i.created_by
+             WHERE i.id = $1 AND i.tenant_id = $2`,
+            [id, ctx.tenant!.id]
+          ),
+          client.query(
+            "SELECT * FROM public.invoice_items WHERE invoice_id = $1 AND tenant_id = $2",
+            [id, ctx.tenant!.id]
+          ),
+          client.query<{
+            config: {
+              show_logo?: boolean;
+              show_hsn?: boolean;
+              show_gst_summary?: boolean;
+              accent_color?: string;
+              terms?: string;
+            };
+          }>(
+            "SELECT config FROM public.bill_templates WHERE tenant_id = $1 ORDER BY is_default DESC LIMIT 1",
+            [ctx.tenant!.id]
+          ),
+        ]);
         if (invRes.rows.length === 0) return null;
-        const itemsRes = await client.query(
-          "SELECT * FROM public.invoice_items WHERE invoice_id = $1 AND tenant_id = $2",
-          [id, ctx.tenant!.id]
-        );
-        return { inv: invRes.rows[0], items: itemsRes.rows };
+        return { inv: invRes.rows[0], items: itemsRes.rows, tpl: tplRes.rows[0]?.config ?? null };
       }
     );
 
     if (!invData) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
-    const { inv, items } = invData;
+    const { inv, items, tpl } = invData;
+    const showLogo = tpl?.show_logo ?? true;
+    const rawLogoKey = ctx.tenant.brand_config?.logo_key ?? null;
+    const logoSource =
+      ctx.tenant.brand_config?.logo_pdf_data_url ||
+      (rawLogoKey ? getPublicAssetUrl(rawLogoKey) : null);
+    const pdfSafeLogo = showLogo ? await fetchImageForPdf(logoSource, { format: "png", maxDim: 160 }) : null;
+    const builtBy = inv.creator_name
+      ? `${inv.creator_name}${inv.creator_login ? ` (@${inv.creator_login})` : ""}`
+      : null;
+
     const pdf = await renderInvoicePdfBuffer({
       tenantName: ctx.tenant.name,
+      logoUrl: showLogo ? pdfSafeLogo : null,
+      accentColor: tpl?.accent_color || ctx.tenant.brand_config?.primary_color || null,
       branchName: inv.branch_name,
       branchAddress: inv.branch_address,
       branchGstin: inv.branch_gstin,
       invoiceNumber: inv.invoice_number || "DRAFT",
       invoiceType: inv.invoice_type,
       createdAt: inv.created_at,
+      builtBy,
       customerName: inv.customer_snapshot?.name || "Walk-In Customer",
       customerPhone: inv.customer_snapshot?.phone,
       customerGstin: inv.customer_snapshot?.gstin,
@@ -68,6 +98,9 @@ export async function GET(
       grandTotal: Number(inv.grand_total),
       paidAmount: Number(inv.paid_amount),
       dueAmount: Number(inv.due_amount),
+      terms: tpl?.terms || undefined,
+      showHsn: tpl?.show_hsn ?? true,
+      showGst: tpl?.show_gst_summary ?? true,
       items: items.map((it) => ({
         product_name: it.product_name,
         sku: it.sku,
@@ -178,13 +211,24 @@ export async function GET(
           name: string;
           model_code: string;
           category: string | null;
+          brand: string | null;
+          description: string | null;
+          is_new_arrival: boolean;
+          custom_fields: Record<string, unknown> | null;
           primary_image_key: string | null;
           selling_price: string | null;
           wholesale_price: string | null;
+          sizes: string[];
         }>(
-          `SELECT p.id, p.name, p.model_code, p.category, p.primary_image_key,
+          `SELECT p.id, p.name, p.model_code, p.category, p.brand, p.description,
+                  p.is_new_arrival, p.custom_fields, p.primary_image_key,
                   MIN(pv.selling_price)::text AS selling_price,
-                  MIN(pv.wholesale_price)::text AS wholesale_price
+                  MIN(pv.wholesale_price)::text AS wholesale_price,
+                  COALESCE(
+                    ARRAY_AGG(DISTINCT NULLIF(TRIM(pv.attributes->>'size'), ''))
+                      FILTER (WHERE NULLIF(TRIM(pv.attributes->>'size'), '') IS NOT NULL),
+                    '{}'::text[]
+                  ) AS sizes
            FROM public.products p
            LEFT JOIN public.product_variants pv ON pv.product_id = p.id AND pv.is_active = true
            WHERE p.tenant_id = $1 AND p.is_active = true
@@ -198,21 +242,49 @@ export async function GET(
       }
     );
 
+    const cfg = ctx.tenant.storefront_config;
+    const logoRaw =
+      ctx.tenant.brand_config?.logo_pdf_data_url ||
+      (ctx.tenant.brand_config?.logo_key ? getPublicAssetUrl(ctx.tenant.brand_config.logo_key) : null);
+    const [logoDataUri, productImages] = await Promise.all([
+      fetchImageForPdf(logoRaw, { format: "png", maxDim: 160 }),
+      Promise.all(
+        rows.map(async (r) => {
+          if (!r.primary_image_key) return null;
+          const thumbUrl = getPublicAssetUrl(deriveThumbKey(r.primary_image_key));
+          const converted = await fetchImageForPdf(thumbUrl, { format: "jpeg", maxDim: 420 });
+          if (converted) return converted;
+          return fetchImageForPdf(getPublicAssetUrl(r.primary_image_key), { format: "jpeg", maxDim: 420 });
+        })
+      ),
+    ]);
+
     const pdf = await renderCataloguePdfBuffer({
       tenantName: ctx.tenant.name,
-      title,
-      whatsapp: ctx.tenant.storefront_config?.whatsapp_number || "",
+      logoUrl: logoDataUri,
+      title: title.replace(/\u2014/g, "-"),
+      subtitle: (cfg?.hero_subtitle || "").replace(/\u2014/g, "-"),
+      whatsapp: cfg?.whatsapp_number || "",
+      catalogueUrl: `${request.nextUrl.origin}/s/${ctx.tenant.slug}`,
       priceLabel: priceMode === "wholesale" ? "Wholesale" : priceMode === "hide" ? "Hide" : "Retail",
-      items: rows.map((r) => ({
-        name: r.name,
-        modelCode: r.model_code,
-        category: r.category,
-        imageUrl: r.primary_image_key ? getPublicAssetUrl(deriveThumbKey(r.primary_image_key)) : null,
-        price:
-          priceMode === "hide"
-            ? null
-            : Number(priceMode === "wholesale" ? r.wholesale_price : r.selling_price) || 0,
-      })),
+      items: rows.map((r, idx) => {
+        const rawCarton = Number(r.custom_fields?.pcs_per_carton ?? 0);
+        return {
+          name: r.name,
+          modelCode: r.model_code,
+          category: r.category,
+          brand: (cfg?.show_brand ?? true) ? r.brand : null,
+          description: (cfg?.show_description ?? true) ? r.description : null,
+          isNewArrival: r.is_new_arrival,
+          pcsPerCarton: (cfg?.show_carton_info ?? true) && Number.isFinite(rawCarton) && rawCarton > 0 ? rawCarton : null,
+          sizes: (cfg?.show_sizes ?? true) && r.sizes?.length ? r.sizes.slice(0, 8).join(", ") : undefined,
+          imageUrl: productImages[idx] ?? null,
+          price:
+            priceMode === "hide"
+              ? null
+              : Number(priceMode === "wholesale" ? r.wholesale_price : r.selling_price) || 0,
+        };
+      }),
     });
 
     return new NextResponse(new Uint8Array(pdf), {

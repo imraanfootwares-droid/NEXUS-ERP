@@ -49,7 +49,7 @@ export function BarcodeLabelSheet({
   mfgMonthYear: string;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="print-doc space-y-4">
       <div className="no-print flex justify-between items-center">
         <p className="text-xs text-slate-600">
           Legal Metrology Ready Labels ({items.length} labels) — MRP incl. of all taxes, Mfg Date &amp; Net Qty

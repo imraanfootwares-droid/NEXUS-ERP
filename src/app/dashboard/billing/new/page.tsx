@@ -1,6 +1,7 @@
+import { getBranchScope } from "@/lib/auth/active-branch";
 import { PosTerminal, type PosVariantItem } from "@/components/billing/pos-terminal";
 import { TierLockOverlay } from "@/components/ui/kpi-grid";
-import { canAccess, isFeatureEnabled } from "@/lib/auth/access";
+import { canAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import { deriveThumbKey, getPublicAssetUrl } from "@/lib/storage/s3-client";
@@ -21,14 +22,15 @@ export default async function PosNewBillPage({
   }
 
   const { draft } = await searchParams;
-  const stockEnabled = isFeatureEnabled(ctx.tenant, "dynamic_stock_matrix");
-  const crmEnabled = isFeatureEnabled(ctx.tenant, "customer_crm");
-  const discountsEnabled = isFeatureEnabled(ctx.tenant, "discounts_returns_payments");
+  const stockEnabled = ctx.enabledFeatures.dynamic_stock_matrix;
+  const crmEnabled = ctx.enabledFeatures.customer_crm;
+  const discountsEnabled = ctx.enabledFeatures.discounts_returns_payments;
 
+  const scope = await getBranchScope(ctx);
   const data = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
-      const defaultBranchId = ctx.branches[0]?.id;
+      const defaultBranchId = scope.ordered[0]?.id;
       const [varsRes, custRes, hsnRes, axesRes] = await Promise.all([
         stockEnabled && defaultBranchId
           ? client.query<PosVariantItem & { primary_image_key: string | null }>(
@@ -77,6 +79,7 @@ export default async function PosNewBillPage({
             id: dInv.rows[0].id,
             branch_id: dInv.rows[0].branch_id,
             customer_id: dInv.rows[0].customer_id,
+            customer_snapshot: dInv.rows[0].customer_snapshot ?? null,
             invoice_type: dInv.rows[0].invoice_type,
             tax_mode: dInv.rows[0].tax_mode,
             items: dItems.rows.map((it) => ({
@@ -105,9 +108,11 @@ export default async function PosNewBillPage({
 
   return (
     <PosTerminal
+      key={scope.activeId}
       tenant={ctx.tenant}
       userId={ctx.user.id}
-      branches={ctx.branches}
+      branches={scope.ordered}
+      branchLocked={scope.activeId !== "all"}
       initialVariants={data.variants}
       initialCustomers={data.customers}
       initialHsn={data.hsn}

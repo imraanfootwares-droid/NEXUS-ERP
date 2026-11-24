@@ -5,6 +5,9 @@
  * Produces `full` (max 1200px, q=0.80, <= 500KB) and `thumb` (400px, q=0.75, ~20KB).
  */
 
+/** Must match the value signed by the server for public uploads. */
+export const IMAGE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
 export interface CompressedImagePair {
   fullBlob: Blob;
   thumbBlob: Blob;
@@ -19,9 +22,9 @@ async function loadImage(file: File): Promise<HTMLImageElement> {
       URL.revokeObjectURL(url);
       resolve(img);
     };
-    img.onerror = (err) => {
+    img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(err);
+      reject(new Error("This photo format is not supported. Please use a JPG, PNG or WebP image."));
     };
     img.src = url;
   });
@@ -44,16 +47,19 @@ async function renderWebp(
 
   ctx.drawImage(img, 0, 0, width, height);
 
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) reject(new Error("WebP conversion failed"));
-        else resolve(blob);
-      },
-      "image/webp",
-      quality
-    );
-  });
+  const encode = (type: string) =>
+    new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+
+  const webp = await encode("image/webp");
+  if (webp?.type === "image/webp") return webp;
+
+  // iPhone Safari cannot create WebP and would return a very large PNG, so use JPEG there.
+  ctx.globalCompositeOperation = "destination-over";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  const jpeg = await encode("image/jpeg");
+  if (!jpeg) throw new Error("Could not process this photo. Please try another image.");
+  return jpeg;
 }
 
 async function shortSha256Hex(blob: Blob): Promise<string> {
@@ -127,7 +133,7 @@ export async function uploadProductPhotoToStorage(
       purpose: "product_full",
       hash,
       contentLength: fullBlob.size,
-      contentType: "image/webp",
+      contentType: fullBlob.type,
     }),
   });
   const pFull = await pFullRes.json();
@@ -147,7 +153,7 @@ export async function uploadProductPhotoToStorage(
       purpose: "product_thumb",
       hash,
       contentLength: thumbBlob.size,
-      contentType: "image/webp",
+      contentType: thumbBlob.type,
     }),
   });
   const pThumb = await pThumbRes.json();
@@ -158,18 +164,18 @@ export async function uploadProductPhotoToStorage(
   const [upFull, upThumb] = await Promise.all([
     fetch(pFull.uploadUrl, {
       method: "PUT",
-      headers: { "Content-Type": "image/webp", "Content-Length": String(fullBlob.size) },
+      headers: { "Content-Type": fullBlob.type, "Cache-Control": IMAGE_CACHE_CONTROL },
       body: fullBlob,
     }),
     fetch(pThumb.uploadUrl, {
       method: "PUT",
-      headers: { "Content-Type": "image/webp", "Content-Length": String(thumbBlob.size) },
+      headers: { "Content-Type": thumbBlob.type, "Cache-Control": IMAGE_CACHE_CONTROL },
       body: thumbBlob,
     }),
   ]);
 
   if (!upFull.ok || !upThumb.ok) {
-    throw new Error("Upload to Cloudflare R2 failed. Check R2 CORS policy and credentials.");
+    throw new Error("Photo upload failed. Please check your internet and try again.");
   }
 
   return { fullKey: pFull.key, via: "r2" };

@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertAccess } from "@/lib/auth/access";
+import { canAccess, assertAccess } from "@/lib/auth/access";
+import { linkWalkInCustomer } from "@/lib/billing/walk-in-customer";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import type { BillTemplateConfig, PaymentMode } from "@/types/database";
@@ -22,18 +23,46 @@ export async function createOrFinalizeInvoiceAction(payload: Record<string, unkn
     assertAccess(ctx, "billing.apply_discount", { isMutation: true });
   }
 
+  // Money safety validation before committing to DB
+  const items = Array.isArray(payload.items) ? (payload.items as Array<Record<string, unknown>>) : [];
+  if (items.length === 0) {
+    throw new Error("Invoice must contain at least one item.");
+  }
+  for (const it of items) {
+    const qty = Number(it.qty);
+    const unitPrice = Number(it.unit_price);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw new Error("Each item must have a valid quantity greater than 0.");
+    }
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      throw new Error("Each item must have a valid non-negative price.");
+    }
+  }
+  const grandTotal = Number(payload.grand_total);
+  const paidAmount = Number(payload.paid_amount ?? 0);
+  if (!Number.isFinite(grandTotal) || grandTotal < 0) {
+    throw new Error("Invalid invoice total.");
+  }
+  if (!Number.isFinite(paidAmount) || paidAmount < 0) {
+    throw new Error("Invalid paid amount.");
+  }
+
+  const canSaveCustomer = canAccess(ctx, "customers.manage", { isMutation: true }).allowed;
   const invoiceId = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
+      const linked = canSaveCustomer ? await linkWalkInCustomer(client, ctx.tenant.id, payload) : payload;
       const res = await client.query<{ id: string }>(
         "SELECT public.create_invoice_atomic($1, $2::jsonb) AS id",
-        [ctx.tenant.id, JSON.stringify({ ...payload, created_by: ctx.user.id })]
+        [ctx.tenant.id, JSON.stringify({ ...linked, created_by: ctx.user.id })]
       );
       return res.rows[0].id;
     }
   );
 
   revalidatePath("/dashboard/billing");
+  revalidatePath("/dashboard/billing/new");
+  revalidatePath("/dashboard/customers");
   revalidatePath("/dashboard/stock");
   revalidatePath("/dashboard");
   return invoiceId;
@@ -234,7 +263,7 @@ export async function collectCustomerDueAction(payload: {
 export async function saveBillTemplateAction(input: {
   id?: string;
   name: string;
-  format: "a4" | "thermal_80mm" | "thermal_58mm";
+  format: "a4" | "a5" | "thermal_80mm" | "thermal_58mm";
   isDefault: boolean;
   config: BillTemplateConfig;
 }) {

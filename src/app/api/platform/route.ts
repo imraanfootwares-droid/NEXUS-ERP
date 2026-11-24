@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Full Platform Migration Export (Application Owner only)
-  const ctx = await getServerSessionContext();
+  const ctx = await getServerSessionContext("platform");
   if (!ctx || !ctx.user.is_platform_admin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

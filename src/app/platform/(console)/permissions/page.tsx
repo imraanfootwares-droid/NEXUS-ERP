@@ -1,13 +1,14 @@
 import { withPlatformTx } from "@/lib/db";
 import type { HsnCodeRow } from "@/types/database";
 import { PlatformPermissionsAndHsnClient } from "@/app/platform/_client";
+import type { TierPerson, TierTenant } from "@/app/platform/_tier-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformPermissionsPage() {
   const data = await withPlatformTx(async (client) => {
-    const [tenantsRes, globalRes, tenantPermsRes, hsnRes] = await Promise.all([
-      client.query<{ id: string; name: string }>("SELECT id, name FROM public.tenants ORDER BY name"),
+    const [tenantsRes, globalRes, tenantPermsRes, hsnRes, peopleRes] = await Promise.all([
+      client.query<TierTenant>("SELECT id, name, tier, feature_overrides FROM public.tenants ORDER BY name"),
       client.query<{
         permission_key: string;
         default_owner: boolean;
@@ -21,6 +22,9 @@ export default async function PlatformPermissionsPage() {
         allowed: boolean;
       }>("SELECT tenant_id, role, permission_key, allowed FROM public.tenant_role_permissions"),
       client.query<HsnCodeRow>("SELECT * FROM public.hsn_codes WHERE tenant_id IS NULL ORDER BY code"),
+      client.query<TierPerson>(
+        "SELECT id, tenant_id, role, full_name, username, is_active, tier_override FROM public.profiles WHERE is_platform_admin = false ORDER BY full_name"
+      ),
     ]);
 
     const globalDefaults: Record<string, { owner: boolean; branch_admin: boolean; worker: boolean }> = {};
@@ -49,24 +53,19 @@ export default async function PlatformPermissionsPage() {
       globalDefaults,
       tenantOverrides,
       hsnCodes: hsnRes.rows,
+      people: peopleRes.rows,
     };
   });
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-slate-900">
-          Permission Matrix &amp; HSN Master
-        </h1>
-        <p className="text-sm text-slate-600">
-          Configure global defaults, override any tenant role&apos;s permissions, and manage Indian GST HSN codes.
-        </p>
-      </div>
+    <div className="space-y-3.5">
+      <h1>Roles, Tiers &amp; HSN</h1>
       <PlatformPermissionsAndHsnClient
         tenants={data.tenants}
         globalDefaults={data.globalDefaults}
         tenantOverrides={data.tenantOverrides}
         hsnCodes={data.hsnCodes}
+        people={data.people}
       />
     </div>
   );

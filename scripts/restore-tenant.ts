@@ -5,6 +5,7 @@ import fs from "fs";
 import zlib from "zlib";
 import { Pool } from "pg";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { encodeRestoreValue } from "../src/lib/backups/restore-encoding";
 
 /**
  * Restore a tenant snapshot from a gzipped JSON backup (local file or R2 private bucket key).
@@ -45,6 +46,8 @@ async function readBackupJson(args: string[]): Promise<Record<string, Array<Reco
 }
 
 const RESTORE_ORDER = [
+  "platform_settings",
+  "permission_definitions",
   "tenants",
   "branches",
   "devices",
@@ -74,6 +77,7 @@ const RESTORE_ORDER = [
   "stock_transfers",
   "stock_transfer_items",
   "stock_ledger",
+  "landing_enquiries",
 ] as const;
 
 async function main() {
@@ -107,11 +111,13 @@ async function main() {
       const rows = snapshot[table] ?? [];
       if (rows.length === 0) continue;
       const cols = Object.keys(rows[0]);
+      const typeRes = await client.query<{ column_name: string; data_type: string }>(
+        "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1",
+        [table]
+      );
+      const types = new Map(typeRes.rows.map((r) => [r.column_name, r.data_type]));
       for (const row of rows) {
-        const vals = cols.map((c) => {
-          const v = row[c];
-          return v !== null && typeof v === "object" && !Array.isArray(v) ? JSON.stringify(v) : v;
-        });
+        const vals = cols.map((c) => encodeRestoreValue(row[c], types.get(c)));
         const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
         await client.query(
           `INSERT INTO public.${table} (${cols.join(",")}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,

@@ -11,6 +11,9 @@ import { env, isConfigured } from "@/lib/env";
 
 export type BucketKind = "public" | "private";
 
+/** Image file names contain a content hash, so a stored file never changes. */
+const PUBLIC_IMAGE_CACHE = "public, max-age=31536000, immutable";
+
 let cachedClient: S3Client | null = null;
 
 function getS3Client(): S3Client {
@@ -77,9 +80,13 @@ export async function getPresignedUploadUrl(opts: PresignPutOptions): Promise<st
     ContentLength: opts.contentLength,
     CacheControl:
       opts.cacheControl ??
-      (opts.kind === "public" ? "public, max-age=31536000, immutable" : "private, no-store"),
+      (opts.kind === "public" ? PUBLIC_IMAGE_CACHE : "private, no-store"),
   });
-  return getSignedUrl(client, cmd, { expiresIn: opts.expiresInSeconds ?? 300 });
+  // Signing this header makes browsers keep images, which saves free R2 read requests.
+  return getSignedUrl(client, cmd, {
+    expiresIn: opts.expiresInSeconds ?? 300,
+    signableHeaders: new Set(["cache-control", "content-type"]),
+  });
 }
 
 export async function getPresignedDownloadUrl(

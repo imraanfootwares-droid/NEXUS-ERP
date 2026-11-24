@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import {
   IMPERSONATE_COOKIE_NAME,
+  PLATFORM_SESSION_COOKIE_NAME,
   SESSION_COOKIE_NAME,
   SESSION_TTL_SECONDS,
   hashPassword,
@@ -43,14 +44,34 @@ function isHttpsRequest(request: NextRequest): boolean {
   return proto === "https";
 }
 
-function setSessionCookie(res: NextResponse, token: string, request: NextRequest) {
-  res.cookies.set(SESSION_COOKIE_NAME, token, {
+function setSessionCookie(
+  res: NextResponse,
+  token: string,
+  request: NextRequest,
+  isPlatformAdmin: boolean
+) {
+  const cookieName = isPlatformAdmin ? PLATFORM_SESSION_COOKIE_NAME : SESSION_COOKIE_NAME;
+  res.cookies.set(cookieName, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production" && isHttpsRequest(request),
     path: "/",
     maxAge: SESSION_TTL_SECONDS,
   });
+}
+
+function detectRequestScope(request: NextRequest): "platform" | "tenant" {
+  const param = request.nextUrl.searchParams.get("scope");
+  if (param === "platform" || param === "tenant") return param;
+  const referer = request.headers.get("referer");
+  if (referer) {
+    try {
+      if (new URL(referer).pathname.startsWith("/platform")) return "platform";
+    } catch {
+      // ignore malformed referer
+    }
+  }
+  return "tenant";
 }
 
 export async function POST(request: NextRequest) {
@@ -135,7 +156,7 @@ export async function POST(request: NextRequest) {
       redirectTo,
       mustChangePassword: user.must_change_password,
     });
-    setSessionCookie(res, token, request);
+    setSessionCookie(res, token, request, user.is_platform_admin);
     return res;
   } catch (err) {
     return NextResponse.json(
@@ -196,7 +217,10 @@ export async function PATCH(request: NextRequest) {
       if (!parsed.success) {
         return NextResponse.json({ error: "New password must be at least 8 characters." }, { status: 400 });
       }
-      const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+      const reqScope = detectRequestScope(request);
+      const token = request.cookies.get(
+        reqScope === "platform" ? PLATFORM_SESSION_COOKIE_NAME : SESSION_COOKIE_NAME
+      )?.value;
       const jwt = token ? await verifySessionToken(token) : null;
       if (!jwt) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -240,7 +264,7 @@ export async function PATCH(request: NextRequest) {
       });
 
       const res = NextResponse.json({ ok: true });
-      setSessionCookie(res, newToken, request);
+      setSessionCookie(res, newToken, request, jwt.pa);
       return res;
     }
 
@@ -257,9 +281,14 @@ export async function DELETE(request: NextRequest) {
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ error: "Cross-origin request blocked." }, { status: 403 });
   }
+  const reqScope = detectRequestScope(request);
   const res = NextResponse.json({ ok: true });
-  res.cookies.delete(SESSION_COOKIE_NAME);
-  res.cookies.delete(IMPERSONATE_COOKIE_NAME);
-  res.cookies.delete(DEV_ROLE_COOKIE);
+  if (reqScope === "platform") {
+    res.cookies.delete(PLATFORM_SESSION_COOKIE_NAME);
+    res.cookies.delete(IMPERSONATE_COOKIE_NAME);
+  } else {
+    res.cookies.delete(SESSION_COOKIE_NAME);
+    res.cookies.delete(DEV_ROLE_COOKIE);
+  }
   return res;
 }

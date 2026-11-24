@@ -22,9 +22,10 @@ export const FEATURE_KEYS = [
   "supplier_and_production",
   "stock_transfers",
   "owner_profit_analytics",
-  // Tier 4 (2)
+  // Tier 4 (3)
   "public_website_cms",
   "pdf_catalogue_export",
+  "customer_enquiries",
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
@@ -197,6 +198,12 @@ export const FEATURE_META: Record<
     category: "Storefront",
     description: "WhatsApp-ready PDF brochure with configurable price display",
   },
+  customer_enquiries: {
+    label: "Customer Enquiries Inbox",
+    minTier: "tier_4",
+    category: "Storefront",
+    description: "Public catalogue & storefront enquiry inbox with WhatsApp routing",
+  },
 };
 
 export const PERMISSION_DEFINITIONS = [
@@ -225,6 +232,8 @@ export const PERMISSION_DEFINITIONS = [
   { key: "transfers.receive", feature: "stock_transfers", module: "Multi-Branch", label: "Receive Branch Transfers", owner: true, branch_admin: true, worker: true },
   { key: "website.manage", feature: "public_website_cms", module: "Storefront", label: "Manage Website & Photos", owner: true, branch_admin: false, worker: false },
   { key: "catalogue.export", feature: "pdf_catalogue_export", module: "Storefront", label: "Export PDF Catalogue", owner: true, branch_admin: true, worker: false },
+  { key: "enquiries.view", feature: "customer_enquiries", module: "Storefront", label: "View Customer Enquiries Inbox", owner: true, branch_admin: true, worker: true },
+  { key: "enquiries.manage", feature: "customer_enquiries", module: "Storefront", label: "Manage Enquiries & WhatsApp Routing", owner: true, branch_admin: true, worker: false },
   { key: "settings.catalog_schema", feature: "dynamic_stock_matrix", module: "Settings", label: "Edit Variant Axes & Custom Fields", owner: true, branch_admin: false, worker: false },
   { key: "settings.tax_and_hsn", feature: "gst_billing_pdf", module: "Settings", label: "Edit Tax Mode & HSN Codes", owner: true, branch_admin: false, worker: false },
   { key: "settings.staff_and_roles", feature: "rbac_logins", module: "Settings", label: "Manage Role Permissions", owner: true, branch_admin: false, worker: false },

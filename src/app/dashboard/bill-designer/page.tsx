@@ -29,11 +29,11 @@ export default async function BillDesignerPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-2xl font-bold text-slate-900">
+        <h1>
           Custom Bill Design &amp; Print Studio
         </h1>
-        <p className="text-sm text-slate-600">
-          Customize A4 / Thermal 80mm / 58mm print layouts and your POS billing screen layout.
+        <p className="mt-0.5 text-[12.5px] text-[#77777d]">
+          Pick from ready-made A4, A5 &amp; Small Bill templates and preview your POS billing screen live.
         </p>
       </div>
       <BillDesignerClient

@@ -1,13 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  assertAccess,
-  canAccess,
-  getDependentFeatures,
-  getRequiredPrerequisites,
-  isFeatureEnabled,
-  resolveAllFeatures,
-  resolveRolePermissions,
-} from "../access";
+import { assertAccess, canAccess, getDependentFeatures, getRequiredPrerequisites, isFeatureEnabled, resolveAllFeatures, resolveRolePermissions, effectiveUserTier, resolveUserFeatures, resolveAccessBlock } from "../access";
 import { hashPassword, isSameOriginRequest, verifyPassword } from "../crypto";
 import { buildVariantSku, generateVariantCombinations } from "@/lib/catalog/verticals";
 import { PERMISSION_DEFINITIONS } from "@/lib/constants/saas";
@@ -187,8 +179,25 @@ describe("Access Control & Cross-Tier Overrides", () => {
     );
   });
 
-  it("has all 30 canonical permission definitions", () => {
-    expect(PERMISSION_DEFINITIONS.length).toBe(30);
+  it("has all 32 canonical permission definitions including customer enquiries", () => {
+    expect(PERMISSION_DEFINITIONS.length).toBe(32);
+    const tier1 = makeTenant({ tier: "tier_1" });
+    expect(isFeatureEnabled(tier1, "customer_enquiries")).toBe(false);
+    const tier1WithEnq = makeTenant({ tier: "tier_1", feature_overrides: { customer_enquiries: true } });
+    expect(isFeatureEnabled(tier1WithEnq, "customer_enquiries")).toBe(true);
+    const workerCtx = makeCtx({
+      tenant: tier1WithEnq,
+      user: { ...makeCtx().user, role: "worker" },
+      permissions: resolveRolePermissions("worker", []),
+    });
+    expect(canAccess(workerCtx, "enquiries.view").allowed).toBe(true);
+    expect(canAccess(workerCtx, "enquiries.manage").allowed).toBe(false);
+    const branchAdminCtx = makeCtx({
+      tenant: tier1WithEnq,
+      user: { ...makeCtx().user, role: "branch_admin" },
+      permissions: resolveRolePermissions("branch_admin", []),
+    });
+    expect(canAccess(branchAdminCtx, "enquiries.manage").allowed).toBe(true);
   });
 
   it("verifies scrypt password hashing and CSRF same-origin guard", () => {
@@ -215,5 +224,76 @@ describe("Access Control & Cross-Tier Overrides", () => {
     ]);
     expect(combos).toHaveLength(4);
     expect(buildVariantSku("IMR-101", combos[0])).toBe("IMR-101-UK7-BLACK");
+  });
+});
+
+describe("per-person tiers", () => {
+  const tenant = { tier: "tier_4" as const, feature_overrides: {} };
+
+  it("follows the business plan when no personal tier is set", () => {
+    expect(resolveUserFeatures(tenant, null)).toEqual(resolveAllFeatures(tenant));
+  });
+
+  it("removes higher-tier modules from a demoted person", () => {
+    const features = resolveUserFeatures(tenant, "tier_1");
+    expect(features.gst_billing_pdf).toBe(true);
+    expect(features.dynamic_stock_matrix).toBe(false);
+    expect(features.public_website_cms).toBe(false);
+  });
+
+  it("never grants more than the business plan", () => {
+    const small = { tier: "tier_1" as const, feature_overrides: {} };
+    expect(resolveUserFeatures(small, "tier_4")).toEqual(resolveAllFeatures(small));
+    expect(effectiveUserTier("tier_1", "tier_4")).toBe("tier_1");
+  });
+
+  it("keeps a module the business disabled switched off", () => {
+    const custom = { tier: "tier_4" as const, feature_overrides: { customer_crm: false } };
+    expect(resolveUserFeatures(custom, "tier_3").customer_crm).toBe(false);
+  });
+
+  it("does not let a custom business add-on bypass a personal tier", () => {
+    const custom = { tier: "tier_2" as const, feature_overrides: { public_website_cms: true } };
+    expect(resolveUserFeatures(custom, null).public_website_cms).toBe(true);
+    expect(resolveUserFeatures(custom, "tier_1").public_website_cms).toBe(false);
+  });
+});
+
+describe("payment access blocks", () => {
+  const baseCtx = {
+    user: { is_active: true, role: "owner" },
+    tenant: { status: "active" },
+    assignedBranchIds: [],
+    enabledFeatures: { gst_billing_pdf: true },
+    permissions: { "billing.view": true },
+    impersonation: null,
+  };
+  const block = { scope: "user", message: null, amountDue: 500, contact: null, blockedAt: null };
+
+  it("has no block by default", () => {
+    expect(resolveAccessBlock({ access_blocked: false }, { access_blocked: false })).toBeNull();
+  });
+
+  it("gives a business block priority over a personal block", () => {
+    const result = resolveAccessBlock(
+      { access_blocked: true, access_block_amount: "1500.50" },
+      { access_blocked: true, access_block_amount: 20 }
+    );
+    expect(result?.scope).toBe("business");
+    expect(result?.amountDue).toBe(1500.5);
+  });
+
+  it("denies every permission while blocked", () => {
+    const ctx = { ...baseCtx, accessBlock: block } as never;
+    expect(canAccess(ctx, "billing.view")).toEqual({ allowed: false, reason: "ACCESS_BLOCKED" });
+  });
+
+  it("restores access after unblocking", () => {
+    expect(canAccess({ ...baseCtx, accessBlock: null } as never, "billing.view").allowed).toBe(true);
+  });
+
+  it("keeps platform support sessions working", () => {
+    const ctx = { ...baseCtx, accessBlock: block, impersonation: { mode: "read" } } as never;
+    expect(canAccess(ctx, "billing.view").allowed).toBe(true);
   });
 });

@@ -228,23 +228,43 @@ export async function updateSupplierAction(input: {
   name: string;
   phone?: string;
   gstin?: string;
+  stateCode?: string;
+  address?: string;
   materialType?: string;
+  suppliedProducts?: string[];
 }) {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "suppliers.manage", { isMutation: true });
+
+  const cleanProducts = Array.from(
+    new Set(
+      (input.suppliedProducts ?? [])
+        .map((p) => p.trim())
+        .filter(Boolean)
+    )
+  );
 
   await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
       await client.query(
         `UPDATE public.suppliers
-         SET name = $1, phone = $2, gstin = $3, material_type = $4
-         WHERE id = $5 AND tenant_id = $6`,
+         SET name = $1,
+             phone = $2,
+             gstin = $3,
+             state_code = COALESCE($4, state_code),
+             address = $5,
+             material_type = $6,
+             supplied_products = $7::text[]
+         WHERE id = $8 AND tenant_id = $9`,
         [
           input.name.trim(),
           input.phone?.trim() || null,
           input.gstin?.trim().toUpperCase() || null,
+          input.stateCode?.trim() || null,
+          input.address?.trim() || null,
           input.materialType?.trim() || null,
+          cleanProducts,
           input.id,
           ctx.tenant.id,
         ]
@@ -252,6 +272,7 @@ export async function updateSupplierAction(input: {
     }
   );
   revalidatePath("/dashboard/operations");
+  revalidatePath("/dashboard/customers");
 }
 
 export async function deleteSupplierAction(supplierId: string) {
@@ -285,6 +306,11 @@ export async function createProductWithVariantsAction(input: {
   wholesalePrice: number;
   lowStockThreshold: number;
   combinations: Array<Record<string, string>>;
+  openingStock?: {
+    branchId: string;
+    quantity: number;
+    note?: string;
+  };
 }) {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "stock.manage", { isMutation: true });
@@ -313,10 +339,11 @@ export async function createProductWithVariantsAction(input: {
       for (let i = 0; i < combos.length; i++) {
         const attrs = combos[i];
         const sku = buildVariantSku(input.modelCode, attrs) + (combos.length > 1 && Object.keys(attrs).length === 0 ? `-${i + 1}` : "");
-        await client.query(
+        const vRes = await client.query<{ id: string }>(
           `INSERT INTO public.product_variants
            (tenant_id, product_id, sku, barcode, attributes, cost_price, avg_cost, mrp, selling_price, wholesale_price, low_stock_threshold)
-           VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7, $8, $9)`,
+           VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7, $8, $9)
+           RETURNING id`,
           [
             ctx.tenant.id,
             pid,
@@ -329,6 +356,35 @@ export async function createProductWithVariantsAction(input: {
             input.lowStockThreshold,
           ]
         );
+        const variantId = vRes.rows[0]?.id;
+        if (
+          variantId &&
+          input.openingStock &&
+          input.openingStock.branchId &&
+          Number(input.openingStock.quantity) > 0
+        ) {
+          const qty = Number(input.openingStock.quantity);
+          await client.query(
+            `INSERT INTO public.branch_stock (tenant_id, branch_id, variant_id, quantity)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (tenant_id, branch_id, variant_id)
+             DO UPDATE SET quantity = public.branch_stock.quantity + EXCLUDED.quantity, updated_at = now()`,
+            [ctx.tenant.id, input.openingStock.branchId, variantId, qty]
+          );
+          await client.query(
+            `INSERT INTO public.stock_ledger
+               (tenant_id, branch_id, variant_id, change_qty, balance_after, reason, notes, created_by)
+             VALUES ($1, $2, $3, $4, $4, 'opening', $5, $6)`,
+            [
+              ctx.tenant.id,
+              input.openingStock.branchId,
+              variantId,
+              qty,
+              input.openingStock.note || "Opening stock on product creation",
+              ctx.user.id,
+            ]
+          );
+        }
       }
       return pid;
     }
@@ -460,22 +516,42 @@ export async function createSupplierAction(input: {
   phone?: string;
   gstin?: string;
   stateCode?: string;
+  address?: string;
   materialType?: string;
+  suppliedProducts?: string[];
 }) {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "suppliers.manage", { isMutation: true });
+
+  const cleanProducts = Array.from(
+    new Set(
+      (input.suppliedProducts ?? [])
+        .map((p) => p.trim())
+        .filter(Boolean)
+    )
+  );
 
   await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
       await client.query(
-        `INSERT INTO public.suppliers (tenant_id, name, phone, gstin, state_code, material_type)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [ctx.tenant.id, input.name.trim(), input.phone || null, input.gstin?.toUpperCase() || null, input.stateCode || null, input.materialType || null]
+        `INSERT INTO public.suppliers (tenant_id, name, phone, gstin, state_code, address, material_type, supplied_products)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::text[])`,
+        [
+          ctx.tenant.id,
+          input.name.trim(),
+          input.phone?.trim() || null,
+          input.gstin?.trim().toUpperCase() || null,
+          input.stateCode?.trim() || null,
+          input.address?.trim() || null,
+          input.materialType?.trim() || null,
+          cleanProducts,
+        ]
       );
     }
   );
   revalidatePath("/dashboard/operations");
+  revalidatePath("/dashboard/customers");
 }
 
 export async function recordPurchaseAction(input: {
@@ -517,6 +593,7 @@ export async function recordPurchaseAction(input: {
   );
   revalidatePath("/dashboard/operations");
   revalidatePath("/dashboard/stock");
+  revalidatePath("/dashboard/customers");
 }
 
 export async function recordSupplierPaymentAction(input: {
@@ -545,6 +622,34 @@ export async function recordSupplierPaymentAction(input: {
     }
   );
   revalidatePath("/dashboard/operations");
+  revalidatePath("/dashboard/customers");
+}
+
+export async function getSupplierHistoryAction(supplierId: string) {
+  const ctx = await getServerSessionContext();
+  assertAccess(ctx, "suppliers.manage");
+
+  return withTenantTx(
+    { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
+    async (client) => {
+      const res = await client.query<{
+        id: string;
+        bill_number: string | null;
+        purchase_type: string;
+        total_amount: string;
+        paid_amount: string;
+        created_at: string;
+      }>(
+        `SELECT id, bill_number, purchase_type, total_amount::text, paid_amount::text, created_at
+         FROM public.purchase_orders
+         WHERE supplier_id = $1 AND tenant_id = $2
+         ORDER BY created_at DESC
+         LIMIT 50`,
+        [supplierId, ctx.tenant.id]
+      );
+      return res.rows;
+    }
+  );
 }
 
 export async function createAndDispatchTransferAction(input: {

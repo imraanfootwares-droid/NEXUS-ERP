@@ -1,142 +1,179 @@
 import React from "react";
 
-function Pulse({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-xl bg-slate-200/75 ${className}`} />;
+function Bone({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={`ui-skeleton ${className}`} style={style} />;
+}
+
+/** Deterministic wave so the server and client render the same loader. */
+export function PixelLoader({ columns = 14, rows = 7 }: { columns?: number; rows?: number }) {
+  return (
+    <div
+      className="ui-pixel-loader grid gap-[2px]"
+      style={{ gridTemplateColumns: `repeat(${columns}, 7px)`, gridAutoRows: 7 }}
+      role="status"
+      aria-label="Loading"
+    >
+      {Array.from({ length: columns * rows }, (_, i) => {
+        const col = i % columns;
+        const row = Math.floor(i / columns);
+        return <span key={i} style={{ animationDelay: `${col * 62 + (rows - row) * 34}ms` }} />;
+      })}
+    </div>
+  );
+}
+
+function StatSkeleton() {
+  return (
+    <div className="ui-tray">
+      <div className="ui-surface flex items-center justify-between px-4 py-3.5">
+        <div className="space-y-2.5">
+          <Bone className="h-2.5 w-24" />
+          <Bone className="h-5 w-28" />
+        </div>
+        <div className="flex h-9 items-end gap-[3px]">
+          {[40, 62, 34, 78, 52, 100, 46, 30].map((h, i) => (
+            <Bone key={i} className="w-[2px]" style={{ height: `${h}%` }} />
+          ))}
+        </div>
+      </div>
+      <div className="flex h-7 items-center justify-between px-3">
+        <Bone className="h-3 w-3 rounded-full" />
+        <Bone className="h-2.5 w-20" />
+      </div>
+    </div>
+  );
+}
+
+function ChartSkeleton() {
+  return (
+    <div className="ui-tray flex min-w-0 flex-col">
+      <div className="flex h-[38px] items-center justify-between px-3">
+        <Bone className="h-2.5 w-28" />
+        <Bone className="h-5 w-5 rounded-full" />
+      </div>
+      <div className="ui-surface flex h-[344px] flex-col gap-4 p-4 sm:px-5">
+        <div className="flex items-center justify-between gap-3">
+          <Bone className="h-5 w-40" />
+          <Bone className="hidden h-7 w-44 rounded-full sm:block" />
+        </div>
+        <div className="flex flex-1 items-center justify-center rounded-md bg-[#fafafa]">
+          <PixelLoader columns={22} rows={9} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TableSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className="ui-tray">
+      <div className="flex h-[42px] items-center justify-between gap-3 px-3">
+        <Bone className="h-2.5 w-36" />
+        <Bone className="h-7 w-44 rounded-lg" />
+      </div>
+      <div className="ui-surface divide-y divide-[#f1f1f2]">
+        {Array.from({ length: rows + 1 }, (_, i) => (
+          <div key={i} className="flex h-[42px] items-center gap-6 px-4">
+            <Bone className="h-2.5 w-14" />
+            <Bone className="h-2.5 flex-1 max-w-44" />
+            <Bone className="hidden h-2.5 w-28 md:block" />
+            <Bone className={`hidden w-16 md:block ${i === 0 ? "h-2.5" : "h-5 rounded-full"}`} />
+            <Bone className="ml-auto h-2.5 w-16" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HeaderSkeleton() {
+  return (
+    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+      <Bone className="h-7 w-56" />
+      <div className="flex gap-2">
+        <Bone className="h-8 w-24 rounded-lg" />
+        <Bone className="h-8 w-28 rounded-lg" />
+      </div>
+    </div>
+  );
 }
 
 export function DashboardSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="space-y-2">
-          <Pulse className="h-7 w-52" />
-          <Pulse className="h-4 w-80 max-w-full" />
-        </div>
-        <div className="flex items-center gap-2">
-          <Pulse className="h-9 w-24 rounded-xl" />
-          <Pulse className="h-9 w-32 rounded-xl" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="ui-page space-y-4" aria-busy="true">
+      <HeaderSkeleton />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="rounded-2xl border border-slate-200/80 bg-white p-4 space-y-3 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-            <div className="flex items-center justify-between">
-              <Pulse className="h-4 w-24" />
-              <Pulse className="h-7 w-7 rounded-lg" />
-            </div>
-            <Pulse className="h-8 w-28" />
-            <Pulse className="h-10 w-full rounded-lg" />
-          </div>
+          <StatSkeleton key={i} />
         ))}
       </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Pulse className="h-10 w-64 rounded-xl" />
-        <Pulse className="h-10 w-72 rounded-xl" />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,2.15fr)_minmax(0,1fr)]">
+        <ChartSkeleton />
+        <ChartSkeleton />
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="rounded-2xl border border-slate-200/80 bg-white p-4 space-y-3">
-            <div className="flex items-center gap-3">
-              <Pulse className="h-14 w-14 rounded-xl shrink-0" />
-              <div className="flex-1 space-y-2">
-                <Pulse className="h-4 w-36" />
-                <Pulse className="h-3 w-24" />
-              </div>
-            </div>
-            <Pulse className="h-2 w-full rounded-full" />
-            <div className="grid grid-cols-3 gap-2">
-              <Pulse className="h-12 rounded-xl" />
-              <Pulse className="h-12 rounded-xl" />
-              <Pulse className="h-12 rounded-xl" />
-            </div>
-          </div>
-        ))}
-      </div>
+      <TableSkeleton />
     </div>
   );
 }
 
 export function PlatformTenantsSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="space-y-2">
-          <Pulse className="h-7 w-56" />
-          <Pulse className="h-4 w-96 max-w-full" />
-        </div>
-        <Pulse className="h-10 w-44 rounded-xl" />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Pulse className="h-10 w-72 rounded-xl" />
-        <Pulse className="h-10 w-80 rounded-xl" />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="rounded-2xl border border-slate-200/80 bg-white p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Pulse className="h-11 w-11 rounded-xl" />
-                <div className="space-y-2">
-                  <Pulse className="h-4 w-36" />
-                  <Pulse className="h-3 w-24" />
-                </div>
-              </div>
-              <Pulse className="h-6 w-16 rounded-full" />
-            </div>
-            <div className="space-y-2.5">
-              <Pulse className="h-2.5 w-full rounded-full" />
-              <Pulse className="h-2.5 w-4/5 rounded-full" />
-            </div>
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-              <Pulse className="h-4 w-20" />
-              <Pulse className="h-8 w-32 rounded-xl" />
-            </div>
-          </div>
+    <div className="ui-page space-y-4" aria-busy="true">
+      <HeaderSkeleton />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <StatSkeleton key={i} />
         ))}
       </div>
+      <TableSkeleton rows={8} />
     </div>
   );
 }
 
 export function TenantStudioSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="rounded-3xl bg-slate-900/95 p-6 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-slate-800 animate-pulse" />
-            <div className="space-y-2">
-              <div className="h-6 w-52 rounded-lg bg-slate-800 animate-pulse" />
-              <div className="h-4 w-64 rounded-lg bg-slate-800 animate-pulse" />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <div className="h-10 w-40 rounded-xl bg-slate-800 animate-pulse" />
-            <div className="h-10 w-36 rounded-xl bg-slate-800 animate-pulse" />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-16 rounded-2xl bg-slate-800/70 animate-pulse" />
-          ))}
+    <div className="ui-page space-y-4" aria-busy="true">
+      <Bone className="h-6 w-32 rounded-full" />
+      <div className="flex items-center gap-3">
+        <Bone className="h-11 w-11 rounded-xl" />
+        <div className="space-y-2">
+          <Bone className="h-5 w-52" />
+          <Bone className="h-3 w-72 max-w-full" />
         </div>
       </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <Pulse key={i} className="h-28 rounded-2xl" />
+          <StatSkeleton key={i} />
         ))}
       </div>
+      <Bone className="h-9 w-96 max-w-full rounded-full" />
+      <TableSkeleton rows={7} />
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <Pulse key={i} className="h-36 rounded-2xl" />
-        ))}
+/** Compact row placeholder for data loading inside dialogs and panels. */
+export function InlineRowsSkeleton({ rows = 4, label }: { rows?: number; label: string }) {
+  return (
+    <div className="space-y-2.5 py-1" role="status" aria-label={label}>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-3">
+          <Bone className="h-7 w-7 shrink-0 rounded-lg" />
+          <Bone className="h-2.5 flex-1" style={{ maxWidth: `${72 - i * 9}%` }} />
+          <Bone className="ml-auto h-2.5 w-14" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Shown while a signed-in layout resolves the session on first entry. */
+export function AppBootSkeleton() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-white">
+      <div className="flex flex-col items-center gap-4">
+        <PixelLoader />
+        <p className="ui-eyebrow">Loading workspace</p>
       </div>
     </div>
   );

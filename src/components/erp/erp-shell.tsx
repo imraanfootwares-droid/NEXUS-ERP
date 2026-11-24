@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -8,31 +8,35 @@ import {
   BarChart3,
   Bell,
   Boxes,
+  ChevronDown,
   ChevronRight,
   FileSpreadsheet,
   Globe,
+  Inbox,
   KeyRound,
   LayoutDashboard,
   Lock,
   LogOut,
   Menu,
+  Network,
   PackageCheck,
   Plus,
   Printer,
   Receipt,
   RefreshCw,
   Settings,
-  Sparkles,
   Users,
   Wifi,
   WifiOff,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { setActiveBranchAction } from "@/actions/branch";
 import { exitImpersonationAction } from "@/actions/platform";
-import { NexusLogo } from "@/components/brand/nexus-logo";
-import { Badge, Button, Dialog, Input, Label, Select } from "@/components/ui/primitives";
+import { Button, Dialog, Input, Label, Select } from "@/components/ui/primitives";
+import { AccessBlockedScreen } from "@/components/access/access-blocked-screen";
 import { canAccess } from "@/lib/auth/access";
+import { fetchAccessStatus, readCachedBlock, writeCachedBlock } from "@/lib/offline/access-block";
 import type { PermissionKey } from "@/lib/constants/saas";
 import {
   clearCatalogCacheOnLogout,
@@ -41,22 +45,29 @@ import {
   replayOutboxFifo,
   type OutboxEntry,
 } from "@/lib/offline/sync-engine";
-import type { SessionContext, UiStyleKey } from "@/types/database";
+import type { AccessBlock, BranchRow, SessionContext, UiStyleKey } from "@/types/database";
 
 interface NavItem {
   href: string;
   label: string;
   icon: React.ReactNode;
   permission?: PermissionKey;
+  roles?: Array<"owner" | "branch_admin" | "worker">;
 }
 
 export function ErpShell({
   ctx,
   lowStockCount,
+  newEnquiryCount = 0,
+  branchOptions,
+  initialBranchId,
   children,
 }: {
   ctx: SessionContext;
   lowStockCount: number;
+  newEnquiryCount?: number;
+  branchOptions: BranchRow[];
+  initialBranchId: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -64,8 +75,27 @@ export function ErpShell({
   const tenant = ctx.tenant!;
   const uiStyle: UiStyleKey = tenant.brand_config?.ui_style ?? "style_4";
 
+  const [liveBlock, setLiveBlock] = useState<AccessBlock | null>(ctx.accessBlock ?? null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [activeBranchId, setActiveBranchId] = useState(ctx.branches[0]?.id ?? "");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [activeBranchId, setActiveBranchId] = useState(initialBranchId);
+  const [branchPending, startBranchSwitch] = useTransition();
+
+  const switchBranch = (id: string) => {
+    const previous = activeBranchId;
+    setActiveBranchId(id);
+    startBranchSwitch(async () => {
+      try {
+        await setActiveBranchAction(id);
+        router.refresh();
+        const name = branchOptions.find((b) => b.id === id)?.name ?? "All branches";
+        toast.success(`Now viewing ${name}`);
+      } catch (err) {
+        setActiveBranchId(previous);
+        toast.error(err instanceof Error ? err.message : "Could not switch branch.");
+      }
+    });
+  };
   const [online, setOnline] = useState(true);
   const [outbox, setOutbox] = useState<OutboxEntry[]>([]);
   const [syncOpen, setSyncOpen] = useState(false);
@@ -99,6 +129,16 @@ export function ErpShell({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ entries: batch }),
         });
+        if (r.status === 423) {
+          // Blocked: keep every entry queued so it syncs after access returns.
+          const held = await r.json().catch(() => ({}));
+          if (held.block && !ctx.impersonation) {
+            writeCachedBlock(tenant.id, ctx.user.id, held.block);
+            setLiveBlock(held.block);
+          }
+          throw new Error("Held until access is restored");
+        }
+        if (!r.ok) throw new Error("Sync failed");
         const data = await r.json();
         return data.results ?? [];
       });
@@ -116,11 +156,24 @@ export function ErpShell({
   useEffect(() => {
     let active = true;
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+      const host = window.location.hostname;
+      if (host === "localhost" || host === "127.0.0.1") {
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+          .catch(() => undefined);
+      } else {
+        navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+      }
     }
     listOutboxEntries(tenant.id)
       .then((entries) => {
-        if (active) setOutbox(entries);
+        if (!active) return;
+        setOutbox(entries);
+        // Sends anything held during a block or an offline period.
+        if (navigator.onLine && entries.some((e) => e.status === "pending") && !readCachedBlock(tenant.id, ctx.user.id)) {
+          void triggerSync();
+        }
       })
       .catch(() => undefined);
 
@@ -140,9 +193,71 @@ export function ErpShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant.id]);
 
+  // Keeps a block in force offline and picks up changes from Super Admin while the app is open.
+  useEffect(() => {
+    if (ctx.impersonation) return;
+    let active = true;
+    // Rare checks let the free database sleep. The server still enforces a block on every save.
+    let lastCheck = Date.now();
+    const check = async () => {
+      if (!navigator.onLine || document.visibilityState !== "visible") return;
+      if (Date.now() - lastCheck < 10 * 60_000) return;
+      lastCheck = Date.now();
+      const status = await fetchAccessStatus();
+      if (!active || !status.known) return;
+      writeCachedBlock(tenant.id, ctx.user.id, status.block);
+      setLiveBlock(status.block);
+    };
+    // Online, the server decides. The saved block applies only when it cannot be reached.
+    const start = window.setTimeout(async () => {
+      const cached = readCachedBlock(tenant.id, ctx.user.id);
+      const status = navigator.onLine ? await fetchAccessStatus() : ({ known: false } as const);
+      if (!active) return;
+      if (!status.known) {
+        if (cached) setLiveBlock(cached);
+        return;
+      }
+      writeCachedBlock(tenant.id, ctx.user.id, status.block);
+      setLiveBlock(status.block);
+      if (cached && !status.block) void triggerSync();
+    }, 0);
+    const onOnline = () => {
+      lastCheck = 0;
+      void check();
+    };
+    const timer = window.setInterval(check, 15 * 60_000);
+    window.addEventListener("focus", check);
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      active = false;
+      window.clearTimeout(start);
+      window.clearInterval(timer);
+      window.removeEventListener("focus", check);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", check);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx.impersonation, ctx.user.id, tenant.id]);
+
+  // The page behind the mobile menu must not scroll, and Escape closes it.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [mobileOpen]);
+
   const handleLogout = async () => {
     await clearCatalogCacheOnLogout().catch(() => undefined);
-    await fetch("/api/auth", { method: "DELETE" });
+    await fetch("/api/auth?scope=tenant", { method: "DELETE" });
     router.push("/login");
     router.refresh();
   };
@@ -171,82 +286,112 @@ export function ErpShell({
     }
   };
 
-  const navItems: NavItem[] = [
-    { href: "/dashboard", label: "Overview", icon: <LayoutDashboard className="h-4 w-4" /> },
-    { href: "/dashboard/billing", label: "Billing & Ledger", icon: <Receipt className="h-4 w-4" />, permission: "billing.view" },
-    { href: "/dashboard/billing/new", label: "POS Terminal", icon: <Plus className="h-4 w-4" />, permission: "billing.create" },
-    { href: "/dashboard/bill-designer", label: "Bill Designer", icon: <Printer className="h-4 w-4" />, permission: "bill_designer.manage" },
-    { href: "/dashboard/customers", label: "Customers CRM", icon: <Users className="h-4 w-4" />, permission: "customers.view" },
-    { href: "/dashboard/stock", label: "Stock & Matrix", icon: <Boxes className="h-4 w-4" />, permission: "stock.view" },
-    { href: "/dashboard/operations", label: "Factory & Transfers", icon: <PackageCheck className="h-4 w-4" />, permission: "transfers.receive" },
-    { href: "/dashboard/reports", label: "GST & Reports", icon: <FileSpreadsheet className="h-4 w-4" />, permission: "reports.export_gst" },
-    { href: "/dashboard/storefront", label: "Website & PDF", icon: <Globe className="h-4 w-4" />, permission: "catalogue.export" },
-    { href: "/dashboard/settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
+  const navGroups: Array<{ title: string; items: NavItem[] }> = [
+    {
+      title: "Main Menu",
+      items: [
+        { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
+        { href: "/dashboard/billing/new", label: "POS Terminal", icon: <Plus className="h-4 w-4" />, permission: "billing.create" },
+        { href: "/dashboard/billing", label: "Billing & Ledger", icon: <Receipt className="h-4 w-4" />, permission: "billing.view" },
+        { href: "/dashboard/stock", label: "Stock & Matrix", icon: <Boxes className="h-4 w-4" />, permission: "stock.view" },
+        { href: "/dashboard/operations", label: "Send Stock", icon: <PackageCheck className="h-4 w-4" />, permission: "transfers.receive" },
+      ],
+    },
+    {
+      title: "Customers",
+      items: [
+        { href: "/dashboard/customers", label: "Customer & Supplier", icon: <Users className="h-4 w-4" />, permission: "customers.view" },
+        { href: "/dashboard/enquiries", label: "Enquiries", icon: <Inbox className="h-4 w-4" />, permission: "enquiries.view" },
+        { href: "/dashboard/storefront", label: "Website & PDF", icon: <Globe className="h-4 w-4" />, permission: "catalogue.export" },
+      ],
+    },
+    {
+      title: "Management",
+      items: [
+        { href: "/dashboard/valuation", label: "Stock Valuation", icon: <BarChart3 className="h-4 w-4" />, roles: ["owner", "branch_admin"] },
+        { href: "/dashboard/organisation", label: "Organisation", icon: <Network className="h-4 w-4" />, roles: ["owner", "branch_admin"] },
+        { href: "/dashboard/reports", label: "GST & Reports", icon: <FileSpreadsheet className="h-4 w-4" />, permission: "reports.export_gst" },
+        { href: "/dashboard/bill-designer", label: "Bill Designer", icon: <Printer className="h-4 w-4" />, permission: "bill_designer.manage" },
+      ],
+    },
+    {
+      title: "Settings",
+      items: [{ href: "/dashboard/settings", label: "System Settings", icon: <Settings className="h-4 w-4" /> }],
+    },
   ];
 
-  const isDarkSidebar = uiStyle === "style_2" || uiStyle === "style_5";
-  const accentColor = tenant.brand_config?.primary_color || "#4B5A94";
-  const sidebarBg =
-    uiStyle === "style_5"
-      ? "bg-slate-950 text-slate-100 border-slate-800"
-      : uiStyle === "style_2"
-      ? "bg-[#0B1120] text-slate-200 border-slate-800"
-      : uiStyle === "style_3"
-      ? "bg-[#F4F6FA] text-slate-800 border-slate-200/80"
-      : "bg-white text-slate-800 border-slate-200/80";
-  const pageBg = uiStyle === "style_5" ? "bg-slate-100" : "bg-[#F8F9FB]";
+  const allNavItems = navGroups.flatMap((g) => g.items);
+  // Longest match wins, so /billing/new highlights POS rather than Billing too.
+  const activeHref =
+    allNavItems
+      .filter((n) => pathname === n.href || (n.href !== "/dashboard" && pathname.startsWith(n.href + "/")))
+      .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? "/dashboard";
+  const currentSectionLabel = allNavItems.find((n) => n.href === activeHref)?.label ?? "Dashboard";
+
+  const sidebarTone = uiStyle === "style_2" || uiStyle === "style_5" ? "dark" : "light";
+  const accentColor = tenant.brand_config?.primary_color || "#171717";
   const pendingCount = outbox.filter((o) => o.status === "pending").length;
   const conflictCount = outbox.filter((o) => o.status === "conflict").length;
+  const tierLabel = tenant.tier.replace("_", " ").replace(/^t/, "T");
+  const roleLabel = ctx.user.role.replace(/_/g, " ");
 
-  const currentSectionLabel =
-    navItems.find((n) => pathname === n.href || (n.href !== "/dashboard" && pathname.startsWith(n.href + "/")))?.label ??
-    "Overview";
-
-  const userInitials = ctx.user.full_name
-    .split(" ")
-    .map((w) => w[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const initialsOf = (name: string) =>
+    name
+      .split(/\s+/)
+      .map((w) => w[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
+  const userInitials = initialsOf(ctx.user.full_name);
 
   const renderLinks = (onClick?: () => void) => (
-    <div className="space-y-0.5 px-3 py-2">
-      {navItems.map((item) => {
-        const check = item.permission ? canAccess(ctx, item.permission) : { allowed: true };
-        const lockedByFeature = check.reason === "FEATURE_DISABLED";
-        if (!check.allowed && !lockedByFeature) return null;
-
-        const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
+    <div className="space-y-3.5">
+      {navGroups.map((group, groupIdx) => {
+        const links = group.items.flatMap((item) => {
+          if (item.roles && !item.roles.includes(ctx.user.role)) return [];
+          const check = item.permission ? canAccess(ctx, item.permission) : { allowed: true };
+          const lockedByFeature = check.reason === "FEATURE_DISABLED";
+          if (!check.allowed && !lockedByFeature) return [];
+          const active = item.href === activeHref;
+          return [
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onClick}
+              aria-current={active ? "page" : undefined}
+              className={`flex min-h-[36px] items-center justify-between gap-2 rounded-[9px] px-2.5 py-[7px] text-[13px] transition-all duration-150 lg:min-h-[32px] ${
+                active
+                  ? "bg-[var(--nav-active)] font-medium text-[var(--nav-active-text)] shadow-[0_1px_2px_rgba(0,0,0,.06),0_0_0_1px_rgba(0,0,0,.05)]"
+                  : "text-[var(--nav-text)] hover:bg-[var(--nav-hover)]"
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-2.5">
+                <span className={`shrink-0 [&_svg]:h-[15px] [&_svg]:w-[15px] ${active ? "" : "opacity-70"}`}>{item.icon}</span>
+                <span className="truncate">{item.label}</span>
+              </span>
+              {item.href === "/dashboard/stock" && lowStockCount > 0 && !lockedByFeature ? (
+                <span className="rounded-full bg-[var(--nav-pill)] px-1.5 py-px font-mono text-[10px] font-medium">
+                  {lowStockCount}
+                </span>
+              ) : item.href === "/dashboard/enquiries" && newEnquiryCount > 0 && !lockedByFeature ? (
+                <span className="rounded-full bg-[var(--nav-pill)] px-1.5 py-px font-mono text-[10px] font-medium">
+                  {newEnquiryCount}
+                </span>
+              ) : lockedByFeature ? (
+                <Lock className="h-3 w-3 opacity-50" />
+              ) : null}
+            </Link>,
+          ];
+        });
+        if (links.length === 0) return null;
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onClick}
-            className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-[13px] transition-colors min-h-[40px] ${
-              active
-                ? isDarkSidebar
-                  ? "bg-white/15 text-white font-semibold"
-                  : "bg-slate-100/95 text-slate-900 font-semibold"
-                : isDarkSidebar
-                ? "hover:bg-slate-800/80 text-slate-300 font-medium"
-                : "hover:bg-slate-50 text-slate-600 hover:text-slate-900 font-medium"
-            }`}
-          >
-            <span className="flex items-center gap-2.5">
-              <span className={active ? (isDarkSidebar ? "text-sky-300" : "text-slate-900") : "text-slate-400"}>
-                {item.icon}
-              </span>
-              {item.label}
-            </span>
-            {item.href === "/dashboard/stock" && lowStockCount > 0 && !lockedByFeature ? (
-              <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
-                {lowStockCount}
-              </span>
-            ) : lockedByFeature ? (
-              <Lock className="h-3.5 w-3.5 text-slate-400" />
-            ) : null}
-          </Link>
+          <div key={group.title} className={groupIdx > 0 ? "border-t border-[var(--nav-line)] pt-3" : ""}>
+            <p className="px-2.5 pb-1.5 text-[11px] text-[var(--nav-title)]">{group.title}</p>
+            <nav aria-label={group.title} className="space-y-px">
+              {links}
+            </nav>
+          </div>
         );
       })}
     </div>
@@ -255,9 +400,83 @@ export function ErpShell({
   const storageUsedMb = (Number(tenant.storage_used_bytes || 0) / (1024 * 1024)).toFixed(1);
   const storagePct = Math.min(100, Math.round((Number(tenant.storage_used_bytes || 0) / (tenant.max_storage_mb * 1024 * 1024)) * 100));
 
+  const workspacePill = (
+    <Link
+      href="/dashboard"
+      className="flex items-center gap-2.5 rounded-[11px] bg-[var(--nav-pill)] p-1.5 shadow-[inset_0_0_0_1px_rgba(0,0,0,.04)] transition-opacity hover:opacity-85"
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-[11px] font-bold text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,.1)]">
+        {initialsOf(tenant.name) || "N"}
+      </span>
+      <span className="min-w-0 flex-1 leading-tight">
+        <span className="block truncate text-[10.5px] text-[var(--nav-title)]">{tierLabel} workspace</span>
+        <span className="block truncate text-[13px] font-medium text-[var(--nav-active-text)] data-[tone=dark]:text-white" style={sidebarTone === "dark" ? { color: "#fff" } : undefined}>
+          {tenant.name}
+        </span>
+      </span>
+    </Link>
+  );
+
+  const accountCard = (
+    <div className="relative">
+      {profileOpen && (
+        <div className="absolute inset-x-0 bottom-full z-20 mb-1.5 rounded-xl bg-white p-1 text-[#27272a] shadow-[0_12px_32px_rgba(0,0,0,.16),0_0_0_1px_rgba(0,0,0,.06)]">
+          <div className="px-2.5 py-1.5">
+            <div className="flex items-center justify-between text-[11px] text-[#77777d]">
+              <span>Storage</span>
+              <span className="font-mono">{storageUsedMb} / {tenant.max_storage_mb} MB</span>
+            </div>
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[#ececee]">
+              <div className="h-full rounded-full bg-[#171717]" style={{ width: `${storagePct}%` }} />
+            </div>
+          </div>
+          <div className="my-1 h-px bg-[#f1f1f2]" />
+          <button
+            type="button"
+            onClick={() => {
+              setProfileOpen(false);
+              setMobileOpen(false);
+              setPwOpen(true);
+            }}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs hover:bg-[#f4f4f5]"
+          >
+            <KeyRound className="h-3.5 w-3.5" /> Change Password
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-rose-600 hover:bg-rose-50"
+          >
+            <LogOut className="h-3.5 w-3.5" /> Sign Out
+          </button>
+        </div>
+      )}
+      <button
+        type="button"
+        aria-expanded={profileOpen}
+        aria-label="Account menu"
+        onClick={() => setProfileOpen((v) => !v)}
+        className="flex w-full cursor-pointer items-center gap-2.5 rounded-[11px] bg-white p-1.5 text-left shadow-[0_1px_2px_rgba(0,0,0,.05),0_0_0_1px_rgba(0,0,0,.05)]"
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#171717] text-[11px] font-semibold text-white">
+          {userInitials}
+        </span>
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block truncate text-[12.5px] font-medium text-[#171717]">{ctx.user.full_name}</span>
+          <span className="block truncate text-[10.5px] capitalize text-[#77777d]">{roleLabel}</span>
+        </span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-[#a3a3a8] transition-transform duration-200 ${profileOpen ? "rotate-180" : ""}`} />
+      </button>
+    </div>
+  );
+
+  if (liveBlock && !ctx.impersonation) {
+    return <AccessBlockedScreen block={liveBlock} tenantId={tenant.id} userId={ctx.user.id} />;
+  }
+
   return (
     <div
-      className={`min-h-screen ${pageBg} flex flex-col`}
+      className="spark-ui flex min-h-screen flex-col bg-white"
       style={{ "--brand-accent": accentColor } as React.CSSProperties}
     >
       {ctx.impersonation && (
@@ -266,7 +485,7 @@ export function ErpShell({
             Support View: Inspecting <strong>{tenant.name}</strong> ({ctx.impersonation.mode.toUpperCase()} mode)
           </span>
           <form action={exitImpersonationAction}>
-            <button type="submit" className="rounded bg-white/20 px-2.5 py-1 font-semibold hover:bg-white/30 cursor-pointer">
+            <button type="submit" className="rounded-md bg-white/20 px-2.5 py-1 font-semibold hover:bg-white/30 cursor-pointer">
               Exit Support View
             </button>
           </form>
@@ -274,18 +493,16 @@ export function ErpShell({
       )}
 
       {ctx.user.must_change_password && !ctx.impersonation && !pwBannerDismissed && (
-        <div className="no-print bg-amber-50 border-b border-amber-200 text-amber-950 px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
+        <div className="no-print bg-amber-50 border-b border-amber-200 text-amber-950 px-4 py-1.5 text-xs flex flex-wrap items-center justify-between gap-2">
           <span className="inline-flex items-center gap-2">
             <KeyRound className="h-3.5 w-3.5 text-amber-700 shrink-0" />
-            <span>
-              You are signed in with a temporary password. Replace it anytime for better account security.
-            </span>
+            <span>You are signed in with a temporary password. Replace it to secure your account.</span>
           </span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setPwOpen(true)}
-              className="rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-700 cursor-pointer"
+              className="rounded-md bg-[#171717] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[#2a2a2a] cursor-pointer"
             >
               Set New Password
             </button>
@@ -293,7 +510,7 @@ export function ErpShell({
               type="button"
               onClick={() => setPwBannerDismissed(true)}
               aria-label="Dismiss password reminder"
-              className="rounded-lg p-1 text-amber-800 hover:bg-amber-200/70 cursor-pointer"
+              className="rounded-md p-1 text-amber-800 hover:bg-amber-200/70 cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -302,156 +519,119 @@ export function ErpShell({
       )}
 
       {tenant.stock_outdated_banner && (
-        <div className="no-print bg-amber-100 border-b border-amber-300 text-amber-950 px-4 py-2 text-xs flex items-center justify-between">
+        <div className="no-print bg-amber-50 border-b border-amber-200 text-amber-950 px-4 py-1.5 text-xs flex items-center justify-between gap-2">
           <span>Stock tracking was re-enabled. Please run a Stock Count in Stock &amp; Matrix to verify physical balances.</span>
-          <Link href="/dashboard/stock" className="font-bold underline">Go to Stock</Link>
+          <Link href="/dashboard/stock" className="shrink-0 font-semibold underline">Go to Stock</Link>
         </div>
       )}
 
       <div className="flex flex-1">
         {/* Desktop Sidebar */}
-        <aside className={`no-print hidden lg:flex lg:w-[252px] lg:flex-col border-r shrink-0 ${sidebarBg}`}>
-          <div className="h-16 px-4 flex items-center justify-between border-b border-inherit">
-            <Link href="/dashboard">
-              <NexusLogo variant={isDarkSidebar ? "light" : "dark"} size="sm" />
-            </Link>
-            <Badge variant="info">{tenant.tier.replace("_", " ").toUpperCase()}</Badge>
-          </div>
-          <div className="flex-1 overflow-y-auto py-2">{renderLinks()}</div>
-
-          {/* Catalox-style Workspace Status Card */}
-          <div className="px-3 pb-2">
-            <div className="rounded-2xl overflow-hidden border border-slate-200/80 bg-white text-slate-900 shadow-2xs">
-              <div className="bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#3B4A82] px-3.5 py-3 text-white">
-                <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-sky-300">
-                    <Sparkles className="h-3 w-3" /> {tenant.tier.replace("_", " ")}
-                  </span>
-                  <span className="text-[10px] text-slate-300">{ctx.branches.length} Branches</span>
-                </div>
-                <p className="text-xs font-bold mt-1 truncate">{tenant.name}</p>
-              </div>
-              <div className="p-3 space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-slate-600">
-                  <span>R2 Cloud Media</span>
-                  <span className="font-semibold text-slate-800">{storageUsedMb} / {tenant.max_storage_mb} MB</span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                  <div className="h-full rounded-full bg-[#4B5A94]" style={{ width: `${Math.max(4, storagePct)}%` }} />
-                </div>
-                <Link
-                  href="/dashboard/settings"
-                  className="block w-full text-center rounded-xl bg-[#4B5A94] py-1.5 text-[11px] font-semibold text-white hover:bg-[#3E4C80] transition-colors"
-                >
-                  Manage Workspace
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-3 pb-14 border-t border-inherit space-y-1">
-            <button
-              type="button"
-              onClick={() => setPwOpen(true)}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium hover:bg-slate-500/10 cursor-pointer"
-            >
-              <KeyRound className="h-3.5 w-3.5" /> Change Password
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-500/10 cursor-pointer"
-            >
-              <LogOut className="h-3.5 w-3.5" /> Sign Out
-            </button>
-          </div>
+        <aside
+          data-tone={sidebarTone}
+          className="ui-sidebar no-print sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col gap-3 border-r border-[var(--nav-line)] p-2.5 lg:flex"
+        >
+          {workspacePill}
+          <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto pt-1">{renderLinks()}</div>
+          {accountCard}
         </aside>
 
         {/* Mobile Drawer */}
         {mobileOpen && (
-          <div className="no-print fixed inset-0 z-50 lg:hidden flex">
-            <div className={`w-72 max-w-[85vw] h-full flex flex-col border-r ${sidebarBg}`}>
-              <div className="h-14 px-4 flex items-center justify-between border-b border-inherit">
-                <NexusLogo variant={isDarkSidebar ? "light" : "dark"} size="sm" />
-                <button type="button" onClick={() => setMobileOpen(false)} className="p-2">
+          <div className="no-print fixed inset-0 z-[60] flex lg:hidden">
+            <div data-tone={sidebarTone} role="dialog" aria-modal="true" aria-label="Main menu" className="ui-sidebar ui-drawer flex h-[100dvh] w-72 max-w-[85vw] flex-col gap-3 p-2.5">
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">{workspacePill}</div>
+                <button type="button" aria-label="Close menu" onClick={() => setMobileOpen(false)} className="rounded-lg p-2 text-[var(--nav-text)]">
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto">{renderLinks(() => setMobileOpen(false))}</div>
-              <div className="p-3 border-t border-inherit space-y-2">
-                <Button variant="outline" size="sm" className="w-full" onClick={() => { setMobileOpen(false); setPwOpen(true); }}>
-                  Change Password
-                </Button>
-                <Button variant="danger" size="sm" className="w-full" onClick={handleLogout}>
-                  Sign Out
-                </Button>
-              </div>
+              <div className="ui-drawer-scroll min-h-0 flex-1">{renderLinks(() => setMobileOpen(false))}</div>
+              {accountCard}
             </div>
-            <div className="flex-1 bg-slate-950/50" onClick={() => setMobileOpen(false)} />
+            <div className="flex-1 bg-black/30 backdrop-blur-[2px]" onClick={() => setMobileOpen(false)} />
           </div>
         )}
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <header className="no-print sticky top-0 z-20 h-16 bg-white border-b border-slate-200/80 px-3 sm:px-6 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3 min-w-0">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="no-print sticky top-0 z-20 flex h-[52px] items-center justify-between gap-2 border-b border-[var(--ui-line)] bg-white/90 px-3 backdrop-blur-md sm:px-5">
+            <div className="flex min-w-0 items-center gap-2.5">
               <button
                 type="button"
+                aria-label="Open menu"
                 onClick={() => setMobileOpen(true)}
-                className="lg:hidden rounded-xl p-2 text-slate-600 hover:bg-slate-100 min-h-[42px] min-w-[42px] flex items-center justify-center"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-[#55555b] hover:bg-[#f4f4f5] lg:hidden"
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400 min-w-0">
-                <span className="font-medium text-slate-500 truncate max-w-[130px]">{tenant.name}</span>
-                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                <span className="font-semibold text-slate-900 truncate">{currentSectionLabel}</span>
+              <div className="hidden min-w-0 items-center gap-1.5 text-[13px] md:flex">
+                <Link href="/dashboard" className="text-[#a3a3a8] transition-colors hover:text-[#171717]">Dashboard</Link>
+                {currentSectionLabel !== "Dashboard" ? (
+                  <>
+                    <ChevronRight className="h-3 w-3 shrink-0 text-[#c9c9cd]" />
+                    <span className="truncate font-medium text-[#171717]">{currentSectionLabel}</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronRight className="h-3 w-3 shrink-0 text-[#c9c9cd]" />
+                    <span className="font-medium text-[#171717]">Overview</span>
+                  </>
+                )}
               </div>
-              {ctx.branches.length > 0 && (
-                <Select
-                  value={activeBranchId}
-                  onChange={(e) => {
-                    setActiveBranchId(e.target.value);
-                    window.localStorage.setItem(`nexus:branch:${tenant.id}`, e.target.value);
-                  }}
-                  className="w-[150px] sm:w-[190px] shrink-0 min-h-[36px] text-xs bg-slate-50/70"
-                >
-                  {ctx.branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.code})
-                    </option>
-                  ))}
-                </Select>
-              )}
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            <div className="flex shrink-0 items-center gap-1.5">
+              {branchOptions.length > 1 ? (
+                <span className={branchPending ? "ui-branch-pending" : undefined}>
+                  <Select
+                    aria-label="Active branch"
+                    value={activeBranchId}
+                    disabled={branchPending}
+                    onChange={(e) => switchBranch(e.target.value)}
+                    className="!min-h-[32px] !w-[132px] !bg-[#f4f4f5] !py-1 !text-xs !shadow-none sm:!w-[176px]"
+                  >
+                    <option value="all">All branches</option>
+                    {branchOptions.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
+                  </Select>
+                </span>
+              ) : branchOptions[0] ? (
+                <span
+                  title="Only one branch is assigned to you"
+                  className="inline-flex h-8 max-w-[132px] items-center truncate rounded-lg bg-[#f4f4f5] px-3 text-xs text-[#3f3f46] sm:max-w-[176px]"
+                >
+                  <span className="truncate">{branchOptions[0].name}</span>
+                </span>
+              ) : null}
+
               <button
                 type="button"
                 onClick={() => setSyncOpen(true)}
-                className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold border cursor-pointer ${
-                  conflictCount > 0
-                    ? "bg-rose-50 text-rose-700 border-rose-200"
-                    : !online
-                    ? "bg-amber-50 text-amber-800 border-amber-200"
-                    : "bg-emerald-50/80 text-emerald-700 border-emerald-200/80"
-                }`}
+                title={online ? "Connected. Open sync queue" : "Offline. Open sync queue"}
+                aria-label={online ? "Online, open sync queue" : "Offline, open sync queue"}
+                className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-[#55555b] hover:bg-[#f4f4f5]"
               >
-                {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-                <span className="hidden sm:inline">{online ? "Online" : "Offline"}</span>
+                {online ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4 text-amber-600" />}
                 {(pendingCount > 0 || conflictCount > 0) && (
-                  <span>({pendingCount + conflictCount})</span>
+                  <span className={`absolute -right-0.5 -top-0.5 rounded-full px-1 font-mono text-[9px] font-medium text-white ${conflictCount > 0 ? "bg-rose-600" : "bg-[#171717]"}`}>
+                    {pendingCount + conflictCount}
+                  </span>
                 )}
               </button>
 
               <Link
                 href="/dashboard/stock"
-                className="relative rounded-xl border border-slate-200/80 bg-white p-2 text-slate-600 hover:bg-slate-50"
                 title="Low-stock alerts"
+                aria-label={`Low-stock alerts: ${lowStockCount}`}
+                className="relative flex h-8 w-8 items-center justify-center rounded-lg text-[#55555b] hover:bg-[#f4f4f5]"
               >
                 <Bell className="h-4 w-4" />
                 {lowStockCount > 0 && (
-                  <span className="absolute -top-1 -right-1 rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">
+                  <span className="absolute -right-0.5 -top-0.5 rounded-full bg-rose-600 px-1 font-mono text-[9px] font-medium text-white">
                     {lowStockCount}
                   </span>
                 )}
@@ -460,35 +640,23 @@ export function ErpShell({
               {canAccess(ctx, "billing.create").allowed && (
                 <Link
                   href="/dashboard/billing/new"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#4B5A94] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#3E4C80] min-h-[36px] shadow-2xs"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#171717] px-2.5 text-xs font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,.25),inset_0_1px_0_rgba(255,255,255,.12)] transition-colors hover:bg-[#2a2a2a]"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">New Bill</span>
                 </Link>
               )}
-
-              <div className="hidden xl:flex items-center gap-2.5 pl-2 border-l border-slate-200/80">
-                <div className="h-8 w-8 rounded-full bg-emerald-900 text-emerald-100 text-xs font-bold flex items-center justify-center shrink-0">
-                  {userInitials}
-                </div>
-                <div className="leading-tight">
-                  <p className="text-xs font-semibold text-slate-900 max-w-[130px] truncate">{ctx.user.full_name}</p>
-                  <p className="text-[10px] text-slate-500 max-w-[130px] truncate">
-                    {ctx.user.email || `${ctx.user.role.replace("_", " ")}`}
-                  </p>
-                </div>
-              </div>
             </div>
           </header>
 
-          <main className="flex-1 p-3 sm:p-6 pb-24 lg:pb-8 max-w-full overflow-x-hidden">
+          <main className="mx-auto w-full max-w-[1480px] flex-1 overflow-x-hidden p-3 pb-24 sm:p-5 lg:pb-6">
             {children}
           </main>
         </div>
       </div>
 
       {/* Mobile Bottom Quick Bar */}
-      <nav className="no-print lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 grid grid-cols-5 pb-[env(safe-area-inset-bottom)]">
+      <nav aria-label="Quick navigation" className="no-print fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-[var(--ui-line)] bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
         {[
           { href: "/dashboard", label: "Home", icon: <BarChart3 className="h-4 w-4" /> },
           { href: "/dashboard/billing/new", label: "POS", icon: <Plus className="h-4 w-4" /> },
@@ -498,8 +666,8 @@ export function ErpShell({
           <Link
             key={b.href}
             href={b.href}
-            className={`flex flex-col items-center justify-center py-2 text-[11px] font-medium min-h-[52px] ${
-              pathname === b.href ? "text-sky-600" : "text-slate-600"
+            className={`flex min-h-[52px] flex-col items-center justify-center py-2 text-[11px] font-medium ${
+              pathname === b.href ? "text-[#171717]" : "text-[#8a8a90]"
             }`}
           >
             {b.icon}
@@ -509,7 +677,7 @@ export function ErpShell({
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
-          className="flex flex-col items-center justify-center py-2 text-[11px] font-medium text-slate-600 min-h-[52px]"
+          className="flex min-h-[52px] flex-col items-center justify-center py-2 text-[11px] font-medium text-[#8a8a90]"
         >
           <Menu className="h-4 w-4" />
           <span className="mt-0.5">More</span>

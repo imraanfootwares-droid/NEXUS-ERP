@@ -29,7 +29,9 @@ import {
   Wand2,
   Zap,
 } from "lucide-react";
+import { Paged } from "@/components/ui/pagination";
 import { toast } from "sonner";
+import { StatTray, StatusPill } from "@/components/ui/spark";
 import {
   adminSetUserPasswordAction,
   applyFeatureOverridesBatchAction,
@@ -97,7 +99,7 @@ const CATEGORY_STYLE: Record<
   Billing: {
     icon: <Receipt className="h-4 w-4" />,
     bg: "bg-indigo-50",
-    text: "text-[#4B5A94]",
+    text: "text-[#171717]",
     ring: "ring-indigo-200",
   },
   Inventory: {
@@ -163,6 +165,7 @@ const MIX_PRESETS: Array<{
     buildOverrides: () => ({
       public_website_cms: true,
       pdf_catalogue_export: true,
+      customer_enquiries: true,
       dynamic_stock_matrix: true,
       customer_crm: true,
     }),
@@ -181,7 +184,7 @@ const MIX_PRESETS: Array<{
   },
   {
     id: "unlock_all",
-    label: "Unlock All 18",
+    label: `Unlock All ${FEATURE_KEYS.length}`,
     tagline: "Force-enable every module",
     buildOverrides: (tier) => {
       const ov: Partial<Record<FeatureKey, boolean>> = {};
@@ -406,176 +409,91 @@ export function TenantStudioClient({
   const mbUsed = (Number(tenant.storage_used_bytes || 0) / (1024 * 1024)).toFixed(1);
 
   return (
-    <div className="space-y-6">
-      {/* Hero Tenant Command Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0B1120] via-[#131D38] to-[#23315C] p-6 text-white shadow-lg">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-20 left-1/3 h-56 w-56 rounded-full bg-sky-400/15 blur-3xl"
-        />
+    <div className="space-y-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          href="/platform/tenants"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-[#77777d] transition-colors hover:text-[#171717]"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          All Workspaces
+        </Link>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Link
+            href={`/s/${tenant.slug}`}
+            target="_blank"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-white px-2.5 text-xs font-medium text-[#27272a] shadow-[0_1px_2px_rgba(0,0,0,.05),0_0_0_1px_rgba(0,0,0,.08)] transition-colors hover:bg-[#fafafa]"
+          >
+            <Globe className="h-3.5 w-3.5" />
+            Storefront
+            <ExternalLink className="h-3 w-3 opacity-60" />
+          </Link>
+          <button
+            type="button"
+            disabled={impersonating !== null}
+            onClick={() => {
+              setImpersonating("read");
+              void startImpersonationAction(tenant.id, "read");
+            }}
+            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-[#171717] px-2.5 text-xs font-medium text-white transition-colors hover:bg-[#2a2a2a] disabled:opacity-60"
+          >
+            {impersonating === "read" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+            Inspect (Read-Only)
+          </button>
+          <button
+            type="button"
+            disabled={impersonating !== null}
+            onClick={() => setWriteConfirmOpen(true)}
+            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-rose-600 px-2.5 text-xs font-medium text-white transition-colors hover:bg-rose-700 disabled:opacity-60"
+          >
+            {impersonating === "write" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldAlert className="h-3.5 w-3.5" />}
+            Write Mode
+          </button>
+        </div>
+      </div>
 
-        <div className="relative flex flex-col gap-5">
-          {/* Top Breadcrumb + Impersonation Actions */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Link
-              href="/platform/tenants"
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-200 backdrop-blur hover:bg-white/20 transition-colors"
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] bg-[#171717] text-sm font-semibold text-white">
+          {initials || "NX"}
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1>{tenant.name}</h1>
+            <StatusPill tone={status === "active" ? "success" : "danger"}>{status}</StatusPill>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#77777d]">
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(tenant.slug);
+                toast.success("Copied tenant slug");
+              }}
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-[#f1f1f2] px-1.5 py-0.5 font-mono text-[11px] text-[#3f3f46] hover:bg-[#e7e7e9]"
             >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              All Workspaces
-            </Link>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Link
-                href={`/s/${tenant.slug}`}
-                target="_blank"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-white/15 transition-colors"
-              >
-                <Globe className="h-3.5 w-3.5" />
-                Storefront
-                <ExternalLink className="h-3 w-3 opacity-70" />
-              </Link>
-
-              <button
-                type="button"
-                disabled={impersonating !== null}
-                onClick={() => {
-                  setImpersonating("read");
-                  void startImpersonationAction(tenant.id, "read");
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-sky-400/30 bg-sky-500/15 px-3.5 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-500/25 transition-colors cursor-pointer disabled:opacity-60"
-              >
-                {impersonating === "read" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Eye className="h-3.5 w-3.5" />
-                )}
-                Inspect (Read-Only)
-              </button>
-
-              <button
-                type="button"
-                disabled={impersonating !== null}
-                onClick={() => setWriteConfirmOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-rose-500 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-rose-600 transition-colors cursor-pointer disabled:opacity-60"
-              >
-                {impersonating === "write" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <ShieldAlert className="h-3.5 w-3.5" />
-                )}
-                Write Mode
-              </button>
-            </div>
-          </div>
-
-          {/* Identity Row */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-400 to-sky-400 font-display text-lg font-extrabold text-slate-950 shadow-md">
-                {initials || "NX"}
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="font-display text-2xl font-bold tracking-tight text-white">
-                    {tenant.name}
-                  </h1>
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                      status === "active"
-                        ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/30"
-                        : "bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/30"
-                    }`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        status === "active" ? "bg-emerald-400" : "bg-rose-400"
-                      }`}
-                    />
-                    {status === "active" ? "Active" : "Suspended"}
-                  </span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-300">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(tenant.slug);
-                      toast.success("Copied tenant slug");
-                    }}
-                    className="inline-flex items-center gap-1 rounded-md bg-white/10 px-2 py-0.5 font-mono text-[11px] text-slate-100 hover:bg-white/20 cursor-pointer"
-                  >
-                    /{tenant.slug}
-                    <Copy className="h-3 w-3 opacity-70" />
-                  </button>
-                  <span>•</span>
-                  <span className="capitalize">{tenant.vertical_key} Vertical</span>
-                  <span>•</span>
-                  <span className="text-sky-200 font-medium">
-                    {TIER_META[localTier].name}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Live Telemetry Glass Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
-            <div className="rounded-2xl bg-white/[0.07] border border-white/10 p-3.5 backdrop-blur">
-              <div className="text-[11px] font-medium text-slate-300">Active Modules</div>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="font-display text-xl font-bold text-white">
-                  {activeCount} / {FEATURE_KEYS.length}
-                </span>
-                {overrideCount > 0 && (
-                  <span className="rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
-                    {overrideCount} custom
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-white/[0.07] border border-white/10 p-3.5 backdrop-blur">
-              <div className="text-[11px] font-medium text-slate-300">Team Seats</div>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="font-display text-xl font-bold text-white">
-                  {users.length} / {maxUsers}
-                </span>
-                <span className="text-[11px] text-slate-300">staff accounts</span>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-white/[0.07] border border-white/10 p-3.5 backdrop-blur">
-              <div className="text-[11px] font-medium text-slate-300">Branches &amp; R2</div>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="font-display text-xl font-bold text-white">
-                  {stats.branchCount} / {maxBranches}
-                </span>
-                <span className="text-[11px] text-slate-300">• {mbUsed} MB</span>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-white/[0.07] border border-white/10 p-3.5 backdrop-blur">
-              <div className="text-[11px] font-medium text-slate-300">Live Activity</div>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="font-display text-xl font-bold text-white">
-                  {stats.productCount}
-                </span>
-                <span className="text-[11px] text-slate-300">
-                  models • {stats.invoiceCount} bills
-                </span>
-              </div>
-            </div>
+              /{tenant.slug}
+              <Copy className="h-3 w-3 opacity-60" />
+            </button>
+            <span className="capitalize">{tenant.vertical_key}</span>
+            <span aria-hidden="true">·</span>
+            <span>{TIER_META[localTier].name}</span>
           </div>
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTray
+          label="Active Modules"
+          value={`${activeCount}/${FEATURE_KEYS.length}`}
+          footnote={overrideCount > 0 ? `${overrideCount} custom override${overrideCount === 1 ? "" : "s"}` : "Plan defaults"}
+        />
+        <StatTray label="Team Seats" value={`${users.length}/${maxUsers}`} footnote="Staff accounts" />
+        <StatTray label="Branches" value={`${stats.branchCount}/${maxBranches}`} footnote={`${mbUsed} MB stored`} />
+        <StatTray label="Activity" value={stats.invoiceCount} unit="Bills" footnote={`${stats.productCount} product models`} />
+      </div>
+
       {/* Studio Navigation Segmented Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-2xl border border-slate-200/80 bg-white p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+        <div className="inline-flex max-w-full overflow-x-auto no-scrollbar rounded-full bg-[#f1f1f2] p-[3px]">
           {(
             [
               {
@@ -602,19 +520,19 @@ export function TenantStudioClient({
               key={t.id}
               type="button"
               onClick={() => setActiveTab(t.id)}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-all duration-200 cursor-pointer ${
                 activeTab === t.id
-                  ? "bg-[#4B5A94] text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  ? "bg-white text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,.08),0_0_0_1px_rgba(0,0,0,.03)]"
+                  : "text-[#77777d] hover:text-[#171717]"
               }`}
             >
               {t.icon}
               <span>{t.label}</span>
               <span
-                className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                className={`rounded-full px-1.5 py-px font-mono text-[10px] font-medium ${
                   activeTab === t.id
-                    ? "bg-white/20 text-white"
-                    : "bg-slate-100 text-slate-600"
+                    ? "bg-[#171717] text-white"
+                    : "bg-[#e4e4e7] text-[#55555b]"
                 }`}
               >
                 {t.badge}
@@ -628,7 +546,7 @@ export function TenantStudioClient({
             type="button"
             disabled={savingPreset !== null}
             onClick={() => void applyPreset(MIX_PRESETS[0])}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
           >
             {savingPreset === "tier_baseline" ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -644,10 +562,10 @@ export function TenantStudioClient({
       {activeTab === "studio" && (
         <div className="space-y-5">
           {/* 1-Click Mix & Match Recipes */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+          <div className="rounded-[14px] border border-slate-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-[#4B5A94]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-[#171717]">
                   <Wand2 className="h-4 w-4" />
                 </div>
                 <div>
@@ -670,11 +588,11 @@ export function TenantStudioClient({
                     type="button"
                     disabled={savingPreset !== null}
                     onClick={() => void applyPreset(preset)}
-                    className="group flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-left transition-all hover:border-[#4B5A94]/50 hover:bg-indigo-50/40 cursor-pointer disabled:opacity-60"
+                    className="group flex items-center justify-between gap-2 rounded-[10px] border border-slate-200 bg-slate-50/70 p-3 text-left transition-all hover:border-[#171717]/50 hover:bg-indigo-50/40 cursor-pointer disabled:opacity-60"
                   >
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-                        <Zap className="h-3.5 w-3.5 text-[#4B5A94] shrink-0" />
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-900">
+                        <Zap className="h-3.5 w-3.5 text-[#171717] shrink-0" />
                         <span className="truncate">{preset.label}</span>
                       </div>
                       <p className="mt-0.5 truncate text-[11px] text-slate-500">
@@ -682,9 +600,9 @@ export function TenantStudioClient({
                       </p>
                     </div>
                     {isBusy ? (
-                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#4B5A94]" />
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#171717]" />
                     ) : (
-                      <span className="rounded-lg bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 border border-slate-200 group-hover:border-[#4B5A94] group-hover:text-[#4B5A94]">
+                      <span className="rounded-lg bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 border border-slate-200 group-hover:border-[#171717] group-hover:text-[#171717]">
                         Apply
                       </span>
                     )}
@@ -703,7 +621,7 @@ export function TenantStudioClient({
                 value={featureSearch}
                 onChange={(e) => setFeatureSearch(e.target.value)}
                 placeholder="Filter 18 ERP modules..."
-                className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#4B5A94] focus:outline-none"
+                className="w-full rounded-[10px] border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#171717] focus:outline-none"
               />
             </div>
 
@@ -713,7 +631,7 @@ export function TenantStudioClient({
                   key={cat}
                   type="button"
                   onClick={() => setCategoryFilter(cat)}
-                  className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition-all cursor-pointer ${
+                  className={`rounded-[10px] px-2.5 py-1.5 text-[11px] font-semibold transition-all cursor-pointer ${
                     categoryFilter === cat
                       ? "bg-slate-900 text-white shadow-xs"
                       : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -726,7 +644,7 @@ export function TenantStudioClient({
               <button
                 type="button"
                 onClick={() => setOnlyOverrides((v) => !v)}
-                className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-1 rounded-[10px] px-2.5 py-1.5 text-[11px] font-semibold transition-all cursor-pointer ${
                   onlyOverrides
                     ? "bg-amber-500 text-white shadow-xs"
                     : "bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100"
@@ -740,7 +658,7 @@ export function TenantStudioClient({
 
           {/* Interactive Feature Module Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredFeatures.map((fk) => {
+            <Paged items={filteredFeatures} size={9}>{(pagedRows) => pagedRows.map((fk) => {
               const meta = FEATURE_META[fk];
               const active = isFeatureEnabled(effectiveTenant, fk);
               const overrideVal = localOverrides[fk];
@@ -763,19 +681,19 @@ export function TenantStudioClient({
               return (
                 <div
                   key={fk}
-                  className={`relative flex flex-col justify-between rounded-2xl border bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-all duration-150 ${borderClass}`}
+                  className={`relative flex flex-col justify-between rounded-[14px] border bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-all duration-150 ${borderClass}`}
                 >
                   <div className="space-y-3">
                     {/* Card Header */}
                     <div className="flex items-start justify-between gap-2.5">
                       <div className="flex items-start gap-2.5 min-w-0">
                         <div
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${style.bg} ${style.text} ${style.ring}`}
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ring-1 ${style.bg} ${style.text} ${style.ring}`}
                         >
                           {style.icon}
                         </div>
                         <div className="min-w-0">
-                          <h3 className="text-xs font-bold text-slate-900 leading-snug">
+                          <h3 className="text-xs font-semibold text-slate-900 leading-snug">
                             {meta.label}
                           </h3>
                           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
@@ -852,7 +770,7 @@ export function TenantStudioClient({
                       {inBaseTier ? "Default in plan" : "Add-on module"}
                     </span>
 
-                    <div className="inline-flex rounded-xl bg-slate-100 p-0.5 text-[11px] font-semibold">
+                    <div className="inline-flex rounded-[10px] bg-slate-100 p-0.5 text-[11px] font-semibold">
                       <button
                         type="button"
                         disabled={isSaving}
@@ -893,7 +811,7 @@ export function TenantStudioClient({
                   </div>
                 </div>
               );
-            })}
+            })}</Paged>
           </div>
         </div>
       )}
@@ -905,7 +823,7 @@ export function TenantStudioClient({
           <Card>
             <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Subscription Tier</h3>
+                <h3 className="text-sm font-semibold text-slate-900">Subscription Tier</h3>
                 <p className="text-xs text-slate-500">
                   Pick a base tier for this workspace — custom Mix &amp; Match overrides remain preserved.
                 </p>
@@ -933,26 +851,26 @@ export function TenantStudioClient({
                     key={tk}
                     type="button"
                     onClick={() => setSelectedTier(tk)}
-                    className={`relative flex flex-col justify-between rounded-2xl border p-4 text-left transition-all cursor-pointer ${
+                    className={`relative flex flex-col justify-between rounded-[14px] border p-4 text-left transition-all cursor-pointer ${
                       isSelected
-                        ? "border-[#4B5A94] bg-indigo-50/40 ring-2 ring-[#4B5A94]/20"
+                        ? "border-[#171717] bg-indigo-50/40 ring-2 ring-[#171717]/20"
                         : "border-slate-200 bg-white hover:border-slate-300"
                     }`}
                   >
                     <div>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold uppercase tracking-wide text-[#4B5A94]">
+                        <span className="text-xs font-bold uppercase tracking-wide text-[#171717]">
                           {tk.replace("tier_", "Tier ")}
                         </span>
                         {isCurrent ? (
                           <Badge variant="success">Current</Badge>
                         ) : isSelected ? (
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#4B5A94] text-white">
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#171717] text-white">
                             <Check className="h-3 w-3" />
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-1 text-sm font-bold text-slate-900">
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
                         {tm.name.split("—")[1]?.trim() ?? tm.name}
                       </p>
                       <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
@@ -961,7 +879,7 @@ export function TenantStudioClient({
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-900">
+                      <span className="font-semibold text-slate-900">
                         ₹{tm.priceInr.toLocaleString("en-IN")}
                       </span>
                       <span className="text-[11px] text-slate-500">{modCount} modules</span>
@@ -975,7 +893,7 @@ export function TenantStudioClient({
           {/* Quotas, Status, AMC & Custom Domain */}
           <Card>
             <CardHeader>
-              <h3 className="text-sm font-bold text-slate-900">
+              <h3 className="text-sm font-semibold text-slate-900">
                 Quotas, Status, AMC &amp; Custom Domain
               </h3>
             </CardHeader>
@@ -1057,19 +975,19 @@ export function TenantStudioClient({
       {activeTab === "team" && (
         <Card>
           <CardHeader>
-            <h3 className="text-sm font-bold text-slate-900">
+            <h3 className="text-sm font-semibold text-slate-900">
               Tenant Users &amp; Direct Password Management ({users.length})
             </h3>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {users.map((u) => (
+            <Paged items={users} size={8}>{(pagedRows) => pagedRows.map((u) => (
               <div
                 key={u.id}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3.5"
+                className="flex items-center justify-between gap-3 rounded-[14px] border border-slate-200/80 bg-slate-50/50 p-3.5"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-bold text-slate-900">{u.full_name}</p>
+                    <p className="truncate text-sm font-semibold text-slate-900">{u.full_name}</p>
                     <Badge
                       variant={
                         u.role === "owner"
@@ -1091,7 +1009,7 @@ export function TenantStudioClient({
                   Password
                 </Button>
               </div>
-            ))}
+            ))}</Paged>
           </CardContent>
         </Card>
       )}

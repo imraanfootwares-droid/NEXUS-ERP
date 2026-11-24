@@ -2,13 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { assertAccess, isFeatureEnabled } from "@/lib/auth/access";
-import { hashPassword } from "@/lib/auth/crypto";
+import { hashPassword, verifyPassword } from "@/lib/auth/crypto";
 import { getServerSessionContext } from "@/lib/auth/session";
-import { runTenantBackup } from "@/lib/backups/exporter";
+import { excelKeyFor, runTenantBackup } from "@/lib/backups/exporter";
 import { PERMISSION_PARENT_MAP, type TenantRole } from "@/lib/constants/saas";
 import { withTenantTx } from "@/lib/db";
 import { deleteObject, getPresignedDownloadUrl, headObject } from "@/lib/storage/s3-client";
-import type { BrandConfig, RatioPreset, TaxConfig } from "@/types/database";
+import type { BrandConfig, CategoryTemplate, LedgerConfig, RatioPreset, TaxConfig } from "@/types/database";
 
 export async function updateBrandConfigAction(
   brand: BrandConfig,
@@ -49,6 +49,81 @@ export async function updateBrandConfigAction(
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard");
+}
+
+export async function updateLedgerConfigAction(ledgerConfig: LedgerConfig) {
+  const ctx = await getServerSessionContext();
+  if (!ctx || !ctx.tenant) throw new Error("Unauthorized");
+  if (ctx.impersonation?.mode === "read") throw new Error("Read-only support session.");
+  if (ctx.user.role !== "owner" && ctx.user.role !== "branch_admin") {
+    throw new Error("Only Owners and Branch Admins can customize ledger fields.");
+  }
+
+  const clean = (arr: LedgerConfig["item_columns"]) =>
+    arr
+      .map((f) => ({
+        key: String(f.key).trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_").slice(0, 40),
+        label: String(f.label).trim().slice(0, 40),
+        enabled: Boolean(f.enabled),
+        isCustom: Boolean(f.isCustom),
+      }))
+      .filter((f) => f.key.length > 0 && f.label.length > 0)
+      .slice(0, 20);
+
+  const tenant = ctx.tenant;
+  const nextBrand: BrandConfig = {
+    ...tenant.brand_config,
+    ledger_config: {
+      item_columns: clean(ledgerConfig.item_columns),
+      header_fields: clean(ledgerConfig.header_fields),
+    },
+  };
+
+  await withTenantTx({ tenantId: tenant.id, isPlatformAdmin: ctx.user.is_platform_admin }, async (client) => {
+    await client.query("UPDATE public.tenants SET brand_config = $1 WHERE id = $2", [
+      JSON.stringify(nextBrand),
+      tenant.id,
+    ]);
+  });
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/customers");
+}
+
+export async function updateCategoryTemplatesAction(templates: CategoryTemplate[]) {
+  const ctx = await getServerSessionContext();
+  if (!ctx || !ctx.tenant) throw new Error("Unauthorized");
+  if (ctx.impersonation?.mode === "read") throw new Error("Read-only support session.");
+  if (ctx.user.role !== "owner" && ctx.user.role !== "branch_admin") {
+    throw new Error("Only Owners and Branch Admins can manage product categories and fields.");
+  }
+
+  const tenant = ctx.tenant;
+  const cleaned: CategoryTemplate[] = templates
+    .map((t) => ({
+      category: String(t.category || "").trim().slice(0, 60),
+      default_sizes: (t.default_sizes ?? []).map((s) => String(s).trim()).filter(Boolean).slice(0, 30),
+      default_colours: (t.default_colours ?? []).map((c) => String(c).trim()).filter(Boolean).slice(0, 20),
+      default_pieces_per_carton: Math.max(1, Math.floor(Number(t.default_pieces_per_carton) || 20)),
+      extra_fields: (t.extra_fields ?? []).map((f) => String(f).trim()).filter(Boolean).slice(0, 15),
+    }))
+    .filter((t) => t.category.length > 0)
+    .slice(0, 40);
+
+  const nextBrand: BrandConfig = {
+    ...tenant.brand_config,
+    category_templates: cleaned,
+  };
+
+  await withTenantTx({ tenantId: tenant.id, isPlatformAdmin: ctx.user.is_platform_admin }, async (client) => {
+    await client.query("UPDATE public.tenants SET brand_config = $1 WHERE id = $2", [
+      JSON.stringify(nextBrand),
+      tenant.id,
+    ]);
+  });
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/stock");
 }
 
 export async function updateTaxConfigAction(tax: TaxConfig) {
@@ -295,7 +370,7 @@ export async function triggerManualBackupAction() {
   return res;
 }
 
-export async function getBackupDownloadUrlAction(backupId: string): Promise<string> {
+export async function getBackupDownloadUrlAction(backupId: string, format: "restore" | "excel" = "restore"): Promise<string> {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "backups.manage");
 
@@ -307,6 +382,13 @@ export async function getBackupDownloadUrlAction(backupId: string): Promise<stri
     return res.rows[0]?.s3_key ?? null;
   });
   if (!key) throw new Error("Backup not found.");
+  if (format === "excel") {
+    const excelKey = excelKeyFor(key);
+    if (!(await headObject("private", excelKey)).exists) {
+      throw new Error("This older backup has no Excel copy.");
+    }
+    return getPresignedDownloadUrl("private", excelKey, 300);
+  }
   return getPresignedDownloadUrl("private", key, 300);
 }
 
@@ -401,6 +483,69 @@ export async function deleteCustomFieldAction(fieldId: string) {
       fieldId,
       ctx.tenant.id,
     ]);
+  });
+  revalidatePath("/dashboard/settings");
+}
+
+export async function updateMyProfileAction(input: {
+  fullName: string;
+  email?: string;
+  phone?: string;
+}) {
+  const ctx = await getServerSessionContext();
+  if (!ctx || !ctx.tenant) throw new Error("Unauthorized");
+  if (ctx.impersonation?.mode === "read") throw new Error("Read-only support session.");
+
+  const cleanName = input.fullName.trim();
+  if (!cleanName) throw new Error("Full name is required.");
+
+  const tenant = ctx.tenant;
+  await withTenantTx({ tenantId: tenant.id, isPlatformAdmin: ctx.user.is_platform_admin }, async (client) => {
+    await client.query(
+      `UPDATE public.profiles
+       SET full_name = $1, email = $2, phone = $3
+       WHERE id = $4 AND tenant_id = $5`,
+      [
+        cleanName,
+        input.email?.trim() ? input.email.trim().toLowerCase() : null,
+        input.phone?.trim() || null,
+        ctx.user.id,
+        tenant.id,
+      ]
+    );
+  });
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard");
+}
+
+export async function changeMyPasswordAction(input: {
+  currentPassword: string;
+  newPassword: string;
+}) {
+  const ctx = await getServerSessionContext();
+  if (!ctx || !ctx.tenant) throw new Error("Unauthorized");
+  if (ctx.impersonation?.mode === "read") throw new Error("Read-only support session.");
+  if (input.newPassword.length < 8) {
+    throw new Error("New password must be at least 8 characters.");
+  }
+
+  const tenant = ctx.tenant;
+  await withTenantTx({ tenantId: tenant.id, isPlatformAdmin: ctx.user.is_platform_admin }, async (client) => {
+    const res = await client.query<{ password_hash: string }>(
+      "SELECT password_hash FROM public.profiles WHERE id = $1 AND tenant_id = $2",
+      [ctx.user.id, tenant.id]
+    );
+    const existing = res.rows[0];
+    if (!existing || !verifyPassword(input.currentPassword, existing.password_hash)) {
+      throw new Error("Current password is incorrect.");
+    }
+    const nextHash = hashPassword(input.newPassword);
+    await client.query(
+      `UPDATE public.profiles
+       SET password_hash = $1, must_change_password = false
+       WHERE id = $2 AND tenant_id = $3`,
+      [nextHash, ctx.user.id, tenant.id]
+    );
   });
   revalidatePath("/dashboard/settings");
 }

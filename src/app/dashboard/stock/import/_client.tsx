@@ -89,7 +89,7 @@ export function StockImportClient({
             </Button>
           </div>
 
-          <div className="rounded-xl border-2 border-dashed border-slate-300 p-6 text-center">
+          <div className="rounded-[10px] border-2 border-dashed border-slate-300 p-6 text-center">
             <Upload className="h-8 w-8 mx-auto text-slate-400 mb-2" />
             <p className="text-sm font-medium text-slate-700 mb-2">Upload Excel (.xlsx) or CSV (.csv)</p>
             <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="text-xs" />
@@ -106,7 +106,7 @@ export function StockImportClient({
           )}
 
           {validRows.length > 0 && (
-            <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+            <div className="flex items-center justify-between rounded-[10px] bg-emerald-50 border border-emerald-200 p-4">
               <div className="text-sm text-emerald-900">
                 <strong>{validRows.length}</strong> valid rows ready to commit atomically.
               </div>

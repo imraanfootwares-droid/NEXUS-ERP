@@ -2,6 +2,8 @@
 
 import React, { useMemo, useState } from "react";
 import { Check, Search, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import { matchSizeRun, sizeAxisKey, variantOptions, type SizeRunVariant } from "@/lib/catalog/size-run";
 import { INDIAN_STATES } from "@/lib/constants/saas";
 import type { CustomFieldRow, HsnCodeRow, RatioPreset } from "@/types/database";
 import { Button, Input, Label, Select } from "./primitives";
@@ -92,7 +94,7 @@ export function VariantMatrixGrid({
   getCellHint?: (rowVal: string, colVal: string) => string | undefined;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-x-auto rounded-[10px] border border-slate-200 bg-white">
       <table className="w-full text-xs sm:text-sm border-collapse">
         <thead>
           <tr className="bg-slate-50 border-b border-slate-200">
@@ -146,17 +148,30 @@ export function VariantMatrixGrid({
 }
 
 /** Reusable 1-Click Size-Run / Carton Ratio Quick Fill bar. */
-export function SizeRunQuickFill({
+export function SizeRunQuickFill<T extends SizeRunVariant>({
   presets,
+  variants,
   onApply,
 }: {
   presets: RatioPreset[];
-  onApply: (multipliedRatios: Record<string, number>) => void;
+  /** Variants of the selected product. */
+  variants: T[];
+  onApply: (hits: Array<{ variant: T; qty: number }>) => void;
 }) {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [sets, setSets] = useState(1);
+  const [picked, setPicked] = useState("");
+
+  const allSizes = useMemo(() => presets.flatMap((p) => Object.keys(p.ratios)), [presets]);
+  const options = useMemo(() => variantOptions(variants, allSizes), [variants, allSizes]);
 
   if (presets.length === 0) return null;
+
+  // One colour is selected for you. With several, you must choose, so stock is never guessed.
+  const option = options.length === 1 ? options[0] : options.includes(picked) ? picked : "";
+  const needsChoice = options.length > 1 && !option;
+  const sizeKey = sizeAxisKey(variants, allSizes);
+  const optionLabel = Object.keys(variants[0]?.attributes ?? {}).filter((k) => k !== sizeKey).join(" / ") || "Colour";
 
   const apply = () => {
     const preset = presets[selectedIdx] ?? presets[0];
@@ -164,11 +179,20 @@ export function SizeRunQuickFill({
     for (const [size, qty] of Object.entries(preset.ratios)) {
       out[size] = qty * Math.max(1, sets);
     }
-    onApply(out);
+    const { hits, missing } = matchSizeRun(variants, out, option, allSizes);
+    const name = option || "this product";
+    if (hits.length === 0) {
+      toast.error(`${name} is not available in these sizes.`);
+      return;
+    }
+    onApply(hits);
+    const pairs = hits.reduce((sum, h) => sum + h.qty, 0);
+    if (missing.length > 0) toast.warning(`Added ${pairs} of ${name}. Not available: ${missing.join(", ")}.`);
+    else toast.success(`Added ${pairs} of ${name}.`);
   };
 
   return (
-    <div className="flex flex-wrap items-end gap-2 rounded-xl border border-sky-200 bg-sky-50/70 p-3">
+    <div className="flex flex-wrap items-end gap-2 rounded-[10px] border border-sky-200 bg-sky-50/70 p-3">
       <div className="flex-1 min-w-[180px]">
         <Label>Size-Run Ratio Preset</Label>
         <Select value={String(selectedIdx)} onChange={(e) => setSelectedIdx(Number(e.target.value))}>
@@ -179,6 +203,19 @@ export function SizeRunQuickFill({
           ))}
         </Select>
       </div>
+      {options.length > 0 ? (
+        <div className="flex-1 min-w-[130px]">
+          <Label>{optionLabel}</Label>
+          <Select aria-label={optionLabel} value={option} onChange={(e) => setPicked(e.target.value)}>
+            {options.length > 1 ? <option value="">Choose {optionLabel.toLowerCase()}</option> : null}
+            {options.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </Select>
+        </div>
+      ) : null}
       <div className="w-24">
         <Label>Sets / Cartons</Label>
         <Input
@@ -188,7 +225,7 @@ export function SizeRunQuickFill({
           onChange={(e) => setSets(Math.max(1, Number(e.target.value) || 1))}
         />
       </div>
-      <Button variant="secondary" onClick={apply}>
+      <Button variant="secondary" disabled={needsChoice} onClick={apply}>
         <Sparkles className="h-4 w-4" />
         Fill Size-Run
       </Button>
@@ -238,7 +275,7 @@ export function HsnCombobox({
         />
       </div>
       {open && (
-        <div className="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+        <div className="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-[10px] border border-slate-200 bg-white shadow-xl">
           {filtered.length === 0 ? (
             <div className="p-3 text-xs text-slate-500">No matching HSN codes.</div>
           ) : (
@@ -254,7 +291,7 @@ export function HsnCombobox({
                 className="flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left text-xs hover:bg-sky-50 border-b border-slate-100 last:border-0 cursor-pointer"
               >
                 <div>
-                  <span className="font-bold text-slate-900">{h.code}</span>
+                  <span className="font-semibold text-slate-900">{h.code}</span>
                   <span className="ml-2 text-slate-500">{h.category}</span>
                   <p className="text-slate-600 line-clamp-1 mt-0.5">{h.description}</p>
                 </div>

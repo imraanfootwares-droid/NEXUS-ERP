@@ -3,8 +3,9 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, Edit, Loader2, Printer, RotateCcw, Trash2 } from "lucide-react";
+import { Ban, Edit, Printer, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { InlineRowsSkeleton } from "@/components/ui/page-skeletons";
 import {
   cancelInvoiceAction,
   deleteDraftInvoiceAction,
@@ -26,6 +27,9 @@ interface InvoiceListRow {
   status: string;
   has_oversold: boolean;
   created_at: string;
+  creator_name: string | null;
+  creator_login: string | null;
+  creator_role: string | null;
 }
 
 interface ReturnLineItem {
@@ -134,7 +138,7 @@ export function BillingLedgerClient({
       sortValue: (r) => r.invoice_number || "DRAFT",
       render: (r) => (
         <div>
-          <span className="font-bold text-slate-900">{r.invoice_number || "DRAFT"}</span>
+          <span className="font-semibold text-slate-900">{r.invoice_number || "DRAFT"}</span>
           {r.invoice_type === "return_credit_note" && <Badge variant="info" className="ml-1.5">Credit Note</Badge>}
           {r.has_oversold && <Badge variant="danger" className="ml-1.5">Oversold</Badge>}
           <div className="text-[11px] text-slate-500">{r.branch_name}</div>
@@ -143,16 +147,37 @@ export function BillingLedgerClient({
     },
     {
       key: "customer",
-      header: "Customer",
+      header: "Customer & Date/Time",
       sortValue: (r) => r.customer_name,
       render: (r) => (
         <div>
           <span className="font-medium">{r.customer_name}</span>
-          <div className="text-[11px] text-slate-500">
-            {new Date(r.created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}
+          <div className="font-mono text-[11px] text-slate-500" suppressHydrationWarning>
+            {new Date(r.created_at).toLocaleString("en-IN", {
+              timeZone: "Asia/Kolkata",
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}
           </div>
         </div>
       ),
+    },
+    {
+      key: "built_by",
+      header: "Built By",
+      sortValue: (r) => r.creator_name || "",
+      render: (r) =>
+        r.creator_name ? (
+          <div>
+            <span className="font-medium text-slate-900">{r.creator_name}</span>
+            <div className="text-[11px] text-slate-500">
+              {r.creator_login ? `@${r.creator_login}` : ""}
+              {r.creator_role ? ` • ${r.creator_role.replace("_", " ")}` : ""}
+            </div>
+          </div>
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        ),
     },
     {
       key: "total",
@@ -208,7 +233,7 @@ export function BillingLedgerClient({
                   toast.success("Draft deleted.");
                   router.refresh();
                 }}
-                className="inline-flex items-center rounded-lg bg-rose-500 p-1.5 text-white hover:bg-rose-600 cursor-pointer"
+                className="inline-flex items-center rounded-lg bg-white p-1.5 text-rose-600 shadow-[0_0_0_1px_rgba(0,0,0,.08)] transition-colors hover:bg-rose-50 cursor-pointer"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -295,9 +320,7 @@ export function BillingLedgerClient({
         maxWidth="max-w-2xl"
       >
         {returnLoading ? (
-          <div className="py-8 flex items-center justify-center gap-2 text-xs text-slate-500">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading invoice line items...
-          </div>
+          <InlineRowsSkeleton label="Loading invoice line items" />
         ) : (
           <form
             onSubmit={async (e) => {
@@ -356,7 +379,7 @@ export function BillingLedgerClient({
               {returnItems.map((it, idx) => (
                 <div key={it.id} className="rounded-lg border border-slate-200 p-2.5 text-xs flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-bold text-slate-900 truncate">{it.product_name}</p>
+                    <p className="font-semibold text-slate-900 truncate">{it.product_name}</p>
                     <p className="text-slate-500">
                       Sold: {it.sold_qty} • ₹{it.unit_price} • GST {it.gst_rate}%
                     </p>
@@ -379,7 +402,7 @@ export function BillingLedgerClient({
               ))}
             </div>
 
-            <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 space-y-2">
+            <div className="rounded-[10px] border border-sky-200 bg-sky-50/60 p-3 space-y-2">
               <p className="text-xs font-semibold text-sky-900">2. Optional: 1-Click Size / Variant Exchange</p>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                 <div className="sm:col-span-3">

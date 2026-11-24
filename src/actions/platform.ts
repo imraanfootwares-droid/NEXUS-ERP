@@ -29,7 +29,7 @@ import { withPlatformTx } from "@/lib/db";
 import type { VerticalKey } from "@/types/database";
 
 async function requirePlatformAdmin() {
-  const ctx = await getServerSessionContext();
+  const ctx = await getServerSessionContext("platform");
   if (!ctx || !ctx.user.is_platform_admin) {
     throw new Error("Platform Super Admin access required.");
   }

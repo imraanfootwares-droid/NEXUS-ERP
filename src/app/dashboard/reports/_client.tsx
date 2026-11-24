@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Lock, Pencil, Trash2 } from "lucide-react";
+import { Paged } from "@/components/ui/pagination";
 import { toast } from "sonner";
 import {
   closeDayCashAction,
@@ -85,7 +86,7 @@ export function ReportsAndDayEndClient({
                 <a
                   key={ex.id}
                   href={canExport ? `/api/exports/${ex.id}?from=${from}&to=${to}&format=${format}` : "#"}
-                  className={`rounded-xl border border-slate-200 p-4 flex items-center justify-between hover:border-sky-400 bg-white ${
+                  className={`rounded-[10px] border border-slate-200 p-4 flex items-center justify-between hover:border-sky-400 bg-white ${
                     !canExport ? "opacity-50 pointer-events-none" : ""
                   }`}
                 >
@@ -170,10 +171,10 @@ export function ReportsAndDayEndClient({
           <Card>
             <CardHeader><h3 className="text-sm font-semibold">Recent Expenses</h3></CardHeader>
             <CardContent className="space-y-2">
-              {expenses.map((ex) => (
-                <div key={ex.id} className="flex justify-between items-center gap-2 rounded-xl border border-slate-200 p-3 text-xs">
+              <Paged items={expenses} size={10}>{(pagedRows) => pagedRows.map((ex) => (
+                <div key={ex.id} className="flex justify-between items-center gap-2 rounded-[10px] border border-slate-200 p-3 text-xs">
                   <div>
-                    <p className="font-bold text-slate-900">{ex.category}</p>
+                    <p className="font-semibold text-slate-900">{ex.category}</p>
                     <p className="text-slate-500">{ex.expense_date} • {ex.mode.toUpperCase()} {ex.note ? `• ${ex.note}` : ""}</p>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -201,13 +202,13 @@ export function ReportsAndDayEndClient({
                         toast.success("Expense deleted.");
                         router.refresh();
                       }}
-                      className="rounded-lg bg-rose-500 p-1.5 text-white hover:bg-rose-600 cursor-pointer"
+                      className="rounded-lg bg-white p-1.5 text-rose-600 shadow-[0_0_0_1px_rgba(0,0,0,.08)] transition-colors hover:bg-rose-50 cursor-pointer"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
-              ))}
+              ))}</Paged>
             </CardContent>
           </Card>
         </div>
@@ -246,7 +247,7 @@ export function ReportsAndDayEndClient({
           <Card>
             <CardHeader><h3 className="text-sm font-semibold">Day-End Close History</h3></CardHeader>
             <CardContent className="space-y-2">
-              {dayCloses.map((dc) => (
+              <Paged items={dayCloses} size={10}>{(pagedRows) => pagedRows.map((dc) => (
                 <div key={dc.id} className="rounded-lg border border-slate-200 p-3 text-xs space-y-1">
                   <div className="flex justify-between font-bold">
                     <span>{dc.close_date}</span>
@@ -258,7 +259,7 @@ export function ReportsAndDayEndClient({
                     Expected Cash: ₹{Number(dc.expected_cash).toFixed(2)} • Counted: ₹{Number(dc.counted_cash).toFixed(2)} • UPI: ₹{Number(dc.upi_total).toFixed(2)}
                   </p>
                 </div>
-              ))}
+              ))}</Paged>
             </CardContent>
           </Card>
         </div>

@@ -80,10 +80,10 @@ export function NavigationProgress() {
   return (
     <div
       aria-hidden="true"
-      className="fixed top-0 left-0 right-0 z-[100] h-[3px] pointer-events-none bg-transparent"
+      className="no-print fixed top-0 left-0 right-0 z-[100] h-[2px] pointer-events-none bg-transparent"
     >
       <div
-        className="h-full bg-gradient-to-r from-[#4B5A94] via-sky-500 to-indigo-400 shadow-[0_0_10px_rgba(75,90,148,0.7)] transition-all duration-200 ease-out"
+        className="h-full bg-[#171717] transition-all duration-200 ease-out"
         style={{ width: `${progress}%` }}
       />
     </div>

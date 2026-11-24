@@ -5,13 +5,18 @@ import { checkDbHealth, withPlatformTx } from "@/lib/db";
 import { env } from "@/lib/env";
 import { checkStorageHealth } from "@/lib/storage/s3-client";
 import { CopySnippetButton } from "@/app/platform/_client";
+import { DataExportCard } from "@/components/ui/data-export-card";
+import { BACKUP_INTERVAL_HOURS, readBackupHealth } from "@/lib/backups/scheduler";
+import { BackupHealthCard } from "./_backup-health-card";
+import { TenantHealthRows } from "./_tenant-health-rows";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformInfrastructurePage() {
-  const [dbHealth, storageHealth, info] = await Promise.all([
+  const [dbHealth, storageHealth, backupHealth, info] = await Promise.all([
     checkDbHealth(),
     checkStorageHealth(),
+    readBackupHealth().catch(() => null),
     withPlatformTx(async (client) => {
       const [tenantsRes, pendingRes] = await Promise.all([
         client.query<{
@@ -64,10 +69,10 @@ ${env.NEXT_PUBLIC_APP_DOMAIN || "erp.yourdomain.in"} {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold text-slate-900">
+          <h1>
             Infrastructure, Free-Tier Meters &amp; VPS Migration
           </h1>
-          <p className="text-sm text-slate-600">
+          <p className="mt-0.5 text-[12.5px] text-[#77777d]">
             Live Neon + Cloudflare R2 health and 1-click VPS transition tools.
           </p>
         </div>
@@ -112,6 +117,10 @@ ${env.NEXT_PUBLIC_APP_DOMAIN || "erp.yourdomain.in"} {
         ]}
       />
 
+      <BackupHealthCard health={backupHealth} intervalHours={BACKUP_INTERVAL_HOURS} />
+
+      <DataExportCard endpoint="/api/platform/export" title="Export All Platform Data" />
+
       <Card>
         <CardHeader>
           <h3 className="text-sm font-semibold text-slate-900">Per-Tenant Storage &amp; Backup Health</h3>
@@ -127,14 +136,7 @@ ${env.NEXT_PUBLIC_APP_DOMAIN || "erp.yourdomain.in"} {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {info.tenants.map((t) => (
-                <tr key={t.id}>
-                  <td className="p-2.5 font-semibold">{t.name}</td>
-                  <td className="p-2.5">{t.custom_domain ? <Badge variant="info">{t.custom_domain}</Badge> : "—"}</td>
-                  <td className="p-2.5">{(Number(t.storage_used_bytes) / (1024 * 1024)).toFixed(2)} MB</td>
-                  <td className="p-2.5">{t.last_backup ? new Date(t.last_backup).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "Never"}</td>
-                </tr>
-              ))}
+              <TenantHealthRows tenants={info.tenants} />
             </tbody>
           </table>
         </CardContent>

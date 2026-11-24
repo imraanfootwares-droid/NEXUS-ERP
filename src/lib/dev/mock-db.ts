@@ -1,5 +1,5 @@
 import type { PoolClient, QueryResult, QueryResultRow } from "pg";
-import { resolveAllFeatures, resolveRolePermissions } from "@/lib/auth/access";
+import { resolveAccessBlock, resolveAllFeatures, resolveUserFeatures, resolveRolePermissions } from "@/lib/auth/access";
 import { VERTICAL_PRESETS } from "@/lib/catalog/verticals";
 import { PERMISSION_DEFINITIONS, type FeatureKey, type TenantRole, type TierKey } from "@/lib/constants/saas";
 import type {
@@ -114,6 +114,8 @@ interface MockDbState {
   tenants: TenantRow[];
   branches: BranchRow[];
   profiles: ProfileRow[];
+  userBranches?: Record<string, string[]>;
+  enquiries?: Array<{ id: string; contact: string; business: string; interest: string | null; status: string; ip_hash: string | null; created_at: string }>;
   rolePerms: Array<{ tenant_id: string; role: TenantRole; permission_key: string; allowed: boolean }>;
   globalPerms: Array<{ permission_key: string; default_owner: boolean; default_branch_admin: boolean; default_worker: boolean }>;
   resets: Array<{ id: string; tenant_id: string; user_id: string; identifier_submitted: string; note: string | null; status: string; created_at: string }>;
@@ -833,10 +835,11 @@ export function getMockSessionContext(role: DevPreviewRole): SessionContext {
     user,
     tenant,
     branches,
-    assignedBranchIds: role === "owner" ? branches.map((b) => b.id) : [B_CHN],
+    assignedBranchIds: role === "owner" ? branches.map((b) => b.id) : s.userBranches?.[userId] ?? [B_CHN],
     permissions: resolveRolePermissions(role, permRows),
-    enabledFeatures: resolveAllFeatures(tenant),
+    enabledFeatures: resolveUserFeatures(tenant, user.tier_override),
     impersonation: null,
+    accessBlock: resolveAccessBlock(tenant, user),
   };
 }
 
@@ -919,10 +922,198 @@ export async function mockQuery<T extends QueryResultRow = QueryResultRow>(
     return okResult(rows);
   }
 
+  if (sql.includes("access_block_tenant")) {
+    return okResult(s.tenants.filter((x) => x.id === params[0]).map((x) => ({ id: x.id })));
+  }
+
+  if (sql.includes("access_block_profile")) {
+    return okResult(s.profiles.filter((x) => x.id === params[0]));
+  }
+
+  if (sql.includes("access_block_update")) {
+    const row = sql.includes("public.tenants")
+      ? s.tenants.find((x) => x.id === params[0])
+      : s.profiles.find((x) => x.id === params[0]);
+    if (row) {
+      const blocked = Boolean(params[1]);
+      row.access_blocked = blocked;
+      row.access_block_message = (params[2] as string | null) ?? null;
+      row.access_block_amount = (params[3] as number | null) ?? null;
+      row.access_block_contact = (params[4] as string | null) ?? null;
+      row.access_blocked_at = blocked ? row.access_blocked_at ?? new Date().toISOString() : null;
+    }
+    return okResult([]);
+  }
+
+  if (sql.includes("access_block_audit")) {
+    s.audits.unshift({
+      id: `aud-${Date.now()}`,
+      tenant_id: String(params[0]),
+      action: String(params[2]),
+      entity_type: String(params[3]),
+      entity_id: String(params[4]),
+      metadata: JSON.parse(String(params[5])),
+      created_at: new Date().toISOString(),
+    } as (typeof s.audits)[number]);
+    return okResult([]);
+  }
+
+  if (sql.includes("pg_advisory_xact_lock")) return okResult([]);
+
+  if (sql.includes("walk_in_customer_match")) {
+    const digits = (v: string | null) => (v ?? "").replace(/\D/g, "").slice(-10);
+    const hit = s.customers.find(
+      (c) =>
+        c.tenant_id === params[0] &&
+        ((params[1] && c.gstin?.toUpperCase() === params[1]) || (params[2] && digits(c.phone) === params[2]))
+    );
+    return okResult(hit ? [{ id: hit.id }] : []);
+  }
+
+  if (sql.includes("walk_in_customer_update")) {
+    const c = s.customers.find((x) => x.id === params[0]);
+    if (c) {
+      c.is_active = true;
+      c.phone = c.phone || (params[2] as string | null);
+      c.gstin = c.gstin || (params[3] as string | null);
+      c.state_code = c.state_code || (params[4] as string | null);
+    }
+    return okResult([]);
+  }
+
+  if (sql.includes("walk_in_customer_insert")) {
+    const id = `cust-dev-${Date.now()}`;
+    s.customers.unshift({
+      id,
+      tenant_id: String(params[0]),
+      name: String(params[1]),
+      phone: (params[2] as string | null) ?? null,
+      email: null,
+      gstin: (params[3] as string | null) ?? null,
+      state_code: (params[4] as string | null) ?? null,
+      address: null,
+      customer_type: "retail",
+      default_discount_pct: 0,
+      credit_limit: 0,
+      credit_days: 0,
+      current_due: 0,
+      credit_balance: 0,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    });
+    return okResult([{ id }]);
+  }
+
+  if (sql.includes("public.landing_enquiries")) {
+    s.enquiries ??= [];
+    if (sql.includes("COUNT(*)")) return okResult([{ cnt: s.enquiries.filter((e) => e.ip_hash === params[0]).length }]);
+    if (sql.includes("LOWER(contact)")) {
+      return okResult(
+        s.enquiries.filter(
+          (e) => e.contact.toLowerCase() === String(params[0]).toLowerCase() && e.business.toLowerCase() === String(params[1]).toLowerCase()
+        )
+      );
+    }
+    if (sql.startsWith("INSERT")) {
+      s.enquiries.unshift({
+        id: `enq-${Date.now()}`,
+        contact: String(params[0]),
+        business: String(params[1]),
+        interest: (params[2] as string | null) ?? null,
+        status: "new",
+        ip_hash: String(params[3]),
+        created_at: new Date().toISOString(),
+      });
+      return okResult([]);
+    }
+    if (sql.startsWith("UPDATE")) {
+      const row = s.enquiries.find((e) => e.id === params[1]);
+      if (row) row.status = String(params[0]);
+      return okResult([]);
+    }
+    return okResult(s.enquiries);
+  }
+
+  const inScope = (branchId: string) => !Array.isArray(params[1]) || (params[1] as string[]).includes(branchId);
+
+  if (sql.includes("DELETE FROM public.user_branch_assignments")) {
+    s.userBranches = { ...s.userBranches, [String(params[0])]: [] };
+    return okResult([]);
+  }
+
+  if (sql.includes("INSERT INTO public.user_branch_assignments") && sql.includes("RETURNING branch_id")) {
+    const ids = (params[2] as string[]).filter((id) => s.branches.some((b) => b.id === id && b.tenant_id === params[1]));
+    s.userBranches = { ...s.userBranches, [String(params[0])]: ids };
+    return okResult(ids.map((branch_id) => ({ branch_id })));
+  }
+
+  if (sql.includes("SELECT user_id, branch_id FROM public.user_branch_assignments")) {
+    return okResult(
+      s.profiles
+        .filter((x) => !x.is_platform_admin && x.role !== "owner")
+        .flatMap((x) => (s.userBranches?.[x.id] ?? [B_CHN]).map((branch_id) => ({ user_id: x.id, branch_id })))
+    );
+  }
+
+  if (sql.includes("person_tier_lookup")) {
+    const person = s.profiles.find((x) => x.id === params[0]);
+    if (!person) return okResult([]);
+    const tenant = s.tenants.find((x) => x.id === person.tenant_id);
+    return okResult([{ ...person, tier_override: person.tier_override ?? null, plan_tier: tenant?.tier ?? null }]);
+  }
+
+  if (sql.includes("UPDATE public.profiles SET tier_override")) {
+    const person = s.profiles.find((x) => x.id === params[1]);
+    if (person) person.tier_override = (params[0] as TierKey | null) ?? null;
+    return okResult([]);
+  }
+
+  if (sql.includes("trend_buckets")) {
+    const tid = sql.includes("tenant_id = $1") ? String(params[0]) : null;
+    const buckets = new Map<string, { grain: string; bucket: string; total: number; due: number; bills: number }>();
+    const add = (grain: string, bucket: string, total: number, due: number) => {
+      const key = `${grain}:${bucket}`;
+      const cur = buckets.get(key) ?? { grain, bucket, total: 0, due: 0, bills: 0 };
+      cur.total += total;
+      cur.due += due;
+      cur.bills += 1;
+      buckets.set(key, cur);
+    };
+    for (const inv of s.invoices) {
+      if ((tid && inv.tenant_id !== tid) || !inScope(inv.branch_id) || inv.invoice_type !== "sale" || ["draft", "cancelled"].includes(inv.status)) continue;
+      const ist = new Date(new Date(inv.created_at).getTime() + 5.5 * 60 * 60 * 1000);
+      const day = ist.toISOString().slice(0, 10);
+      const monday = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() - ((ist.getUTCDay() + 6) % 7)));
+      add("day", day, inv.grand_total, inv.due_amount);
+      add("week", monday.toISOString().slice(0, 10), inv.grand_total, inv.due_amount);
+      add("month", `${day.slice(0, 7)}-01`, inv.grand_total, inv.due_amount);
+    }
+    return okResult([...buckets.values()].map((b) => ({ ...b, total: String(b.total), due: String(b.due), bills: String(b.bills) })));
+  }
+
+  if (sql.includes("recent_invoices")) {
+    return okResult(
+      s.invoices
+        .filter((i) => i.tenant_id === params[0] && inScope(i.branch_id) && i.invoice_type === "sale" && i.status !== "draft")
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(0, 8)
+        .map((i) => ({
+          id: i.id,
+          invoice_number: i.invoice_number,
+          customer_name: i.customer_snapshot?.name ?? null,
+          branch_name: s.branches.find((b) => b.id === i.branch_id)?.name ?? "",
+          grand_total: String(i.grand_total),
+          due_amount: String(i.due_amount),
+          status: i.status,
+          created_at: i.created_at,
+        }))
+    );
+  }
+
   // Dashboard Overview aggregates
   if (sql.includes("AS today_sales")) {
     const tid = String(params[0]);
-    const valid = s.invoices.filter((i) => i.tenant_id === tid && i.invoice_type === "sale" && !["draft", "cancelled"].includes(i.status));
+    const valid = s.invoices.filter((i) => i.tenant_id === tid && inScope(i.branch_id) && i.invoice_type === "sale" && !["draft", "cancelled"].includes(i.status));
     const todayStr = new Date().toISOString().slice(0, 10);
     const todaySales = valid.filter((i) => i.created_at.slice(0, 10) === todayStr).reduce((a, i) => a + i.grand_total, 0);
     const monthSales = valid.reduce((a, i) => a + i.grand_total, 0);
@@ -934,7 +1125,7 @@ export async function mockQuery<T extends QueryResultRow = QueryResultRow>(
     const tid = String(params[0]);
     return okResult(
       s.branches
-        .filter((b) => b.tenant_id === tid)
+        .filter((b) => b.tenant_id === tid && inScope(b.id))
         .map((b) => {
           const invIds = new Set(s.invoices.filter((i) => i.branch_id === b.id && !["draft", "cancelled"].includes(i.status)).map((i) => i.id));
           const items = s.invoiceItems.filter((ii) => invIds.has(ii.invoice_id));
@@ -962,7 +1153,7 @@ export async function mockQuery<T extends QueryResultRow = QueryResultRow>(
     const tid = String(params[0]);
     let qty = 0;
     let val = 0;
-    for (const bs of s.branchStock.filter((x) => x.tenant_id === tid)) {
+    for (const bs of s.branchStock.filter((x) => x.tenant_id === tid && inScope(x.branch_id))) {
       const v = s.variants.find((x) => x.id === bs.variant_id);
       qty += bs.quantity;
       val += bs.quantity * (v?.avg_cost ?? 0);
@@ -971,19 +1162,19 @@ export async function mockQuery<T extends QueryResultRow = QueryResultRow>(
   }
 
   if (sql.includes("FROM public.stock_transfers WHERE tenant_id = $1 AND status = 'dispatched'")) {
-    const cnt = s.transfers.filter((t) => t.tenant_id === params[0] && t.status === "dispatched").length;
+    const cnt = s.transfers.filter((t) => t.tenant_id === params[0] && t.status === "dispatched" && (inScope(t.from_branch_id) || inScope(t.to_branch_id))).length;
     return okResult([{ cnt: String(cnt) }]);
   }
 
   if (sql.includes("has_oversold = true")) {
-    const cnt = s.invoices.filter((i) => i.tenant_id === params[0] && i.has_oversold && i.status !== "cancelled").length;
+    const cnt = s.invoices.filter((i) => i.tenant_id === params[0] && inScope(i.branch_id) && i.has_oversold && i.status !== "cancelled").length;
     return okResult([{ cnt: String(cnt) }]);
   }
 
   if (sql.includes("bs.quantity <= pv.low_stock_threshold")) {
     const cnt = s.branchStock.filter((bs) => {
       const v = s.variants.find((x) => x.id === bs.variant_id);
-      return bs.tenant_id === params[0] && v && bs.quantity <= v.low_stock_threshold;
+      return bs.tenant_id === params[0] && inScope(bs.branch_id) && v && bs.quantity <= v.low_stock_threshold;
     }).length;
     return okResult([{ cnt: String(cnt) }]);
   }
@@ -1093,7 +1284,21 @@ export async function mockQuery<T extends QueryResultRow = QueryResultRow>(
       const b = s.branches.find((x) => x.id === params[0]);
       return okResult(b ? [b] : []);
     }
-    return okResult(s.branches.filter((b) => b.tenant_id === params[0]));
+    if (sql.includes("tenant_id = $1")) {
+      return okResult(s.branches.filter((b) => b.tenant_id === params[0]));
+    }
+    return okResult(s.branches);
+  }
+
+  if (sql.startsWith("SELECT") && sql.includes("FROM public.profile_branches")) {
+    return okResult(
+      s.profiles
+        .filter((p) => !p.is_platform_admin)
+        .map((p) => ({
+          profile_id: p.id,
+          branch_id: p.role === "worker" ? B_CHN : B_DEL,
+        }))
+    );
   }
 
   if (sql.startsWith("SELECT") && sql.includes("FROM public.tenant_backups")) {
@@ -1153,8 +1358,9 @@ export async function mockQuery<T extends QueryResultRow = QueryResultRow>(
     for (const v of s.variants.filter((x) => x.tenant_id === tid)) {
       const p = s.products.find((x) => x.id === v.product_id);
       if (!p) continue;
-      const stocks = s.branchStock.filter((x) => x.variant_id === v.id);
-      const list = stocks.length > 0 ? stocks : [{ tenant_id: tid, branch_id: B_CHN, variant_id: v.id, quantity: 0 }];
+      const stocks = s.branchStock.filter((x) => x.variant_id === v.id && inScope(x.branch_id));
+      const fallback = Array.isArray(params[1]) ? ((params[1] as string[])[0] ?? B_CHN) : B_CHN;
+      const list = stocks.length > 0 ? stocks : [{ tenant_id: tid, branch_id: fallback, variant_id: v.id, quantity: 0 }];
       for (const bs of list) {
         const b = s.branches.find((x) => x.id === bs.branch_id);
         rows.push({
@@ -1306,7 +1512,7 @@ export async function mockQuery<T extends QueryResultRow = QueryResultRow>(
     const tid = String(params[0]);
     return okResult(
       s.invoices
-        .filter((i) => i.tenant_id === tid)
+        .filter((i) => i.tenant_id === tid && inScope(i.branch_id))
         .map((i) => {
           const b = s.branches.find((x) => x.id === i.branch_id);
           return {

@@ -9,7 +9,7 @@ import {
   type TenantRole,
   type TierKey,
 } from "@/lib/constants/saas";
-import type { SessionContext, TenantRow } from "@/types/database";
+import type { AccessBlock, ProfileRow, SessionContext, TenantRow } from "@/types/database";
 
 export interface FeatureResolutionInput {
   tier: TierKey;
@@ -54,6 +54,37 @@ export function resolveAllFeatures(
   const out = {} as Record<FeatureKey, boolean>;
   for (const key of FEATURE_KEYS) {
     out[key] = isFeatureEnabled(tenant, key);
+  }
+  return out;
+}
+
+export const TIER_ORDER: readonly TierKey[] = ["tier_1", "tier_2", "tier_3", "tier_4"];
+
+export const tierRank = (tier: TierKey): number => TIER_ORDER.indexOf(tier);
+
+/** The tier a person actually works at: their own tier, never above the business plan. */
+export function effectiveUserTier(planTier: TierKey, personalTier?: TierKey | null): TierKey {
+  if (!personalTier) return planTier;
+  return tierRank(personalTier) < tierRank(planTier) ? personalTier : planTier;
+}
+
+/**
+ * Features for one signed-in person: the business's features, further limited by
+ * the person's tier. A personal tier can only remove access, never add it.
+ */
+export function resolveUserFeatures(
+  tenant: FeatureResolutionInput | null | undefined,
+  personalTier?: TierKey | null
+): Record<FeatureKey, boolean> {
+  const business = resolveAllFeatures(tenant);
+  if (!tenant || !personalTier || tierRank(personalTier) >= tierRank(tenant.tier)) {
+    return business;
+  }
+  const allowed = new Set<FeatureKey>(TIER_DEFAULT_FEATURES[personalTier]);
+  const out = {} as Record<FeatureKey, boolean>;
+  for (const key of FEATURE_KEYS) {
+    out[key] =
+      business[key] && allowed.has(key) && getRequiredPrerequisites(key).every((d) => allowed.has(d));
   }
   return out;
 }
@@ -108,11 +139,29 @@ export function resolveRolePermissions(
   return map;
 }
 
+/** A business block takes priority over a block on one person. */
+export function resolveAccessBlock(
+  tenant: Partial<TenantRow> | null | undefined,
+  user: Partial<ProfileRow> | null | undefined
+): AccessBlock | null {
+  const source = tenant?.access_blocked ? tenant : user?.access_blocked ? user : null;
+  if (!source) return null;
+  const amount = source.access_block_amount;
+  return {
+    scope: source === tenant ? "business" : "user",
+    message: source.access_block_message ?? null,
+    amountDue: amount === null || amount === undefined ? null : Number(amount),
+    contact: source.access_block_contact ?? null,
+    blockedAt: source.access_blocked_at ?? null,
+  };
+}
+
 export interface AccessCheckResult {
   allowed: boolean;
   reason?:
     | "UNAUTHENTICATED"
     | "TENANT_SUSPENDED"
+    | "ACCESS_BLOCKED"
     | "IMPERSONATION_READ_ONLY"
     | "FEATURE_DISABLED"
     | "PERMISSION_DENIED"
@@ -134,6 +183,10 @@ export function canAccess(
   // Suspended tenant blocks access (unless active platform impersonation)
   if (ctx.tenant.status === "suspended" && !ctx.impersonation) {
     return { allowed: false, reason: "TENANT_SUSPENDED" };
+  }
+
+  if (ctx.accessBlock && !ctx.impersonation) {
+    return { allowed: false, reason: "ACCESS_BLOCKED" };
   }
 
   // Read-only impersonation strictly blocks mutations

@@ -54,7 +54,9 @@ export async function toggleProductWebFlagsAction(
 export async function confirmProductImageAction(
   productId: string,
   fullKey: string,
-  replacePrimary = true
+  replacePrimary = true,
+  /** Stock has one main photo, so replacing it removes the old file from free storage. */
+  removePrevious = false
 ) {
   const ctx = await getServerSessionContext();
   if (!ctx || !ctx.tenant) throw new Error("Unauthorized");
@@ -65,44 +67,96 @@ export async function confirmProductImageAction(
     assertAccess(ctx, "stock.manage", { isMutation: true });
   }
 
+  const tenantId = ctx.tenant.id;
   const isDevDataUrl = fullKey.startsWith("data:") && isDevPreviewAllowed() && !isConfigured.storage;
   const thumbKey = deriveThumbKey(fullKey);
-  let addedBytes = 0;
+  let uploadedBytes = 0;
 
   if (!isDevDataUrl) {
+    if (!fullKey.startsWith(`public/${tenantId}/products/`) || fullKey.endsWith("_thumb.webp")) {
+      throw new Error("Invalid photo.");
+    }
     const [fullHead, thumbHead] = await Promise.all([
       headObject("public", fullKey),
       headObject("public", thumbKey),
     ]);
-    addedBytes = (fullHead.exists ? fullHead.contentLength : 0) + (thumbHead.exists ? thumbHead.contentLength : 0);
+    // A product must never point to a photo that did not finish uploading.
+    if (!fullHead.exists || !thumbHead.exists) {
+      throw new Error("Photo upload did not finish. Please try again.");
+    }
+    uploadedBytes = fullHead.contentLength + thumbHead.contentLength;
   } else {
-    addedBytes = Math.round(fullKey.length * 0.75);
+    uploadedBytes = Math.round(fullKey.length * 0.75);
   }
 
-  await withTenantTx(
-    { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
+  const orphanKey = await withTenantTx(
+    { tenantId, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
+      const current = await client.query<{ primary_image_key: string | null; gallery_keys: string[] | null }>(
+        "SELECT primary_image_key, gallery_keys FROM public.products WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+        [productId, tenantId]
+      );
+      const product = current.rows[0];
+      if (!product && !isDevDataUrl) throw new Error("Product not found.");
+
+      // The same picture on two products is one stored file, so it is counted once.
+      const alreadyStored = await client.query(
+        "SELECT 1 FROM public.products WHERE tenant_id = $1 AND (primary_image_key = $2 OR $2 = ANY(gallery_keys)) LIMIT 1",
+        [tenantId, fullKey]
+      );
+      const addedBytes = alreadyStored.rows.length > 0 ? 0 : uploadedBytes;
+
+      const oldPrimary = product?.primary_image_key ?? null;
+      const previous = removePrevious && replacePrimary && oldPrimary && oldPrimary !== fullKey ? oldPrimary : null;
+      const gallery = (product?.gallery_keys ?? []).filter((key) => key !== previous && key !== fullKey);
+      gallery.push(fullKey);
+
       await client.query(
         `UPDATE public.products
-         SET primary_image_key = ${replacePrimary ? "$1" : "COALESCE(primary_image_key, $1)"},
-             gallery_keys = array_append(gallery_keys, $1)
-         WHERE id = $2 AND tenant_id = $3`,
-        [fullKey, productId, ctx.tenant!.id]
+         SET primary_image_key = $1, gallery_keys = $2::text[]
+         WHERE id = $3 AND tenant_id = $4`,
+        [replacePrimary ? fullKey : oldPrimary ?? fullKey, gallery, productId, tenantId]
       );
 
       await client.query(
         `UPDATE public.tenants
          SET storage_used_bytes = storage_used_bytes + $1
          WHERE id = $2`,
-        [addedBytes, ctx.tenant!.id]
+        [addedBytes, tenantId]
       );
 
       await client.query(
         "DELETE FROM public.pending_uploads WHERE key = ANY($1::text[]) AND tenant_id = $2",
-        [[fullKey, thumbKey], ctx.tenant!.id]
+        [[fullKey, thumbKey], tenantId]
       );
+
+      if (!previous) return null;
+      const sharedElsewhere = await client.query(
+        "SELECT 1 FROM public.products WHERE tenant_id = $1 AND (primary_image_key = $2 OR $2 = ANY(gallery_keys)) LIMIT 1",
+        [tenantId, previous]
+      );
+      return sharedElsewhere.rows.length > 0 ? null : previous;
     }
   );
+
+  // Removed only after the new photo is safely saved.
+  if (orphanKey && !orphanKey.startsWith("data:") && isConfigured.storage) {
+    const orphanThumb = deriveThumbKey(orphanKey);
+    const [fullHead, thumbHead] = await Promise.all([
+      headObject("public", orphanKey),
+      headObject("public", orphanThumb),
+    ]);
+    await Promise.all([
+      deleteObject("public", orphanKey).catch(() => undefined),
+      deleteObject("public", orphanThumb).catch(() => undefined),
+    ]);
+    await withTenantTx({ tenantId, isPlatformAdmin: ctx.user.is_platform_admin }, (client) =>
+      client.query("UPDATE public.tenants SET storage_used_bytes = GREATEST(0, storage_used_bytes - $1) WHERE id = $2", [
+        fullHead.contentLength + thumbHead.contentLength,
+        tenantId,
+      ])
+    ).catch(() => undefined);
+  }
 
   revalidateTag(`sf:${ctx.tenant.id}`, "max");
   revalidatePath("/dashboard/storefront");

@@ -1,3 +1,4 @@
+import { getBranchScope } from "@/lib/auth/active-branch";
 import { TierLockOverlay } from "@/components/ui/kpi-grid";
 import { canAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
@@ -14,6 +15,7 @@ export default async function ReportsPage() {
     return <TierLockOverlay featureKey="data_exports_gst" />;
   }
 
+  const scope = await getBranchScope(ctx);
   const data = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
@@ -42,15 +44,16 @@ export default async function ReportsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-2xl font-bold text-slate-900">
+        <h1>
           GST Reports, Expenses &amp; Day-End Close
         </h1>
-        <p className="text-sm text-slate-600">
+        <p className="mt-0.5 text-[12.5px] text-[#77777d]">
           Export Sales/Purchase Registers, GSTR-1, HSN Summary, E-Way/IRP JSON, and reconcile daily cash.
         </p>
       </div>
       <ReportsAndDayEndClient
-        branches={ctx.branches}
+        key={scope.activeId}
+        branches={scope.ordered}
         expenses={data.expenses}
         dayCloses={data.closes}
         canExport={canAccess(ctx, "reports.export_gst").allowed}

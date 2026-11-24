@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { amountInWordsIndian } from "@/lib/gst/calculator";
 
@@ -21,12 +21,15 @@ const styles = StyleSheet.create({
 
 export interface InvoicePdfData {
   tenantName: string;
+  logoUrl?: string | null;
+  accentColor?: string | null;
   branchName: string;
   branchAddress?: string | null;
   branchGstin?: string | null;
   invoiceNumber: string;
   invoiceType: string;
   createdAt: string;
+  builtBy?: string | null;
   customerName: string;
   customerPhone?: string | null;
   customerGstin?: string | null;
@@ -51,47 +54,79 @@ export interface InvoicePdfData {
     line_total: number;
   }>;
   terms?: string;
+  showHsn?: boolean;
+  showGst?: boolean;
 }
 
 export async function renderInvoicePdfBuffer(data: InvoicePdfData): Promise<Buffer> {
+  const allowGst = data.showGst ?? true;
+  const allowHsn = data.showHsn ?? true;
+  const hasGst =
+    data.cgstAmount > 0 ||
+    data.sgstAmount > 0 ||
+    data.igstAmount > 0 ||
+    data.items.some((it) => Number(it.gst_rate || 0) > 0);
+  const showGstDetails = allowGst && hasGst;
+
   const docTitle =
     data.invoiceType === "return_credit_note"
       ? "CREDIT NOTE"
       : data.invoiceType === "estimate_bill_of_supply"
       ? "ESTIMATE / BILL OF SUPPLY"
-      : "TAX INVOICE";
+      : showGstDetails
+      ? "TAX INVOICE"
+      : "INVOICE";
 
   const doc = (
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>{data.tenantName}</Text>
-            <Text style={styles.subtitle}>{data.branchName}</Text>
-            {data.branchAddress && <Text style={styles.subtitle}>{data.branchAddress}</Text>}
-            {data.branchGstin && <Text style={styles.subtitle}>GSTIN: {data.branchGstin}</Text>}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, maxWidth: "65%" }}>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
+            {data.logoUrl ? (
+              <Image
+                src={data.logoUrl}
+                style={{ width: 52, height: 52, objectFit: "contain", borderRadius: 4 }}
+              />
+            ) : null}
+            <View>
+              <Text style={[styles.title, data.accentColor ? { color: data.accentColor } : {}]}>
+                {data.tenantName}
+              </Text>
+              <Text style={styles.subtitle}>{data.branchName}</Text>
+              {data.branchAddress && <Text style={styles.subtitle}>{data.branchAddress}</Text>}
+              {allowGst && data.branchGstin && <Text style={styles.subtitle}>GSTIN: {data.branchGstin}</Text>}
+            </View>
           </View>
           <View style={{ alignItems: "flex-end" }}>
-            <Text style={{ fontSize: 12, fontWeight: "bold" }}>{docTitle}</Text>
+            <Text style={{ fontSize: 12, fontWeight: "bold", color: data.accentColor || "#0f172a" }}>
+              {docTitle}
+            </Text>
             <Text style={styles.subtitle}>No: {data.invoiceNumber}</Text>
             <Text style={styles.subtitle}>
-              Date: {new Date(data.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}
+              Date:{" "}
+              {new Date(data.createdAt).toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
             </Text>
+            {data.builtBy && <Text style={styles.subtitle}>Built By: {data.builtBy}</Text>}
           </View>
         </View>
 
         <View style={{ marginBottom: 10 }}>
           <Text style={{ fontWeight: "bold" }}>Billed To: {data.customerName}</Text>
           {data.customerPhone && <Text style={styles.subtitle}>Phone: {data.customerPhone}</Text>}
-          {data.customerGstin && <Text style={styles.subtitle}>Customer GSTIN: {data.customerGstin}</Text>}
+          {allowGst && data.customerGstin && <Text style={styles.subtitle}>Customer GSTIN: {data.customerGstin}</Text>}
         </View>
 
         <View style={[styles.row, styles.th]}>
           <Text style={styles.colName}>Item</Text>
-          <Text style={styles.colSmall}>HSN</Text>
+          {allowHsn && <Text style={styles.colSmall}>HSN</Text>}
           <Text style={styles.colSmall}>Qty</Text>
           <Text style={styles.colSmall}>Rate</Text>
-          <Text style={styles.colSmall}>GST%</Text>
+          {showGstDetails && <Text style={styles.colSmall}>GST%</Text>}
           <Text style={styles.colSmall}>Total</Text>
         </View>
 
@@ -100,32 +135,38 @@ export async function renderInvoicePdfBuffer(data: InvoicePdfData): Promise<Buff
             <Text style={styles.colName}>
               {it.product_name} {it.sku ? `(${it.sku})` : ""}
             </Text>
-            <Text style={styles.colSmall}>{it.hsn_code || "—"}</Text>
+            {allowHsn && <Text style={styles.colSmall}>{it.hsn_code || "-"}</Text>}
             <Text style={styles.colSmall}>{it.qty}</Text>
             <Text style={styles.colSmall}>Rs.{Number(it.unit_price).toFixed(2)}</Text>
-            <Text style={styles.colSmall}>{it.gst_rate}%</Text>
+            {showGstDetails && (
+              <Text style={styles.colSmall}>
+                {Number(it.gst_rate || 0) > 0 ? `${it.gst_rate}%` : "-"}
+              </Text>
+            )}
             <Text style={styles.colSmall}>Rs.{Number(it.line_total).toFixed(2)}</Text>
           </View>
         ))}
 
         <View style={styles.totalsBox}>
-          <View style={styles.totalLine}>
-            <Text>Taxable Value</Text>
-            <Text>Rs.{Number(data.taxableAmount).toFixed(2)}</Text>
-          </View>
-          {data.cgstAmount > 0 && (
+          {showGstDetails && (
+            <View style={styles.totalLine}>
+              <Text>Taxable Value</Text>
+              <Text>Rs.{Number(data.taxableAmount).toFixed(2)}</Text>
+            </View>
+          )}
+          {showGstDetails && data.cgstAmount > 0 && (
             <View style={styles.totalLine}>
               <Text>CGST</Text>
               <Text>Rs.{Number(data.cgstAmount).toFixed(2)}</Text>
             </View>
           )}
-          {data.sgstAmount > 0 && (
+          {showGstDetails && data.sgstAmount > 0 && (
             <View style={styles.totalLine}>
               <Text>SGST</Text>
               <Text>Rs.{Number(data.sgstAmount).toFixed(2)}</Text>
             </View>
           )}
-          {data.igstAmount > 0 && (
+          {showGstDetails && data.igstAmount > 0 && (
             <View style={styles.totalLine}>
               <Text>IGST</Text>
               <Text>Rs.{Number(data.igstAmount).toFixed(2)}</Text>
@@ -158,13 +199,20 @@ export async function renderInvoicePdfBuffer(data: InvoicePdfData): Promise<Buff
 
 export interface CataloguePdfData {
   tenantName: string;
+  logoUrl?: string | null;
   title: string;
+  subtitle?: string;
   whatsapp: string;
+  catalogueUrl?: string;
   priceLabel: "Retail" | "Wholesale" | "Hide";
   items: Array<{
     name: string;
     modelCode: string;
     category?: string | null;
+    brand?: string | null;
+    description?: string | null;
+    isNewArrival?: boolean;
+    pcsPerCarton?: number | null;
     imageUrl?: string | null;
     price?: number | null;
     sizes?: string;
@@ -172,36 +220,302 @@ export interface CataloguePdfData {
 }
 
 export async function renderCataloguePdfBuffer(data: CataloguePdfData): Promise<Buffer> {
+  const monogram =
+    data.tenantName
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() ?? "")
+      .join("") || "S";
+
+  const cleanAscii = (v: string) =>
+    v.replace(/[\u2013\u2014]/g, "-").replace(/\u2022/g, "|").replace(/\u20b9/g, "Rs.");
+
   const doc = (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <View style={{ backgroundColor: "#0f172a", padding: 16, borderRadius: 6, marginBottom: 14 }}>
-          <Text style={{ fontSize: 18, fontWeight: "bold", color: "#ffffff" }}>{data.tenantName}</Text>
-          <Text style={{ fontSize: 11, color: "#38bdf8", marginTop: 4 }}>{data.title}</Text>
-          {data.whatsapp && (
-            <Text style={{ fontSize: 9, color: "#cbd5e1", marginTop: 4 }}>
-              Order / Enquiry on WhatsApp: +{data.whatsapp}
+      <Page
+        size="A4"
+        style={{
+          paddingTop: 22,
+          paddingBottom: 34,
+          paddingHorizontal: 22,
+          fontSize: 9,
+          fontFamily: "Helvetica",
+          color: "#171717",
+          backgroundColor: "#f4f7fb",
+        }}
+      >
+        {/* Frosted-Glass Inspired Storefront Header Card */}
+        <View
+          style={{
+            backgroundColor: "#ffffff",
+            borderWidth: 1,
+            borderColor: "#dbe4f0",
+            borderRadius: 12,
+            padding: 14,
+            marginBottom: 14,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1, paddingRight: 10 }}>
+            {data.logoUrl ? (
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: "#e2e8f0",
+                  backgroundColor: "#ffffff",
+                  padding: 3,
+                  marginRight: 11,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                {/* eslint-disable-next-line jsx-a11y/alt-text */}
+                <Image src={data.logoUrl} style={{ width: 36, height: 36, objectFit: "contain" }} />
+              </View>
+            ) : (
+              <View
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 10,
+                  backgroundColor: "#171717",
+                  marginRight: 11,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: "bold", color: "#ffffff" }}>{monogram}</Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: "bold", color: "#171717" }}>
+                {cleanAscii(data.tenantName)}
+              </Text>
+              <Text style={{ fontSize: 9.5, fontWeight: "bold", color: "#334155", marginTop: 2 }}>
+                {cleanAscii(data.title)}
+              </Text>
+              {data.subtitle ? (
+                <Text style={{ fontSize: 8, color: "#64748b", marginTop: 2 }}>
+                  {cleanAscii(data.subtitle)}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+
+          <View
+            style={{
+              backgroundColor: "#f8fafc",
+              borderWidth: 1,
+              borderColor: "#e2e8f0",
+              borderRadius: 9,
+              paddingVertical: 7,
+              paddingHorizontal: 10,
+              alignItems: "flex-end",
+            }}
+          >
+            <Text style={{ fontSize: 7.5, fontWeight: "bold", color: "#64748b", textTransform: "uppercase" }}>
+              {data.items.length} Products{data.priceLabel !== "Hide" ? ` | ${data.priceLabel} Prices` : ""}
             </Text>
-          )}
+            {data.whatsapp ? (
+              <Text style={{ fontSize: 8.5, fontWeight: "bold", color: "#0f766e", marginTop: 3 }}>
+                WhatsApp: +{data.whatsapp.replace(/\D/g, "")}
+              </Text>
+            ) : null}
+            {data.catalogueUrl ? (
+              <Text style={{ fontSize: 7.5, color: "#475569", marginTop: 2 }}>
+                {data.catalogueUrl}
+              </Text>
+            ) : null}
+          </View>
         </View>
 
-        <View style={styles.grid}>
-          {data.items.slice(0, 150).map((it, idx) => (
-            <View key={idx} style={styles.card} wrap={false}>
-              {/* eslint-disable-next-line jsx-a11y/alt-text */}
-              {it.imageUrl && <Image src={it.imageUrl} style={styles.thumb} />}
-              <Text style={{ fontWeight: "bold", fontSize: 10 }}>{it.name}</Text>
-              <Text style={styles.subtitle}>
-                Code: {it.modelCode} {it.category ? `• ${it.category}` : ""}
-              </Text>
-              {it.sizes && <Text style={{ fontSize: 8, color: "#334155", marginTop: 2 }}>{it.sizes}</Text>}
-              {data.priceLabel !== "Hide" && it.price != null && (
-                <Text style={{ fontSize: 11, fontWeight: "bold", color: "#0284c7", marginTop: 4 }}>
-                  Rs.{Number(it.price).toLocaleString("en-IN")}
+        {/* 2-Column Product Cards Grid matching Storefront Cards */}
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+          }}
+        >
+          {data.items.slice(0, 150).map((it, idx) => {
+            const metaParts = [it.modelCode, it.category || "", it.brand || ""].filter(Boolean);
+            const shortDesc =
+              it.description && it.description.trim().length > 0
+                ? it.description.trim().slice(0, 88) + (it.description.trim().length > 88 ? "..." : "")
+                : null;
+
+            return (
+              <View
+                key={idx}
+                wrap={false}
+                style={{
+                  width: "48.8%",
+                  backgroundColor: "#ffffff",
+                  borderWidth: 1,
+                  borderColor: "#e2e8f0",
+                  borderRadius: 12,
+                  padding: 10,
+                  marginBottom: 11,
+                }}
+              >
+                {/* Image Box */}
+                <View
+                  style={{
+                    height: 128,
+                    backgroundColor: "#f8fafc",
+                    borderWidth: 1,
+                    borderColor: "#eef2f6",
+                    borderRadius: 9,
+                    marginBottom: 8,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    position: "relative",
+                    padding: 6,
+                  }}
+                >
+                  {it.imageUrl ? (
+                    // eslint-disable-next-line jsx-a11y/alt-text
+                    <Image
+                      src={it.imageUrl}
+                      style={{
+                        width: "100%",
+                        height: 114,
+                        objectFit: "contain",
+                      }}
+                    />
+                  ) : (
+                    <Text style={{ fontSize: 10, fontWeight: "bold", color: "#94a3b8" }}>
+                      {cleanAscii(it.modelCode || it.name.slice(0, 12))}
+                    </Text>
+                  )}
+
+                  {it.isNewArrival && (
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: 6,
+                        left: 6,
+                        backgroundColor: "#171717",
+                        borderRadius: 99,
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                      }}
+                    >
+                      <Text style={{ fontSize: 6.5, fontWeight: "bold", color: "#ffffff" }}>NEW</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Product Title & Code */}
+                <Text style={{ fontSize: 10.5, fontWeight: "bold", color: "#171717" }}>
+                  {cleanAscii(it.name)}
                 </Text>
-              )}
-            </View>
-          ))}
+                <Text style={{ fontSize: 7.8, color: "#64748b", marginTop: 2 }}>
+                  {cleanAscii(metaParts.join("  |  "))}
+                </Text>
+
+                {/* Sizes & Carton Info */}
+                {(it.sizes || it.pcsPerCarton) && (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 5 }}>
+                    {it.sizes && (
+                      <View
+                        style={{
+                          backgroundColor: "#f1f5f9",
+                          borderRadius: 5,
+                          paddingHorizontal: 5,
+                          paddingVertical: 2,
+                        }}
+                      >
+                        <Text style={{ fontSize: 7.2, color: "#334155" }}>
+                          Sizes: {cleanAscii(it.sizes)}
+                        </Text>
+                      </View>
+                    )}
+                    {it.pcsPerCarton ? (
+                      <View
+                        style={{
+                          backgroundColor: "#eff6ff",
+                          borderRadius: 5,
+                          paddingHorizontal: 5,
+                          paddingVertical: 2,
+                        }}
+                      >
+                        <Text style={{ fontSize: 7.2, color: "#1d4ed8", fontWeight: "bold" }}>
+                          {it.pcsPerCarton} pcs / carton
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                )}
+
+                {shortDesc && (
+                  <Text style={{ fontSize: 7.5, color: "#64748b", marginTop: 4, lineHeight: 1.3 }}>
+                    {cleanAscii(shortDesc)}
+                  </Text>
+                )}
+
+                {/* Price Footer */}
+                {data.priceLabel !== "Hide" && it.price != null && (
+                  <View
+                    style={{
+                      marginTop: 7,
+                      paddingTop: 6,
+                      borderTopWidth: 1,
+                      borderTopColor: "#f1f5f9",
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: "bold", color: "#171717" }}>
+                      Rs. {Number(it.price).toLocaleString("en-IN")}
+                    </Text>
+                    <View
+                      style={{
+                        backgroundColor: "#f1f5f9",
+                        borderRadius: 99,
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                      }}
+                    >
+                      <Text style={{ fontSize: 7, fontWeight: "bold", color: "#475569" }}>
+                        {data.priceLabel}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Fixed Page Footer */}
+        <View
+          fixed
+          style={{
+            position: "absolute",
+            bottom: 12,
+            left: 22,
+            right: 22,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            borderTopWidth: 1,
+            borderTopColor: "#dbe4f0",
+            paddingTop: 5,
+          }}
+        >
+          <Text style={{ fontSize: 7.5, color: "#64748b" }}>
+            {cleanAscii(data.tenantName)} | Official Product Catalogue
+          </Text>
+          <Text
+            style={{ fontSize: 7.5, color: "#64748b" }}
+            render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+          />
         </View>
       </Page>
     </Document>
@@ -326,5 +640,279 @@ export async function renderChallanPdfBuffer(data: ChallanPdfData): Promise<Buff
       </Page>
     </Document>
   );
+  return Buffer.from(await renderToBuffer(doc));
+}
+
+export interface PartyLedgerPdfData {
+  tenantName: string;
+  logoUrl?: string | null;
+  partyName: string;
+  partyType: "customer" | "supplier";
+  partyPhone?: string | null;
+  partyGstin?: string | null;
+  partyAddress?: string | null;
+  itemColumns: Array<{ key: string; label: string }>;
+  headerFields: Array<{ key: string; label: string }>;
+  rows: Array<{
+    entryDate: string;
+    voucherNo: string;
+    particulars: string;
+    debit: number;
+    credit: number;
+    balance: number;
+    extraFields: Record<string, string>;
+    items: Array<Record<string, string | number | undefined>>;
+    builtBy?: string | null;
+  }>;
+  totalDebit: number;
+  totalCredit: number;
+  closingBalance: number;
+}
+
+export async function renderPartyLedgerPdfBuffer(data: PartyLedgerPdfData): Promise<Buffer> {
+  const fmtMoney = (n: number) =>
+    Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const doc = (
+    <Document>
+      <Page size="A4" style={{ padding: 20, fontSize: 8, fontFamily: "Helvetica", color: "#0f172a" }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 1.5, borderBottomColor: "#0f172a", paddingBottom: 8, marginBottom: 10 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, maxWidth: "65%" }}>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
+            {data.logoUrl ? (
+              <Image src={data.logoUrl} style={{ width: 42, height: 42, objectFit: "contain" }} />
+            ) : null}
+            <View>
+              <Text style={{ fontSize: 14, fontWeight: "bold" }}>{data.tenantName}</Text>
+              <Text style={{ fontSize: 8.5, color: "#475569", marginTop: 1 }}>
+                {data.partyType === "supplier" ? "SUPPLIER LEDGER STATEMENT" : "CUSTOMER LEDGER STATEMENT"}
+              </Text>
+            </View>
+          </View>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={{ fontSize: 11, fontWeight: "bold" }}>{data.partyName}</Text>
+            {data.partyPhone ? <Text style={{ fontSize: 8, color: "#475569" }}>Ph: {data.partyPhone}</Text> : null}
+            {data.partyGstin ? <Text style={{ fontSize: 8, color: "#475569" }}>GSTIN: {data.partyGstin}</Text> : null}
+            {data.partyAddress ? <Text style={{ fontSize: 7.5, color: "#64748b" }}>{data.partyAddress}</Text> : null}
+          </View>
+        </View>
+
+        <View style={{ flexDirection: "row", backgroundColor: "#0f172a", color: "#ffffff", paddingVertical: 5, paddingHorizontal: 4, fontWeight: "bold", fontSize: 7.5 }}>
+          <Text style={{ width: "15%" }}>Date &amp; Time</Text>
+          <Text style={{ width: "9%" }}>Ch./Voc</Text>
+          <Text style={{ width: "30%" }}>Particulars</Text>
+          <Text style={{ width: "12%", textAlign: "right" }}>Debit</Text>
+          <Text style={{ width: "12%", textAlign: "right" }}>Credit</Text>
+          <Text style={{ width: "13%", textAlign: "right" }}>Balance</Text>
+          <Text style={{ width: "9%", textAlign: "right" }}>Built By</Text>
+        </View>
+
+        {data.rows.map((r, idx) => {
+          const extras = data.headerFields
+            .map((f) => (r.extraFields[f.key] ? `${f.label}: ${r.extraFields[f.key]}` : null))
+            .filter(Boolean)
+            .join("  |  ");
+          return (
+            <View key={idx} style={{ borderBottomWidth: 0.5, borderBottomColor: "#cbd5e1", paddingVertical: 4 }} wrap={false}>
+              <View style={{ flexDirection: "row", paddingHorizontal: 4 }}>
+                <Text style={{ width: "15%", fontSize: 7 }}>
+                  {new Date(r.entryDate).toLocaleString("en-IN", {
+                    timeZone: "Asia/Kolkata",
+                    day: "2-digit",
+                    month: "short",
+                    year: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
+                <Text style={{ width: "9%", fontWeight: "bold" }}>{r.voucherNo}</Text>
+                <View style={{ width: "30%", paddingRight: 4 }}>
+                  <Text>{r.particulars}</Text>
+                  {extras ? <Text style={{ fontSize: 7, color: "#475569", marginTop: 1 }}>{extras}</Text> : null}
+                </View>
+                <Text style={{ width: "12%", textAlign: "right" }}>{r.debit > 0 ? fmtMoney(r.debit) : ""}</Text>
+                <Text style={{ width: "12%", textAlign: "right" }}>{r.credit > 0 ? fmtMoney(r.credit) : ""}</Text>
+                <Text style={{ width: "13%", textAlign: "right", fontWeight: "bold" }}>
+                  {fmtMoney(Math.abs(r.balance))} {r.balance >= 0 ? "Dr" : "Cr"}
+                </Text>
+                <Text style={{ width: "9%", textAlign: "right", fontSize: 6.5, color: "#475569" }}>
+                  {r.builtBy || "-"}
+                </Text>
+              </View>
+
+              {r.items.length > 0 && (
+                <View style={{ marginTop: 4, marginLeft: 18, marginRight: 10, borderWidth: 0.75, borderColor: "#94a3b8", borderRadius: 2 }}>
+                  <View style={{ flexDirection: "row", backgroundColor: "#f1f5f9", borderBottomWidth: 0.75, borderBottomColor: "#94a3b8", paddingVertical: 3, paddingHorizontal: 4, fontWeight: "bold", fontSize: 7 }}>
+                    <Text style={{ flex: 2.2 }}>Item</Text>
+                    {data.itemColumns.map((c) => (
+                      <Text key={c.key} style={{ flex: 1, textAlign: "right" }}>
+                        {c.label}
+                      </Text>
+                    ))}
+                    <Text style={{ flex: 1.3, textAlign: "right" }}>Amount</Text>
+                  </View>
+                  {r.items.map((it, iIdx) => (
+                    <View key={iIdx} style={{ flexDirection: "row", borderBottomWidth: iIdx < r.items.length - 1 ? 0.5 : 0, borderBottomColor: "#e2e8f0", paddingVertical: 2.5, paddingHorizontal: 4, fontSize: 7 }}>
+                      <Text style={{ flex: 2.2 }}>{String(it.item ?? "")}</Text>
+                      {data.itemColumns.map((c) => (
+                        <Text key={c.key} style={{ flex: 1, textAlign: "right" }}>
+                          {it[c.key] != null && String(it[c.key]).length > 0 ? String(it[c.key]) : "-"}
+                        </Text>
+                      ))}
+                      <Text style={{ flex: 1.3, textAlign: "right", fontWeight: "bold" }}>
+                        {fmtMoney(Number(it.amount || 0))}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        })}
+
+        <View style={{ flexDirection: "row", borderTopWidth: 1.5, borderTopColor: "#0f172a", backgroundColor: "#f8fafc", paddingVertical: 6, paddingHorizontal: 4, marginTop: 6, fontWeight: "bold", fontSize: 8.5 }}>
+          <Text style={{ width: "54%", textAlign: "right", paddingRight: 8 }}>TOTAL / CLOSING BALANCE:</Text>
+          <Text style={{ width: "12%", textAlign: "right" }}>{fmtMoney(data.totalDebit)}</Text>
+          <Text style={{ width: "12%", textAlign: "right" }}>{fmtMoney(data.totalCredit)}</Text>
+          <Text style={{ width: "22%", textAlign: "right" }}>
+            Rs.{fmtMoney(Math.abs(data.closingBalance))} {data.closingBalance >= 0 ? "Dr" : "Cr"}
+          </Text>
+        </View>
+      </Page>
+    </Document>
+  );
+
+  return Buffer.from(await renderToBuffer(doc));
+}
+
+export interface StockValuationPdfData {
+  tenantName: string;
+  logoUrl?: string | null;
+  branchScopeLabel: string;
+  generatedAt: string;
+  showCostAndProfit: boolean;
+  summary: {
+    totalProducts: number;
+    totalUnits: number;
+    totalStockCost: number;
+    totalRetailValue: number;
+    totalWholesaleValue: number;
+    expectedRetailProfit: number;
+    expectedWholesaleProfit: number;
+    retailMarginPct: number;
+    wholesaleMarginPct: number;
+  };
+  products: Array<{
+    model_code: string;
+    product_name: string;
+    category: string;
+    uom: string;
+    stock_qty: number;
+    unit_cost: number;
+    unit_retail: number;
+    unit_wholesale: number;
+    total_cost: number;
+    total_retail_value: number;
+    total_wholesale_value: number;
+    expected_retail_profit: number;
+    expected_wholesale_profit: number;
+  }>;
+}
+
+export async function renderStockValuationPdfBuffer(data: StockValuationPdfData): Promise<Buffer> {
+  const fmt = (n: number) =>
+    `Rs.${Math.round(Number(n || 0)).toLocaleString("en-IN")}`;
+
+  const doc = (
+    <Document>
+      <Page size="A4" orientation="landscape" style={{ padding: 20, fontSize: 8, fontFamily: "Helvetica", color: "#0f172a" }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 1.5, borderBottomColor: "#0f172a", paddingBottom: 8, marginBottom: 10 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
+            {data.logoUrl ? (
+              <Image src={data.logoUrl} style={{ width: 38, height: 38, objectFit: "contain" }} />
+            ) : null}
+            <View>
+              <Text style={{ fontSize: 14, fontWeight: "bold" }}>{data.tenantName}</Text>
+              <Text style={{ fontSize: 8.5, color: "#475569" }}>STOCK VALUATION &amp; EXPECTED OUTCOME REPORT</Text>
+            </View>
+          </View>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={{ fontSize: 8.5, fontWeight: "bold" }}>Scope: {data.branchScopeLabel}</Text>
+            <Text style={{ fontSize: 7.5, color: "#475569" }}>Generated: {data.generatedAt}</Text>
+          </View>
+        </View>
+
+        <View style={{ flexDirection: "row", gap: 8, marginBottom: 10 }}>
+          <View style={{ flex: 1, backgroundColor: "#f8fafc", borderWidth: 0.75, borderColor: "#cbd5e1", borderRadius: 4, padding: 6 }}>
+            <Text style={{ fontSize: 7, color: "#475569" }}>TOTAL STOCK</Text>
+            <Text style={{ fontSize: 11, fontWeight: "bold", marginTop: 2 }}>{data.summary.totalUnits.toLocaleString("en-IN")} units</Text>
+            <Text style={{ fontSize: 7, color: "#64748b" }}>{data.summary.totalProducts} products</Text>
+          </View>
+          {data.showCostAndProfit && (
+            <View style={{ flex: 1, backgroundColor: "#f8fafc", borderWidth: 0.75, borderColor: "#cbd5e1", borderRadius: 4, padding: 6 }}>
+              <Text style={{ fontSize: 7, color: "#475569" }}>TOTAL STOCK COST</Text>
+              <Text style={{ fontSize: 11, fontWeight: "bold", marginTop: 2 }}>{fmt(data.summary.totalStockCost)}</Text>
+              <Text style={{ fontSize: 7, color: "#64748b" }}>Our total investment</Text>
+            </View>
+          )}
+          <View style={{ flex: 1, backgroundColor: "#f0fdf4", borderWidth: 0.75, borderColor: "#86efac", borderRadius: 4, padding: 6 }}>
+            <Text style={{ fontSize: 7, color: "#166534" }}>RETAIL SALE VALUE</Text>
+            <Text style={{ fontSize: 11, fontWeight: "bold", marginTop: 2, color: "#14532d" }}>{fmt(data.summary.totalRetailValue)}</Text>
+            {data.showCostAndProfit && (
+              <Text style={{ fontSize: 7, color: "#15803d" }}>
+                Profit: {fmt(data.summary.expectedRetailProfit)} ({data.summary.retailMarginPct.toFixed(1)}%)
+              </Text>
+            )}
+          </View>
+          <View style={{ flex: 1, backgroundColor: "#f0f9ff", borderWidth: 0.75, borderColor: "#7dd3fc", borderRadius: 4, padding: 6 }}>
+            <Text style={{ fontSize: 7, color: "#075985" }}>WHOLESALE SALE VALUE</Text>
+            <Text style={{ fontSize: 11, fontWeight: "bold", marginTop: 2, color: "#0c4a6e" }}>{fmt(data.summary.totalWholesaleValue)}</Text>
+            {data.showCostAndProfit && (
+              <Text style={{ fontSize: 7, color: "#0369a1" }}>
+                Profit: {fmt(data.summary.expectedWholesaleProfit)} ({data.summary.wholesaleMarginPct.toFixed(1)}%)
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={{ flexDirection: "row", backgroundColor: "#0f172a", color: "#ffffff", paddingVertical: 5, paddingHorizontal: 4, fontWeight: "bold", fontSize: 7.5 }}>
+          <Text style={{ width: "22%" }}>Product / Code</Text>
+          <Text style={{ width: "10%" }}>Category</Text>
+          <Text style={{ width: "8%", textAlign: "right" }}>Stock</Text>
+          {data.showCostAndProfit && <Text style={{ width: "9%", textAlign: "right" }}>Unit Cost</Text>}
+          <Text style={{ width: "9%", textAlign: "right" }}>Retail</Text>
+          <Text style={{ width: "9%", textAlign: "right" }}>Wholesale</Text>
+          {data.showCostAndProfit && <Text style={{ width: "11%", textAlign: "right" }}>Total Cost</Text>}
+          <Text style={{ width: "11%", textAlign: "right" }}>Retail Val</Text>
+          <Text style={{ width: "11%", textAlign: "right" }}>Wholesale Val</Text>
+        </View>
+
+        {data.products.map((p, idx) => (
+          <View key={idx} style={{ flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#e2e8f0", paddingVertical: 3.5, paddingHorizontal: 4, fontSize: 7.5 }} wrap={false}>
+            <Text style={{ width: "22%" }}>{p.product_name} ({p.model_code})</Text>
+            <Text style={{ width: "10%", color: "#475569" }}>{p.category}</Text>
+            <Text style={{ width: "8%", textAlign: "right", fontWeight: "bold" }}>{p.stock_qty} {p.uom}</Text>
+            {data.showCostAndProfit && <Text style={{ width: "9%", textAlign: "right" }}>{fmt(p.unit_cost)}</Text>}
+            <Text style={{ width: "9%", textAlign: "right" }}>{fmt(p.unit_retail)}</Text>
+            <Text style={{ width: "9%", textAlign: "right" }}>{fmt(p.unit_wholesale)}</Text>
+            {data.showCostAndProfit && <Text style={{ width: "11%", textAlign: "right" }}>{fmt(p.total_cost)}</Text>}
+            <Text style={{ width: "11%", textAlign: "right", fontWeight: "bold" }}>{fmt(p.total_retail_value)}</Text>
+            <Text style={{ width: "11%", textAlign: "right" }}>{fmt(p.total_wholesale_value)}</Text>
+          </View>
+        ))}
+
+        <View style={{ flexDirection: "row", borderTopWidth: 1.5, borderTopColor: "#0f172a", backgroundColor: "#f8fafc", paddingVertical: 5, paddingHorizontal: 4, marginTop: 4, fontWeight: "bold", fontSize: 8 }}>
+          <Text style={{ width: "32%" }}>GRAND TOTAL ({data.summary.totalProducts} products)</Text>
+          <Text style={{ width: "8%", textAlign: "right" }}>{data.summary.totalUnits}</Text>
+          <Text style={{ width: data.showCostAndProfit ? "27%" : "18%" }} />
+          {data.showCostAndProfit && <Text style={{ width: "11%", textAlign: "right" }}>{fmt(data.summary.totalStockCost)}</Text>}
+          <Text style={{ width: "11%", textAlign: "right" }}>{fmt(data.summary.totalRetailValue)}</Text>
+          <Text style={{ width: "11%", textAlign: "right" }}>{fmt(data.summary.totalWholesaleValue)}</Text>
+        </View>
+      </Page>
+    </Document>
+  );
+
   return Buffer.from(await renderToBuffer(doc));
 }

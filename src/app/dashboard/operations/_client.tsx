@@ -3,21 +3,16 @@
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, Pencil, Plus, Printer, ShoppingBag, Trash2, Truck } from "lucide-react";
+import { CheckCircle2, Package, Plus, Printer, ShoppingBag, Trash2, Truck } from "lucide-react";
+import { Paged } from "@/components/ui/pagination";
 import { toast } from "sonner";
+import { InlineRowsSkeleton } from "@/components/ui/page-skeletons";
 import {
-  advanceProductionBatchStageAction,
   createAndDispatchTransferAction,
-  createSupplierAction,
-  deleteSupplierAction,
   getTransferItemsAction,
   receiveTransferAction,
-  recordProductionBatchAction,
   recordPurchaseAction,
-  recordSupplierPaymentAction,
-  updateSupplierAction,
 } from "@/actions/inventory";
-import { SizeRunQuickFill } from "@/components/ui/dynamic-fields";
 import {
   Alert,
   Badge,
@@ -31,7 +26,7 @@ import {
   Select,
   Tabs,
 } from "@/components/ui/primitives";
-import type { BranchRow, PaymentMode, ProductionStage, RatioPreset } from "@/types/database";
+import type { BranchRow, RatioPreset } from "@/types/database";
 
 interface VariantOpt {
   id: string;
@@ -47,10 +42,7 @@ export function OperationsHubClient({
   branches,
   variants,
   suppliers,
-  batches,
   transfers,
-  ratioPresets = [],
-  prodEnabled,
   suppliersEnabled,
   transfersEnabled,
   canDispatch,
@@ -59,155 +51,159 @@ export function OperationsHubClient({
   branches: BranchRow[];
   variants: VariantOpt[];
   suppliers: Array<{ id: string; name: string; phone: string | null; material_type: string | null; current_due: string }>;
-  batches: Array<{ id: string; batch_number: string; stage: string; karigar_unit_name: string | null; total_units: string; is_stocked?: boolean; created_at: string }>;
+  batches?: Array<{ id: string; batch_number: string; stage: string; karigar_unit_name: string | null; total_units: string; is_stocked?: boolean; created_at: string }>;
   transfers: Array<{ id: string; doc_type: string; doc_number: string; from_name: string; to_name: string; status: string; transfer_value: string; igst_amount: string; created_at: string }>;
   ratioPresets?: RatioPreset[];
-  prodEnabled: boolean;
+  prodEnabled?: boolean;
   suppliersEnabled: boolean;
   transfersEnabled: boolean;
   canDispatch: boolean;
   canReceive: boolean;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState(transfersEnabled ? "transfers" : "production");
+  const [tab, setTab] = useState(transfersEnabled ? "transfers" : "purchase");
 
+  // Group variants by product model for easy 2-step selection (Pick Model -> Pick Size/Colour)
   const models = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const v of variants) if (!m.has(v.model_code)) m.set(v.model_code, v.product_name);
-    return Array.from(m.entries()).map(([code, name]) => ({ code, name }));
+    const m = new Map<string, { code: string; name: string; items: VariantOpt[] }>();
+    for (const v of variants) {
+      const existing = m.get(v.model_code);
+      if (existing) {
+        existing.items.push(v);
+      } else {
+        m.set(v.model_code, { code: v.model_code, name: v.product_name, items: [v] });
+      }
+    }
+    return Array.from(m.values());
   }, [variants]);
 
-  // Production multi-item state
-  const [prodBranch, setProdBranch] = useState(branches.find((b) => b.type === "factory")?.id ?? branches[0]?.id ?? "");
-  const [prodStage, setProdStage] = useState<ProductionStage>("packed");
-  const [karigar, setKarigar] = useState("");
-  const [prodVariant, setProdVariant] = useState(variants[0]?.id ?? "");
-  const [prodQty, setProdQty] = useState(12);
-  const [prodCost, setProdCost] = useState(900);
-  const [prodModelForRatio, setProdModelForRatio] = useState(models[0]?.code ?? "");
-  const [prodItems, setProdItems] = useState<Array<{ variant_id: string; label: string; qty: number; unit_cost: number }>>([]);
-
-  // Supplier + Purchase Order state
-  const [editSupId, setEditSupId] = useState<string | null>(null);
-  const [supName, setSupName] = useState("");
-  const [supPhone, setSupPhone] = useState("");
-  const [supMat, setSupMat] = useState("");
-  const [paySup, setPaySup] = useState<{ id: string; name: string; due: number } | null>(null);
-  const [payAmt, setPayAmt] = useState(0);
-  const [payMode, setPayMode] = useState<PaymentMode>("bank_transfer");
-
-  const [poOpen, setPoOpen] = useState(false);
-  const [poSupplierId, setPoSupplierId] = useState(suppliers[0]?.id ?? "");
-  const [poBranchId, setPoBranchId] = useState(branches[0]?.id ?? "");
-  const [poType, setPoType] = useState<"finished_goods" | "raw_material">("finished_goods");
-  const [poBillNo, setPoBillNo] = useState("");
-  const [poVariantId, setPoVariantId] = useState(variants[0]?.id ?? "");
-  const [poDesc, setPoDesc] = useState("");
-  const [poQty, setPoQty] = useState(10);
-  const [poUnitCost, setPoUnitCost] = useState(500);
-  const [poGstRate, setPoGstRate] = useState(5);
-  const [poPaid, setPoPaid] = useState(0);
-
-  // Transfer multi-item + Receive modal state
-  const [fromBranch, setFromBranch] = useState(branches.find((b) => b.type === "factory")?.id ?? branches[0]?.id ?? "");
-  const [toBranch, setToBranch] = useState(branches.find((b) => b.type === "retail")?.id ?? branches[1]?.id ?? "");
-  const [trVariant, setTrVariant] = useState(variants[0]?.id ?? "");
-  const [trQty, setTrQty] = useState(12);
-  const [trModelForRatio, setTrModelForRatio] = useState(models[0]?.code ?? "");
+  // Send Stock (Branch Transfer) state
+  const [fromBranch, setFromBranch] = useState(branches[0]?.id ?? "");
+  const [toBranch, setToBranch] = useState(branches[1]?.id ?? branches[0]?.id ?? "");
+  const [selectedModel, setSelectedModel] = useState(models[0]?.code ?? "");
+  const modelVariants = useMemo(
+    () => models.find((m) => m.code === selectedModel)?.items ?? variants,
+    [models, selectedModel, variants]
+  );
+  const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>(
+    models[0]?.items[0] ? [models[0].items[0].id] : variants[0] ? [variants[0].id] : []
+  );
+  const [trQtyMode, setTrQtyMode] = useState<"cartons" | "pairs">("cartons");
+  const [trQtyInput, setTrQtyInput] = useState("1");
+  const [trCartonPack, setTrCartonPack] = useState("20");
   const [trItems, setTrItems] = useState<
-    Array<{ variant_id: string; label: string; qty_sent: number; transfer_price: number; gst_rate: number }>
+    Array<{
+      variant_id: string;
+      label: string;
+      sublabel: string;
+      qty_sent: number;
+      unitSummary: string;
+      transfer_price: number;
+      gst_rate: number;
+    }>
   >([]);
   const [transport, setTransport] = useState("");
   const [lrNo, setLrNo] = useState("");
   const [vehicleNo, setVehicleNo] = useState("");
-  const [ewayBillNo, setEwayBillNo] = useState("");
+  const [sending, setSending] = useState(false);
 
+  // Receive Stock modal state
   const [receiveTarget, setReceiveTarget] = useState<{ id: string; doc_number: string } | null>(null);
   const [receiveLoading, setReceiveLoading] = useState(false);
   const [receiveRows, setReceiveRows] = useState<
     Array<{ variant_id: string; sku: string; product_name: string; qty_sent: number; qty_received: number; discrepancy_note: string }>
   >([]);
 
-  const fromB = branches.find((b) => b.id === fromBranch);
-  const toB = branches.find((b) => b.id === toBranch);
-  const isInterGstinTransfer =
-    Boolean(fromB?.gstin) && Boolean(toB?.gstin) && fromB!.gstin!.toUpperCase() !== toB!.gstin!.toUpperCase();
+  // Simple Record Purchase Bill state
+  const [poSupplierId, setPoSupplierId] = useState(suppliers[0]?.id ?? "");
+  const [poBranchId, setPoBranchId] = useState(branches[0]?.id ?? "");
+  const [poBillNo, setPoBillNo] = useState("");
+  const [poVariantId, setPoVariantId] = useState(variants[0]?.id ?? "");
+  const [poQtyMode, setPoQtyMode] = useState<"cartons" | "pairs">("cartons");
+  const [poQtyInput, setPoQtyInput] = useState("5");
+  const [poCartonPack, setPoCartonPack] = useState("20");
+  const [poUnitCost, setPoUnitCost] = useState("500");
+  const [poPaid, setPoPaid] = useState("0");
+  const [poSaving, setPoSaving] = useState(false);
 
-  const estimatedTransferValue = trItems.reduce((s, it) => s + it.qty_sent * it.transfer_price, 0);
+  const selectedVariantsForModel = useMemo(
+    () => modelVariants.filter((v) => selectedVariantIds.includes(v.id)),
+    [modelVariants, selectedVariantIds]
+  );
 
-  const applyRatioToList = (
-    modelCode: string,
-    ratios: Record<string, number>,
-    mode: "transfer" | "production"
-  ) => {
-    const matching = variants.filter((v) => v.model_code === modelCode);
-    let added = 0;
-    for (const [sizeKey, qty] of Object.entries(ratios)) {
-      if (qty <= 0) continue;
-      const hit = matching.find((v) =>
-        Object.values(v.attributes).some((av) => av.toLowerCase() === sizeKey.toLowerCase())
-      );
-      if (!hit) continue;
-      added += qty;
-      if (mode === "transfer") {
-        setTrItems((prev) => {
-          const idx = prev.findIndex((x) => x.variant_id === hit.id);
-          if (idx >= 0) {
-            const n = [...prev];
-            n[idx] = { ...n[idx], qty_sent: n[idx].qty_sent + qty };
-            return n;
-          }
-          return [
-            ...prev,
-            {
-              variant_id: hit.id,
-              label: `${hit.product_name} (${hit.sku})`,
-              qty_sent: qty,
-              transfer_price: Number(hit.avg_cost || 0),
-              gst_rate: Number(hit.gst_rate || 5),
-            },
-          ];
-        });
-      } else {
-        setProdItems((prev) => {
-          const idx = prev.findIndex((x) => x.variant_id === hit.id);
-          if (idx >= 0) {
-            const n = [...prev];
-            n[idx] = { ...n[idx], qty: n[idx].qty + qty };
-            return n;
-          }
-          return [
-            ...prev,
-            {
-              variant_id: hit.id,
-              label: `${hit.product_name} (${hit.sku})`,
-              qty,
-              unit_cost: prodCost || Number(hit.avg_cost || 0),
-            },
-          ];
-        });
-      }
+  const toggleVariantSelection = (variantId: string) => {
+    setSelectedVariantIds((prev) =>
+      prev.includes(variantId) ? prev.filter((id) => id !== variantId) : [...prev, variantId]
+    );
+  };
+
+  const computedTrQty =
+    trQtyMode === "cartons"
+      ? Math.max(0, Number(trQtyInput || 0)) * Math.max(1, Number(trCartonPack || 1))
+      : Math.max(0, Number(trQtyInput || 0));
+
+  const addSelectedTransferItems = () => {
+    const picked = selectedVariantsForModel;
+    if (picked.length === 0) {
+      toast.error("Please select at least one size / colour.");
+      return;
     }
-    toast.success(added > 0 ? `Filled ${added} unit(s) across sizes.` : "No matching size variants found.");
+    if (computedTrQty <= 0) {
+      toast.error("Please enter a valid quantity.");
+      return;
+    }
+
+    const unitSummary =
+      trQtyMode === "cartons"
+        ? `${Number(trQtyInput)} ctn × ${Number(trCartonPack)} = ${computedTrQty} pairs`
+        : `${computedTrQty} pairs`;
+
+    setTrItems((prev) => {
+      const next = [...prev];
+      for (const v of picked) {
+        const attrs = Object.values(v.attributes ?? {}).filter(Boolean).join(" / ");
+        const idx = next.findIndex((x) => x.variant_id === v.id);
+        if (idx >= 0) {
+          const newQty = next[idx].qty_sent + computedTrQty;
+          next[idx] = {
+            ...next[idx],
+            qty_sent: newQty,
+            unitSummary: `${newQty} pairs`,
+          };
+        } else {
+          next.push({
+            variant_id: v.id,
+            label: v.product_name,
+            sublabel: attrs ? `${attrs} (${v.model_code})` : v.sku,
+            qty_sent: computedTrQty,
+            unitSummary,
+            transfer_price: Number(v.avg_cost) || 0,
+            gst_rate: Number(v.gst_rate) || 0,
+          });
+        }
+      }
+      return next;
+    });
+    toast.success(`Added ${picked.length} ${picked.length === 1 ? "item" : "items"} to transfer list.`);
   };
 
   const openReceiveModal = async (tr: { id: string; doc_number: string }) => {
     setReceiveTarget(tr);
     setReceiveLoading(true);
     try {
-      const items = await getTransferItemsAction(tr.id);
+      const rows = await getTransferItemsAction(tr.id);
       setReceiveRows(
-        items.map((it) => ({
-          variant_id: it.variant_id,
-          sku: it.sku,
-          product_name: it.product_name,
-          qty_sent: Number(it.qty_sent),
-          qty_received: Number(it.qty_sent),
+        rows.map((r) => ({
+          variant_id: r.variant_id,
+          sku: r.sku,
+          product_name: r.product_name,
+          qty_sent: Number(r.qty_sent),
+          qty_received: Number(r.qty_sent),
           discrepancy_note: "",
         }))
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load transfer items");
+      toast.error(err instanceof Error ? err.message : "Could not load items.");
       setReceiveTarget(null);
     } finally {
       setReceiveLoading(false);
@@ -215,101 +211,229 @@ export function OperationsHubClient({
   };
 
   const tabs = [
-    ...(transfersEnabled ? [{ id: "transfers", label: `Branch Transfers (${transfers.length})` }] : []),
-    ...(prodEnabled ? [{ id: "production", label: `Production Batches (${batches.length})` }] : []),
-    ...(suppliersEnabled ? [{ id: "suppliers", label: `Suppliers & Purchases (${suppliers.length})` }] : []),
+    ...(transfersEnabled ? [{ id: "transfers", label: "Send Stock", badge: transfers.length }] : []),
+    ...(suppliersEnabled ? [{ id: "purchase", label: "Record Purchase Bill" }] : []),
   ];
 
   return (
     <div className="space-y-4">
-      <Tabs active={tab} onChange={setTab} tabs={tabs} />
+      {tabs.length > 1 && <Tabs active={tab} onChange={setTab} tabs={tabs} />}
 
-      {tab === "transfers" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {canDispatch && branches.length >= 2 && (
-            <Card className="lg:col-span-5">
-              <CardHeader><h3 className="text-sm font-semibold">Dispatch Factory → Shop Transfer</h3></CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label>From Branch</Label>
-                    <Select value={fromBranch} onChange={(e) => setFromBranch(e.target.value)}>
-                      {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>To Branch</Label>
-                    <Select value={toBranch} onChange={(e) => setToBranch(e.target.value)}>
-                      {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </Select>
+      {tab === "transfers" && transfersEnabled && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          {/* Left: Simple Send Stock Form */}
+          <Card className="lg:col-span-6">
+            <CardHeader>
+              <h3 className="text-sm font-semibold">Send Stock to Another Branch</h3>
+              <p className="mt-0.5 text-xs text-[#77777d]">
+                Select the branch, choose your model &amp; cartons/pairs, enter transport details, and send.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {branches.length < 2 && (
+                <Alert variant="info">
+                  You currently have only 1 branch. Add a second branch in{" "}
+                  <Link href="/dashboard/settings?tab=branches" className="font-semibold underline">
+                    Settings → Branches
+                  </Link>{" "}
+                  to transfer stock between branches.
+                </Alert>
+              )}
+
+              {/* Step 1: Branches */}
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <div>
+                  <Label>From Branch</Label>
+                  <Select value={fromBranch} onChange={(e) => setFromBranch(e.target.value)}>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Label>To Branch</Label>
+                  <Select value={toBranch} onChange={(e) => setToBranch(e.target.value)}>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              {/* Step 2: Pick Model, Variant & Cartons / Pairs */}
+              <div className="space-y-3 rounded-xl border border-[#ececee] bg-[#fafafa] p-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-[#171717]">Select Product &amp; Quantity</span>
+                  <div className="inline-flex rounded-lg bg-[#e8e8ec] p-[2px] text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setTrQtyMode("cartons")}
+                      className={`cursor-pointer rounded-md px-2.5 py-1 font-semibold transition-all ${
+                        trQtyMode === "cartons"
+                          ? "bg-[#171717] text-white shadow-2xs"
+                          : "text-[#55555b] hover:text-[#171717]"
+                      }`}
+                    >
+                      Cartons / Boxes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTrQtyMode("pairs")}
+                      className={`cursor-pointer rounded-md px-2.5 py-1 font-semibold transition-all ${
+                        trQtyMode === "pairs"
+                          ? "bg-[#171717] text-white shadow-2xs"
+                          : "text-[#55555b] hover:text-[#171717]"
+                      }`}
+                    >
+                      Pairs / Pieces
+                    </button>
                   </div>
                 </div>
 
-                <Alert variant={isInterGstinTransfer ? "warning" : "info"}>
-                  {isInterGstinTransfer
-                    ? "Different Branch GSTINs detected → Auto-generates Branch Transfer Tax Invoice (IGST)."
-                    : "Same GSTIN / Non-GST branch → Auto-generates Stock Transfer Delivery Challan."}
-                </Alert>
-
-                {ratioPresets.length > 0 && models.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>Quick Fill by Size-Run Carton</Label>
-                    <Select value={trModelForRatio} onChange={(e) => setTrModelForRatio(e.target.value)}>
-                      {models.map((m) => <option key={m.code} value={m.code}>{m.name} ({m.code})</option>)}
-                    </Select>
-                    <SizeRunQuickFill
-                      presets={ratioPresets}
-                      onApply={(ratios) => applyRatioToList(trModelForRatio, ratios, "transfer")}
-                    />
-                  </div>
-                )}
-
-                <div className="flex gap-2 items-end">
-                  <div className="flex-1">
-                    <Label>Add Single Variant</Label>
-                    <Select value={trVariant} onChange={(e) => setTrVariant(e.target.value)}>
-                      {variants.map((v) => (
-                        <option key={v.id} value={v.id}>{v.product_name} — {v.sku}</option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="w-20">
-                    <Label>Qty</Label>
-                    <Input type="number" min={1} value={trQty} onChange={(e) => setTrQty(Number(e.target.value) || 1)} />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      const v = variants.find((x) => x.id === trVariant);
-                      if (!v) return;
-                      setTrItems((prev) => [
-                        ...prev.filter((x) => x.variant_id !== v.id),
-                        {
-                          variant_id: v.id,
-                          label: `${v.product_name} (${v.sku})`,
-                          qty_sent: trQty,
-                          transfer_price: Number(v.avg_cost || 0),
-                          gst_rate: Number(v.gst_rate || 5),
-                        },
-                      ]);
+                <div>
+                  <Label>Model / Product</Label>
+                  <Select
+                    value={selectedModel}
+                    onChange={(e) => {
+                      const code = e.target.value;
+                      setSelectedModel(code);
+                      const first = models.find((m) => m.code === code)?.items[0];
+                      setSelectedVariantIds(first ? [first.id] : []);
                     }}
                   >
-                    <Plus className="h-4 w-4" />
+                    {models.map((m) => (
+                      <option key={m.code} value={m.code}>
+                        {m.name} ({m.code}) — {m.items.length} {m.items.length === 1 ? "size" : "sizes"}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                {/* Multi-select Sizes & Colours chips */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="!mb-0">
+                      Pick One or Multiple Sizes &amp; Colours ({selectedVariantsForModel.length} selected)
+                    </Label>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedVariantIds(modelVariants.map((v) => v.id))}
+                        className="cursor-pointer font-semibold text-sky-700 hover:underline"
+                      >
+                        Select All
+                      </button>
+                      {selectedVariantsForModel.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedVariantIds([])}
+                          className="cursor-pointer font-medium text-[#77777d] hover:text-[#171717]"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {modelVariants.map((v) => {
+                      const attrs = Object.values(v.attributes ?? {}).filter(Boolean).join(" / ") || v.sku;
+                      const picked = selectedVariantIds.includes(v.id);
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => toggleVariantSelection(v.id)}
+                          className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-[11.5px] font-medium transition-all active:scale-95 ${
+                            picked
+                              ? "bg-[#171717] text-white shadow-2xs"
+                              : "border border-[#e4e4e7] bg-white text-[#3f3f46] hover:border-slate-400"
+                          }`}
+                        >
+                          {attrs}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-end gap-2">
+                  {trQtyMode === "cartons" ? (
+                    <>
+                      <div className="w-28">
+                        <Label>Cartons Each</Label>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          value={trQtyInput}
+                          onChange={(e) => setTrQtyInput(e.target.value.replace(/\D/g, ""))}
+                          placeholder="e.g. 5"
+                        />
+                      </div>
+                      <div className="w-28">
+                        <Label>Pcs / Carton</Label>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          value={trCartonPack}
+                          onChange={(e) => setTrCartonPack(e.target.value.replace(/\D/g, ""))}
+                          placeholder="20"
+                        />
+                      </div>
+                      <div className="pb-2 font-mono text-xs font-semibold text-[#55555b]">
+                        = {computedTrQty} pairs each
+                      </div>
+                    </>
+                  ) : (
+                    <div className="w-32">
+                      <Label>Pairs Each</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={trQtyInput}
+                        onChange={(e) => setTrQtyInput(e.target.value.replace(/\D/g, ""))}
+                        placeholder="e.g. 12"
+                      />
+                    </div>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={addSelectedTransferItems}
+                    className="ml-auto"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Selected ({selectedVariantsForModel.length})
                   </Button>
                 </div>
 
+                {/* Items Queued to Send */}
                 {trItems.length > 0 && (
-                  <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 max-h-40 overflow-y-auto text-xs">
-                    {trItems.map((it) => (
-                      <div key={it.variant_id} className="p-2 flex items-center justify-between gap-2">
-                        <span className="truncate font-medium">{it.label}</span>
+                  <div className="space-y-1.5 border-t border-[#ececee] pt-2.5">
+                    <p className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#77777d]">
+                      Items Ready to Send ({trItems.length})
+                    </p>
+                    {trItems.map((it, idx) => (
+                      <div
+                        key={it.variant_id}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-[#ececee] bg-white px-2.5 py-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-[#171717]">{it.label}</p>
+                          <p className="text-[11px] text-[#77777d]">{it.sublabel}</p>
+                        </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <Badge variant="info">{it.qty_sent} pcs</Badge>
+                          <span className="rounded-md bg-[#f1f1f2] px-2 py-0.5 font-mono text-[11px] font-semibold text-[#171717]">
+                            {it.unitSummary}
+                          </span>
                           <button
                             type="button"
-                            onClick={() => setTrItems((prev) => prev.filter((x) => x.variant_id !== it.variant_id))}
-                            className="text-rose-500 cursor-pointer"
+                            onClick={() => setTrItems((prev) => prev.filter((_, i) => i !== idx))}
+                            className="cursor-pointer rounded p-1 text-rose-500 hover:bg-rose-50"
+                            title="Remove"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -318,351 +442,372 @@ export function OperationsHubClient({
                     ))}
                   </div>
                 )}
-
-                <div className="grid grid-cols-3 gap-2">
-                  <div><Label>Transport</Label><Input value={transport} onChange={(e) => setTransport(e.target.value)} placeholder="VRL / Safe" /></div>
-                  <div><Label>LR No</Label><Input value={lrNo} onChange={(e) => setLrNo(e.target.value)} /></div>
-                  <div><Label>Vehicle No</Label><Input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} placeholder="DL01AB1234" /></div>
-                </div>
-
-                {estimatedTransferValue >= 50000 && (
-                  <div>
-                    <Label>E-Way Bill No (Recommended ≥ ₹50,000)</Label>
-                    <Input value={ewayBillNo} onChange={(e) => setEwayBillNo(e.target.value)} placeholder="12-digit EWB No" />
-                  </div>
-                )}
-
-                <Button
-                  className="w-full"
-                  onClick={async () => {
-                    const itemsToSend =
-                      trItems.length > 0
-                        ? trItems
-                        : (() => {
-                            const v = variants.find((x) => x.id === trVariant);
-                            return v
-                              ? [{ variant_id: v.id, qty_sent: trQty, transfer_price: Number(v.avg_cost || 0), gst_rate: Number(v.gst_rate || 5) }]
-                              : [];
-                          })();
-                    if (itemsToSend.length === 0) return toast.error("Add at least one variant.");
-                    try {
-                      const tid = await createAndDispatchTransferAction({
-                        fromBranchId: fromBranch,
-                        toBranchId: toBranch,
-                        transportName: transport,
-                        lrNumber: lrNo,
-                        vehicleNo,
-                        ewayBillNo,
-                        items: itemsToSend,
-                      });
-                      setTrItems([]);
-                      toast.success("Transfer dispatched!");
-                      router.push(`/dashboard/transfers/${tid}/challan`);
-                    } catch (err) {
-                      toast.error(err instanceof Error ? err.message : "Dispatch failed");
-                    }
-                  }}
-                >
-                  <Truck className="h-4 w-4" /> Dispatch &amp; Print Document ({trItems.length || 1} SKU)
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card className={canDispatch && branches.length >= 2 ? "lg:col-span-7" : "lg:col-span-12"}>
-            <CardHeader><h3 className="text-sm font-semibold">Transfer History</h3></CardHeader>
-            <CardContent className="space-y-2">
-              {transfers.map((tr) => (
-                <div key={tr.id} className="rounded-xl border border-slate-200 p-3 text-xs flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="font-bold text-slate-900">
-                      {tr.doc_number} • {tr.from_name} → {tr.to_name}
-                    </p>
-                    <p className="text-slate-500">
-                      {tr.doc_type === "branch_transfer_invoice" ? "IGST Tax Invoice" : "Delivery Challan"} • Value: ₹{Number(tr.transfer_value).toLocaleString("en-IN")}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={tr.status === "received" ? "success" : tr.status === "partial_received" ? "info" : "warning"}>
-                      {tr.status}
-                    </Badge>
-                    <Link
-                      href={`/dashboard/transfers/${tr.id}/challan`}
-                      className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 hover:bg-slate-50"
-                    >
-                      <Printer className="h-3.5 w-3.5" /> View
-                    </Link>
-                    {tr.status === "dispatched" && canReceive && (
-                      <Button size="sm" onClick={() => openReceiveModal({ id: tr.id, doc_number: tr.doc_number })}>
-                        Receive / Verify
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {tab === "production" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader><h3 className="text-sm font-semibold">Log Factory Production Batch</h3></CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label>Factory Branch</Label>
-                  <Select value={prodBranch} onChange={(e) => setProdBranch(e.target.value)}>
-                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </Select>
-                </div>
-                <div>
-                  <Label>Stage</Label>
-                  <Select value={prodStage} onChange={(e) => setProdStage(e.target.value as ProductionStage)}>
-                    <option value="cutting">Cutting (WIP)</option>
-                    <option value="stitching">Stitching (WIP)</option>
-                    <option value="lasting">Lasting (WIP)</option>
-                    <option value="finishing">Finishing (WIP)</option>
-                    <option value="packed">Packed (Credits Stock)</option>
-                  </Select>
-                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div><Label>Unit Cost ₹</Label><Input type="number" min={0} value={prodCost} onChange={(e) => setProdCost(Number(e.target.value))} /></div>
-                <div><Label>Karigar / Unit</Label><Input value={karigar} onChange={(e) => setKarigar(e.target.value)} placeholder="Unit A / Karigar Name" /></div>
-              </div>
-
-              {ratioPresets.length > 0 && models.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Quick Fill Carton Size-Run</Label>
-                  <Select value={prodModelForRatio} onChange={(e) => setProdModelForRatio(e.target.value)}>
-                    {models.map((m) => <option key={m.code} value={m.code}>{m.name} ({m.code})</option>)}
-                  </Select>
-                  <SizeRunQuickFill
-                    presets={ratioPresets}
-                    onApply={(ratios) => applyRatioToList(prodModelForRatio, ratios, "production")}
+              {/* Step 3: Transport, LR No, Vehicle No */}
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <div>
+                  <Label>Transport Name</Label>
+                  <Input
+                    value={transport}
+                    onChange={(e) => setTransport(e.target.value)}
+                    placeholder="e.g. VRL / Safe"
                   />
                 </div>
-              )}
-
-              <div className="flex gap-2 items-end">
-                <div className="flex-1">
-                  <Label>Add Variant</Label>
-                  <Select value={prodVariant} onChange={(e) => setProdVariant(e.target.value)}>
-                    {variants.map((v) => <option key={v.id} value={v.id}>{v.product_name} — {v.sku}</option>)}
-                  </Select>
+                <div>
+                  <Label>LR Number</Label>
+                  <Input
+                    value={lrNo}
+                    onChange={(e) => setLrNo(e.target.value)}
+                    placeholder="e.g. LR-4582"
+                  />
                 </div>
-                <div className="w-20">
-                  <Label>Qty</Label>
-                  <Input type="number" min={1} value={prodQty} onChange={(e) => setProdQty(Number(e.target.value) || 1)} />
+                <div>
+                  <Label>Vehicle Number</Label>
+                  <Input
+                    value={vehicleNo}
+                    onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
+                    placeholder="e.g. DL01AB1234"
+                  />
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    const v = variants.find((x) => x.id === prodVariant);
-                    if (!v) return;
-                    setProdItems((prev) => [
-                      ...prev.filter((x) => x.variant_id !== v.id),
-                      { variant_id: v.id, label: `${v.product_name} (${v.sku})`, qty: prodQty, unit_cost: prodCost },
-                    ]);
-                  }}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
               </div>
-
-              {prodItems.length > 0 && (
-                <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 max-h-36 overflow-y-auto text-xs">
-                  {prodItems.map((it) => (
-                    <div key={it.variant_id} className="p-2 flex items-center justify-between gap-2">
-                      <span className="truncate font-medium">{it.label}</span>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="info">{it.qty} @ ₹{it.unit_cost}</Badge>
-                        <button type="button" onClick={() => setProdItems((p) => p.filter((x) => x.variant_id !== it.variant_id))} className="text-rose-500">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
 
               <Button
                 className="w-full"
+                disabled={!canDispatch || sending || fromBranch === toBranch}
                 onClick={async () => {
-                  const items = prodItems.length > 0 ? prodItems : [{ variant_id: prodVariant, qty: prodQty, unit_cost: prodCost }];
+                  if (fromBranch === toBranch) {
+                    toast.error("From Branch and To Branch must be different.");
+                    return;
+                  }
+                  const list =
+                    trItems.length > 0
+                      ? trItems
+                      : selectedVariantsForModel.length > 0 && computedTrQty > 0
+                      ? selectedVariantsForModel.map((v) => ({
+                          variant_id: v.id,
+                          label: v.product_name,
+                          sublabel: v.sku,
+                          qty_sent: computedTrQty,
+                          unitSummary: `${computedTrQty} pairs`,
+                          transfer_price: Number(v.avg_cost) || 0,
+                          gst_rate: Number(v.gst_rate) || 0,
+                        }))
+                      : [];
+                  if (list.length === 0) {
+                    toast.error("Add at least one item to send.");
+                    return;
+                  }
+                  setSending(true);
                   try {
-                    await recordProductionBatchAction({
-                      branchId: prodBranch,
-                      stage: prodStage,
-                      karigarUnitName: karigar,
-                      items,
+                    const transferId = await createAndDispatchTransferAction({
+                      fromBranchId: fromBranch,
+                      toBranchId: toBranch,
+                      transportName: transport || undefined,
+                      lrNumber: lrNo || undefined,
+                      vehicleNo: vehicleNo || undefined,
+                      items: list.map((x) => ({
+                        variant_id: x.variant_id,
+                        qty_sent: x.qty_sent,
+                        transfer_price: x.transfer_price,
+                        gst_rate: x.gst_rate,
+                      })),
                     });
-                    setProdItems([]);
-                    toast.success("Production batch logged.");
+                    toast.success("Stock sent! Delivery slip ready.");
+                    setTrItems([]);
+                    setTransport("");
+                    setLrNo("");
+                    setVehicleNo("");
                     router.refresh();
+                    if (transferId) {
+                      router.push(`/dashboard/transfers/${transferId}/challan`);
+                    }
                   } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Failed");
+                    toast.error(err instanceof Error ? err.message : "Could not send stock.");
+                  } finally {
+                    setSending(false);
                   }
                 }}
               >
-                Save Production Batch
+                <Truck className="h-4 w-4" />
+                {sending
+                  ? "Sending Stock..."
+                  : `Send Stock & Print Slip (${
+                      trItems.length > 0 ? trItems.length : selectedVariantsForModel.length
+                    } ${
+                      (trItems.length > 0 ? trItems.length : selectedVariantsForModel.length) === 1
+                        ? "item"
+                        : "items"
+                    })`}
               </Button>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><h3 className="text-sm font-semibold">Recent Batches</h3></CardHeader>
-            <CardContent className="space-y-2">
-              {batches.map((b) => (
-                <div key={b.id} className="rounded-lg border border-slate-200 p-3 text-xs flex flex-wrap justify-between items-center gap-2">
-                  <div>
-                    <p className="font-bold">{b.batch_number} • {b.total_units} units</p>
-                    <p className="text-slate-500">Stage: {b.stage} {b.karigar_unit_name ? `• Karigar: ${b.karigar_unit_name}` : ""}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={b.stage === "packed" ? "success" : "info"}>{b.stage}</Badge>
-                    {b.stage !== "packed" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={async () => {
-                          try {
-                            await advanceProductionBatchStageAction(b.id, "packed");
-                            toast.success(`Batch ${b.batch_number} marked Packed & credited to stock!`);
-                            router.refresh();
-                          } catch (err) {
-                            toast.error(err instanceof Error ? err.message : "Failed");
-                          }
-                        }}
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Mark Packed
-                      </Button>
-                    )}
-                  </div>
+          {/* Right: Transfer History */}
+          <Card className="lg:col-span-6">
+            <CardHeader>
+              <h3 className="text-sm font-semibold">Transfer History ({transfers.length})</h3>
+              <p className="mt-0.5 text-xs text-[#77777d]">
+                Track sent stock, mark shipments as received, or print the delivery slip.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2.5">
+              {transfers.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center text-xs text-[#77777d]">
+                  <Package className="mx-auto mb-2 h-6 w-6 text-slate-300" />
+                  No stock transfers sent yet.
                 </div>
-              ))}
+              ) : (
+                <Paged items={transfers} size={8}>
+                  {(pagedRows) =>
+                    pagedRows.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#ececee] bg-white p-3 text-xs"
+                      >
+                        <div className="space-y-0.5">
+                          <p className="font-semibold text-[#171717]">
+                            {t.doc_number} · {t.from_name} → {t.to_name}
+                          </p>
+                          <p className="text-[11px] text-[#77777d]">
+                            Value: ₹{Number(t.transfer_value).toLocaleString("en-IN")} ·{" "}
+                            {new Date(t.created_at).toLocaleDateString("en-IN", {
+                              timeZone: "Asia/Kolkata",
+                            })}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Badge
+                            variant={
+                              t.status === "received"
+                                ? "success"
+                                : t.status === "dispatched"
+                                ? "warning"
+                                : "default"
+                            }
+                          >
+                            {t.status === "received"
+                              ? "Received"
+                              : t.status === "dispatched"
+                              ? "In Transit"
+                              : t.status}
+                          </Badge>
+                          {t.status === "dispatched" && canReceive && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openReceiveModal({ id: t.id, doc_number: t.doc_number })}
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Receive
+                            </Button>
+                          )}
+                          <Link
+                            href={`/dashboard/transfers/${t.id}/challan`}
+                            className="inline-flex min-h-[30px] items-center gap-1 rounded-lg bg-white px-2.5 text-xs font-medium text-[#27272a] shadow-[0_1px_2px_rgba(0,0,0,.05),0_0_0_1px_rgba(0,0,0,.08)] hover:bg-[#fafafa]"
+                          >
+                            <Printer className="h-3.5 w-3.5" /> View
+                          </Link>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </Paged>
+              )}
             </CardContent>
           </Card>
         </div>
       )}
 
-      {tab === "suppliers" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {tab === "purchase" && suppliersEnabled && (
+        <div className="max-w-2xl space-y-4">
+          <Alert variant="info">
+            To add, edit, or see supplier dues &amp; payments, go to{" "}
+            <Link href="/dashboard/customers?tab=suppliers" className="font-semibold underline">
+              Customer &amp; Supplier Ledger →
+            </Link>
+            . Use this form only when you want to record a purchase bill and add stock directly into a branch.
+          </Alert>
+
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <h3 className="text-sm font-semibold">{editSupId ? "Edit Supplier" : "Add Supplier"}</h3>
-              {suppliers.length > 0 && (
-                <Button size="sm" variant="secondary" onClick={() => { setPoSupplierId(suppliers[0].id); setPoOpen(true); }}>
-                  <ShoppingBag className="h-3.5 w-3.5" /> Record Purchase Order
-                </Button>
-              )}
+            <CardHeader>
+              <h3 className="text-sm font-semibold">Record Supplier Purchase Bill</h3>
             </CardHeader>
             <CardContent>
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (editSupId) {
-                    await updateSupplierAction({ id: editSupId, name: supName, phone: supPhone, materialType: supMat });
-                    toast.success("Supplier updated.");
-                  } else {
-                    await createSupplierAction({ name: supName, phone: supPhone, materialType: supMat });
-                    toast.success("Supplier added.");
-                  }
-                  setEditSupId(null); setSupName(""); setSupPhone(""); setSupMat("");
-                  router.refresh();
-                }}
-                className="space-y-3"
-              >
-                <div><Label>Supplier Name *</Label><Input value={supName} onChange={(e) => setSupName(e.target.value)} required /></div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div><Label>Phone</Label><Input value={supPhone} onChange={(e) => setSupPhone(e.target.value)} /></div>
-                  <div><Label>Material Type</Label><Input value={supMat} onChange={(e) => setSupMat(e.target.value)} placeholder="Leather / Soles" /></div>
-                </div>
-                <div className="flex gap-2">
-                  <Button type="submit"><Plus className="h-4 w-4" /> {editSupId ? "Update Supplier" : "Save Supplier"}</Button>
-                  {editSupId && (
-                    <Button variant="outline" onClick={() => { setEditSupId(null); setSupName(""); setSupPhone(""); setSupMat(""); }}>
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+              {suppliers.length === 0 ? (
+                <p className="text-xs text-[#77777d]">
+                  No suppliers added yet.{" "}
+                  <Link href="/dashboard/customers?tab=suppliers" className="font-semibold text-sky-700 underline">
+                    Add a supplier first →
+                  </Link>
+                </p>
+              ) : (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const v = variants.find((x) => x.id === poVariantId);
+                    const qty =
+                      poQtyMode === "cartons"
+                        ? Math.max(0, Number(poQtyInput || 0)) * Math.max(1, Number(poCartonPack || 1))
+                        : Math.max(0, Number(poQtyInput || 0));
+                    const cost = Math.max(0, Number(poUnitCost || 0));
+                    if (!v || qty <= 0) {
+                      toast.error("Please pick a product and valid quantity.");
+                      return;
+                    }
+                    setPoSaving(true);
+                    try {
+                      await recordPurchaseAction({
+                        branchId: poBranchId,
+                        supplierId: poSupplierId,
+                        billNumber: poBillNo || undefined,
+                        purchaseType: "finished_goods",
+                        paidAmount: Math.max(0, Number(poPaid || 0)),
+                        itcCgst: 0,
+                        itcSgst: 0,
+                        itcIgst: 0,
+                        items: [
+                          {
+                            variant_id: v.id,
+                            item_description: `${v.product_name} (${v.sku})`,
+                            qty,
+                            unit_cost: cost,
+                            gst_rate: Number(v.gst_rate || 0),
+                            line_total: qty * cost,
+                          },
+                        ],
+                      });
+                      toast.success("Purchase bill saved & stock added!");
+                      setPoBillNo("");
+                      setPoPaid("0");
+                      router.refresh();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Could not save purchase.");
+                    } finally {
+                      setPoSaving(false);
+                    }
+                  }}
+                  className="space-y-3.5"
+                >
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label>Supplier *</Label>
+                      <Select value={poSupplierId} onChange={(e) => setPoSupplierId(e.target.value)}>
+                        {suppliers.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Receive Stock Into Branch *</Label>
+                      <Select value={poBranchId} onChange={(e) => setPoBranchId(e.target.value)}>
+                        {branches.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
 
-          <Card>
-            <CardHeader><h3 className="text-sm font-semibold">Suppliers &amp; Dues</h3></CardHeader>
-            <CardContent className="space-y-2">
-              {suppliers.map((s) => (
-                <div key={s.id} className="rounded-xl border border-slate-200 p-3 text-xs flex flex-wrap justify-between items-center gap-2">
-                  <div>
-                    <p className="font-bold text-slate-900">{s.name}</p>
-                    <p className="text-slate-500">{s.material_type || "General"} • {s.phone || "—"}</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label>Product *</Label>
+                      <Select value={poVariantId} onChange={(e) => setPoVariantId(e.target.value)}>
+                        {variants.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.product_name} — {Object.values(v.attributes ?? {}).join(" / ") || v.sku}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Supplier Bill No. (Optional)</Label>
+                      <Input
+                        value={poBillNo}
+                        onChange={(e) => setPoBillNo(e.target.value)}
+                        placeholder="e.g. INV-102"
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-rose-600 mr-1">Due: ₹{Number(s.current_due).toLocaleString("en-IN")}</span>
-                    <Button size="sm" variant="ghost" onClick={() => { setPoSupplierId(s.id); setPoOpen(true); }}>
-                      + Bill
-                    </Button>
-                    {Number(s.current_due) > 0 && (
-                      <Button size="sm" variant="outline" onClick={() => { setPaySup({ id: s.id, name: s.name, due: Number(s.current_due) }); setPayAmt(Number(s.current_due)); }}>
-                        Pay
-                      </Button>
+
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div>
+                      <Label>Count By</Label>
+                      <Select
+                        value={poQtyMode}
+                        onChange={(e) => setPoQtyMode(e.target.value as "cartons" | "pairs")}
+                      >
+                        <option value="cartons">Cartons</option>
+                        <option value="pairs">Pairs</option>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>{poQtyMode === "cartons" ? "Cartons" : "Pairs"}</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={poQtyInput}
+                        onChange={(e) => setPoQtyInput(e.target.value.replace(/\D/g, ""))}
+                        required
+                      />
+                    </div>
+                    {poQtyMode === "cartons" && (
+                      <div>
+                        <Label>Pcs / Carton</Label>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          value={poCartonPack}
+                          onChange={(e) => setPoCartonPack(e.target.value.replace(/\D/g, ""))}
+                          required
+                        />
+                      </div>
                     )}
-                    <button
-                      type="button"
-                      title="Edit Supplier"
-                      onClick={() => {
-                        setEditSupId(s.id);
-                        setSupName(s.name);
-                        setSupPhone(s.phone ?? "");
-                        setSupMat(s.material_type ?? "");
-                      }}
-                      className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50 cursor-pointer"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Delete Supplier"
-                      onClick={async () => {
-                        if (!confirm(`Delete supplier "${s.name}"?`)) return;
-                        try {
-                          await deleteSupplierAction(s.id);
-                          toast.success("Supplier deleted.");
-                          router.refresh();
-                        } catch (err) {
-                          toast.error(err instanceof Error ? err.message : "Cannot delete supplier with purchase history.");
-                        }
-                      }}
-                      className="rounded-lg bg-rose-500 p-1.5 text-white hover:bg-rose-600 cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div>
+                      <Label>Cost / Pair (₹)</Label>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={poUnitCost}
+                        onChange={(e) => setPoUnitCost(e.target.value.replace(/[^0-9.]/g, ""))}
+                        required
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
+
+                  <div className="max-w-xs">
+                    <Label>Amount Paid Today (₹)</Label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={poPaid}
+                      onChange={(e) => setPoPaid(e.target.value.replace(/[^0-9.]/g, ""))}
+                    />
+                  </div>
+
+                  <Button type="submit" disabled={poSaving}>
+                    <ShoppingBag className="h-4 w-4" />
+                    {poSaving ? "Saving..." : "Save Purchase & Add Stock"}
+                  </Button>
+                </form>
+              )}
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* Receive & Discrepancy Modal */}
+      {/* Receive Transfer Modal */}
       <Dialog
         open={Boolean(receiveTarget)}
         onClose={() => setReceiveTarget(null)}
-        title={`Receive Transfer — ${receiveTarget?.doc_number ?? ""}`}
-        subtitle="Verify received quantities and note any transit shortages or damage."
-        maxWidth="max-w-2xl"
+        title={`Confirm Received Stock — ${receiveTarget?.doc_number ?? ""}`}
+        subtitle="Check received quantities and confirm to add stock into the receiving branch."
+        maxWidth="max-w-xl"
       >
         {receiveLoading ? (
-          <div className="py-6 flex items-center justify-center gap-2 text-xs text-slate-500">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading dispatched items...
-          </div>
+          <InlineRowsSkeleton label="Loading shipment items" />
         ) : (
           <form
             onSubmit={async (e) => {
@@ -677,168 +822,47 @@ export function OperationsHubClient({
                     discrepancy_note: r.discrepancy_note || undefined,
                   }))
                 );
-                toast.success("Transfer verified & credited into destination branch stock!");
+                toast.success("Stock received & added to branch inventory!");
                 setReceiveTarget(null);
                 router.refresh();
               } catch (err) {
-                toast.error(err instanceof Error ? err.message : "Receive failed");
+                toast.error(err instanceof Error ? err.message : "Could not receive stock.");
               }
             }}
             className="space-y-3"
           >
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {receiveRows.map((row, idx) => (
-                <div key={row.variant_id} className="rounded-lg border border-slate-200 p-3 text-xs space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <p className="font-bold">{row.product_name}</p>
-                      <p className="text-slate-500">{row.sku} • Dispatched: <strong>{row.qty_sent}</strong></p>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span>Recd:</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={row.qty_sent}
-                        value={row.qty_received}
-                        onChange={(e) => {
-                          const q = Math.max(0, Number(e.target.value) || 0);
-                          setReceiveRows((prev) => prev.map((r, i) => (i === idx ? { ...r, qty_received: q } : r)));
-                        }}
-                        className="w-16 min-h-[36px] rounded border border-slate-300 text-center font-semibold"
-                      />
-                    </div>
-                  </div>
-                  {row.qty_received !== row.qty_sent && (
-                    <Input
-                      placeholder="Discrepancy note (e.g. 2 pairs damaged in transit)"
-                      value={row.discrepancy_note}
-                      onChange={(e) =>
-                        setReceiveRows((prev) =>
-                          prev.map((r, i) => (i === idx ? { ...r, discrepancy_note: e.target.value } : r))
-                        )
-                      }
-                    />
-                  )}
+            {receiveRows.map((row, idx) => (
+              <div
+                key={row.variant_id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#ececee] bg-[#fafafa] p-3 text-xs"
+              >
+                <div>
+                  <p className="font-semibold text-[#171717]">{row.product_name}</p>
+                  <p className="text-[11px] text-[#77777d]">
+                    {row.sku} · Sent: {row.qty_sent} pairs
+                  </p>
                 </div>
-              ))}
-            </div>
-            <Button type="submit" className="w-full">Confirm Receipt &amp; Credit Stock</Button>
+                <div className="w-28">
+                  <Label>Received Qty</Label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={String(row.qty_received)}
+                    onChange={(e) => {
+                      const val = Number(e.target.value.replace(/\D/g, "") || 0);
+                      setReceiveRows((prev) =>
+                        prev.map((r, i) => (i === idx ? { ...r, qty_received: val } : r))
+                      );
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+            <Button type="submit" className="w-full">
+              Confirm &amp; Add to Branch Stock
+            </Button>
           </form>
         )}
-      </Dialog>
-
-      {/* Record Purchase Order Modal */}
-      <Dialog open={poOpen} onClose={() => setPoOpen(false)} title="Record Supplier Purchase / Inward Bill" maxWidth="max-w-lg">
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const base = poQty * poUnitCost;
-            const gst = Number(((base * poGstRate) / 100).toFixed(2));
-            const lineTotal = base + gst;
-            const selVar = variants.find((v) => v.id === poVariantId);
-            try {
-              await recordPurchaseAction({
-                branchId: poBranchId,
-                supplierId: poSupplierId,
-                billNumber: poBillNo,
-                purchaseType: poType,
-                paidAmount: poPaid,
-                itcCgst: Number((gst / 2).toFixed(2)),
-                itcSgst: Number((gst / 2).toFixed(2)),
-                itcIgst: 0,
-                items: [
-                  {
-                    variant_id: poType === "finished_goods" ? poVariantId : null,
-                    item_description: poType === "finished_goods" && selVar ? `${selVar.product_name} (${selVar.sku})` : poDesc || "Raw Material",
-                    qty: poQty,
-                    unit_cost: poUnitCost,
-                    gst_rate: poGstRate,
-                    line_total: lineTotal,
-                  },
-                ],
-              });
-              toast.success(poType === "finished_goods" ? "Purchase recorded & stock credited!" : "Raw material purchase recorded!");
-              setPoOpen(false);
-              setPoBillNo("");
-              setPoDesc("");
-              router.refresh();
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Purchase failed");
-            }
-          }}
-          className="space-y-3"
-        >
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Supplier</Label>
-              <Select value={poSupplierId} onChange={(e) => setPoSupplierId(e.target.value)}>
-                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
-            </div>
-            <div>
-              <Label>Branch</Label>
-              <Select value={poBranchId} onChange={(e) => setPoBranchId(e.target.value)}>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Purchase Type</Label>
-              <Select value={poType} onChange={(e) => setPoType(e.target.value as "finished_goods" | "raw_material")}>
-                <option value="finished_goods">Finished Goods (Adds Stock)</option>
-                <option value="raw_material">Raw Material (Leather/Soles)</option>
-              </Select>
-            </div>
-            <div><Label>Supplier Bill No</Label><Input value={poBillNo} onChange={(e) => setPoBillNo(e.target.value)} placeholder="INV-8821" /></div>
-          </div>
-          {poType === "finished_goods" ? (
-            <div>
-              <Label>Variant to Stock</Label>
-              <Select value={poVariantId} onChange={(e) => setPoVariantId(e.target.value)}>
-                {variants.map((v) => <option key={v.id} value={v.id}>{v.product_name} — {v.sku}</option>)}
-              </Select>
-            </div>
-          ) : (
-            <div><Label>Raw Material Description</Label><Input value={poDesc} onChange={(e) => setPoDesc(e.target.value)} placeholder="Italian Calf Leather 200 sq.ft" required /></div>
-          )}
-          <div className="grid grid-cols-3 gap-2">
-            <div><Label>Qty</Label><Input type="number" min={1} value={poQty} onChange={(e) => setPoQty(Number(e.target.value) || 1)} /></div>
-            <div><Label>Unit Cost ₹</Label><Input type="number" min={0} value={poUnitCost} onChange={(e) => setPoUnitCost(Number(e.target.value) || 0)} /></div>
-            <div><Label>GST % (ITC)</Label><Input type="number" min={0} max={40} value={poGstRate} onChange={(e) => setPoGstRate(Number(e.target.value) || 0)} /></div>
-          </div>
-          <div>
-            <Label>Amount Paid Now ₹ (Total incl. GST: ₹{Math.round(poQty * poUnitCost * (1 + poGstRate / 100)).toLocaleString("en-IN")})</Label>
-            <Input type="number" min={0} value={poPaid} onChange={(e) => setPoPaid(Number(e.target.value) || 0)} />
-          </div>
-          <Button type="submit" className="w-full">Save Purchase Order</Button>
-        </form>
-      </Dialog>
-
-      <Dialog open={Boolean(paySup)} onClose={() => setPaySup(null)} title={`Pay Supplier — ${paySup?.name ?? ""}`}>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (!paySup) return;
-            await recordSupplierPaymentAction({ supplierId: paySup.id, amount: payAmt, mode: payMode });
-            toast.success("Supplier payment recorded.");
-            setPaySup(null);
-            router.refresh();
-          }}
-          className="space-y-3"
-        >
-          <div><Label>Amount ₹</Label><Input type="number" min={1} value={payAmt} onChange={(e) => setPayAmt(Number(e.target.value))} required /></div>
-          <div>
-            <Label>Mode</Label>
-            <Select value={payMode} onChange={(e) => setPayMode(e.target.value as PaymentMode)}>
-              <option value="bank_transfer">Bank Transfer</option>
-              <option value="upi">UPI</option>
-              <option value="cash">Cash</option>
-            </Select>
-          </div>
-          <Button type="submit" className="w-full">Record Payment</Button>
-        </form>
       </Dialog>
     </div>
   );

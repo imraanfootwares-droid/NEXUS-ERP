@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
     ],
   },
   serverExternalPackages: ["@react-pdf/renderer", "pg"],
+  // The marketing home page is the static file in public/landing.html.
+  async rewrites() {
+    return { beforeFiles: [{ source: "/", destination: "/landing.html" }], afterFiles: [], fallback: [] };
+  },
 };
 
 export default nextConfig;

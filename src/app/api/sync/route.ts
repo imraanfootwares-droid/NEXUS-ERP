@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { canAccess, resolveRolePermissions } from "@/lib/auth/access";
 import { isSameOriginRequest } from "@/lib/auth/crypto";
+import { linkWalkInCustomer } from "@/lib/billing/walk-in-customer";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import type { OutboxEntry } from "@/lib/offline/sync-engine";
@@ -18,6 +19,9 @@ export async function GET(request: NextRequest) {
   const ctx = await getServerSessionContext();
   if (!ctx || !ctx.tenant) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (ctx.accessBlock) {
+    return NextResponse.json({ error: "Access is paused.", blocked: true, block: ctx.accessBlock }, { status: 423 });
   }
   const branchId = request.nextUrl.searchParams.get("branch_id") || ctx.branches[0]?.id;
   if (!branchId) {
@@ -90,6 +94,9 @@ export async function POST(request: NextRequest) {
   if (!ctx || !ctx.tenant) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (ctx.accessBlock) {
+    return NextResponse.json({ error: "Access is paused.", blocked: true, block: ctx.accessBlock }, { status: 423 });
+  }
   const tenantId = ctx.tenant.id;
 
   const body = await request.json();
@@ -136,13 +143,17 @@ export async function POST(request: NextRequest) {
     try {
       await withTenantTx({ tenantId, isPlatformAdmin: ctx.user.is_platform_admin }, async (client) => {
         // Verify original user is still active in this tenant and has permission
-        const origUserRes = await client.query<{ role: TenantRole; is_active: boolean }>(
-          "SELECT role, is_active FROM public.profiles WHERE id = $1 AND tenant_id = $2",
+        const origUserRes = await client.query<{ role: TenantRole; is_active: boolean; access_blocked: boolean }>(
+          "SELECT role, is_active, access_blocked FROM public.profiles WHERE id = $1 AND tenant_id = $2",
           [entry.user_id, tenantId]
         );
         const orig = origUserRes.rows[0];
         if (!orig || !orig.is_active) {
           throw new Error("CONFLICT:Original user is no longer active.");
+        }
+        if (orig.access_blocked) {
+          // Not a conflict: the entry stays queued and syncs after this person is unblocked.
+          throw new Error("Held until this user's access is restored.");
         }
         const permRows = await client.query<{ permission_key: string; allowed: boolean }>(
           "SELECT permission_key, allowed FROM public.tenant_role_permissions WHERE tenant_id = $1 AND role = $2",
@@ -165,10 +176,18 @@ export async function POST(request: NextRequest) {
         }
 
         if (entry.op === "create_invoice") {
+          const canSaveCustomer = canAccess(
+            { ...ctx, user: { ...ctx.user, id: entry.user_id, role: orig.role }, permissions: perms },
+            "customers.manage",
+            { isMutation: true }
+          ).allowed;
+          const invoicePayload = canSaveCustomer
+            ? await linkWalkInCustomer(client, tenantId, entry.payload as Record<string, unknown>)
+            : entry.payload;
           await client.query("SELECT public.create_invoice_atomic($1, $2::jsonb)", [
             tenantId,
             JSON.stringify({
-              ...entry.payload,
+              ...invoicePayload,
               idempotency_key: entry.idempotency_key,
               created_by: entry.user_id,
               offline: {

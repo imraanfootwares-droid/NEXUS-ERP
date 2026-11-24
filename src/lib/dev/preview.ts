@@ -10,7 +10,7 @@ export const VALID_DEV_ROLES: readonly DevPreviewRole[] = [
 ] as const;
 
 export function isDevPreviewAllowed(): boolean {
-  return process.env.NODE_ENV !== "production" || process.env.ENABLE_DEV_PREVIEW === "true";
+  return false;
 }
 
 export function parseDevPreviewRole(raw: string | undefined | null): DevPreviewRole | null {

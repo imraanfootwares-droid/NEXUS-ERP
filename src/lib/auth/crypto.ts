@@ -4,6 +4,7 @@ import { getAuthSecret } from "@/lib/env";
 import type { TenantRole } from "@/lib/constants/saas";
 
 export const SESSION_COOKIE_NAME = "nexus_session";
+export const PLATFORM_SESSION_COOKIE_NAME = "nexus_platform_session";
 export const IMPERSONATE_COOKIE_NAME = "nexus_impersonate";
 export const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 hours
 export const IMPERSONATE_TTL_SECONDS = 30 * 60; // 30 minutes

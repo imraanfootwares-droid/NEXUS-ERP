@@ -44,7 +44,7 @@ export default async function TransferChallanPage({
   const isTaxInvoice = tr.doc_type === "branch_transfer_invoice";
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4">
+    <div className="print-doc max-w-3xl mx-auto space-y-4">
       <PrintShareToolbar
         backHref="/dashboard/operations"
         backLabel="← Back to Operations"

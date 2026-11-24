@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ArrowDownUp, ChevronLeft, ChevronRight, Search } from "lucide-react";
-import { Button, Input } from "./primitives";
+import { ChevronsUpDown, Search } from "lucide-react";
+import { Pager } from "./pagination";
+import { Input } from "./primitives";
 
 export interface ColumnDef<T> {
   key: string;
@@ -73,12 +74,12 @@ export function DataTable<T>({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="ui-tray">
       {(searchFilter || actions) && (
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+        <div className="flex flex-col sm:flex-row gap-2 p-1.5 sm:items-center sm:justify-between">
           {searchFilter ? (
             <div className="relative w-full sm:max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 h-3.5 w-3.5 text-[#a3a3a8]" />
               <Input
                 value={query}
                 onChange={(e) => {
@@ -86,7 +87,7 @@ export function DataTable<T>({
                   setPage(1);
                 }}
                 placeholder={searchPlaceholder}
-                className="pl-9"
+                className="!pl-8"
               />
             </div>
           ) : (
@@ -97,20 +98,20 @@ export function DataTable<T>({
       )}
 
       {/* Desktop Table */}
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-600">
+      <div className="ui-surface hidden md:block overflow-x-auto">
+        <table className="w-full text-left">
+          <thead className="border-b border-[#ececee]">
             <tr>
               {columns.map((col) => (
-                <th key={col.key} className={`px-4 py-3 font-semibold ${col.className ?? ""}`}>
+                <th key={col.key} className={`px-4 py-2.5 ${col.className ?? ""}`}>
                   {col.sortValue ? (
                     <button
                       type="button"
                       onClick={() => toggleSort(col.key)}
-                      className="inline-flex items-center gap-1 hover:text-slate-900 cursor-pointer"
+                      className="inline-flex items-center gap-1 uppercase hover:text-[#171717] cursor-pointer"
                     >
                       {col.header}
-                      <ArrowDownUp className="h-3 w-3 opacity-60" />
+                      <ChevronsUpDown className={`h-3 w-3 ${sortCol === col.key ? "text-[#171717]" : "opacity-50"}`} />
                     </button>
                   ) : (
                     col.header
@@ -119,18 +120,18 @@ export function DataTable<T>({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-[#f1f1f2]">
             {paginated.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={columns.length} className="px-4 py-10 text-center text-[#77777d]">
                   {emptyMessage}
                 </td>
               </tr>
             ) : (
               paginated.map((row) => (
-                <tr key={rowKey(row)} className="hover:bg-slate-50/70">
+                <tr key={rowKey(row)}>
                   {columns.map((col) => (
-                    <td key={col.key} className={`px-4 py-3 text-slate-800 ${col.className ?? ""}`}>
+                    <td key={col.key} className={`px-4 py-2.5 text-[#27272a] ${col.className ?? ""}`}>
                       {col.render(row)}
                     </td>
                   ))}
@@ -142,9 +143,9 @@ export function DataTable<T>({
       </div>
 
       {/* Mobile Stacked Cards */}
-      <div className="block md:hidden space-y-2.5">
+      <div className="block md:hidden space-y-[3px]">
         {paginated.length === 0 ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+          <div className="ui-surface p-6 text-center text-[13px] text-[#77777d]">
             {emptyMessage}
           </div>
         ) : (
@@ -152,7 +153,7 @@ export function DataTable<T>({
             const primary = columns.find((c) => c.mobilePrimary) ?? columns[0];
             const rest = columns.filter((c) => c.key !== primary.key && !c.hideOnMobile);
             return (
-              <div key={rowKey(row)} className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2 shadow-xs">
+              <div key={rowKey(row)} className="ui-surface p-3.5 space-y-2">
                 <div className="font-medium text-slate-900">{primary.render(row)}</div>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
                   {rest.map((col) => (
@@ -168,35 +169,7 @@ export function DataTable<T>({
         )}
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-xs text-slate-600 pt-1">
-          <span>
-            Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of{" "}
-            {filtered.length}
-          </span>
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={safePage <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="px-2 font-medium">
-              {safePage} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={safePage >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+      <Pager page={safePage} pageSize={pageSize} total={filtered.length} onChange={setPage} />
     </div>
   );
 }

@@ -1,0 +1,3740 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexus ERP — Factory, Retail Branches, GST Billing &amp; Live Storefronts</title>
+  <meta name="description" content="2025–2026 Indian GST Ready • Offline-First PWA. One ERP for Factory, Retail Branches, GST Billing & Live Storefronts." />
+  <meta property="og:title" content="Nexus ERP — Factory, Retail Branches, GST Billing &amp; Live Storefronts" />
+  <meta property="og:description" content="Built for Footwear, Apparel, Electronics, FMCG & Hardware businesses. Connect your factory floor, wholesale dealers, retail counters, and WhatsApp catalogue on Phone & PC." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ink: #0B0F19;
+      --ink-2: #1E2432;
+      --muted: #5F6B7E;
+      --muted-2: #8A94A6;
+      --surface: #F4F7FD;
+      --surface-2: #F7F9FE;
+      --border: #E8EEF7;
+      --blue: #2475FF;
+      --blue-mid: #5A9BFF;
+      --blue-soft: #B5D2FF;
+      --blue-grad: linear-gradient(138deg, #1E71FF 0%, #5899FF 52%, #B8D5FF 100%);
+      --btn-blue-grad: linear-gradient(135deg, #2173FF 0%, #5C9DFF 58%, #B4D3FF 100%);
+      --dark-grad: linear-gradient(180deg, #252B37 0%, #10131A 100%);
+      --font-display: 'Plus Jakarta Sans', 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-body: 'DM Sans', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    body {
+      font-family: var(--font-body);
+      color: var(--ink);
+      background: #FFFFFF;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+    button, input { font-family: inherit; }
+    a { color: inherit; text-decoration: none; }
+    .tabular { font-variant-numeric: tabular-nums; }
+    .container { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+    /* Focus visibility */
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+
+    /* Pill Section Kicker */
+    .section-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: #EEF4FF;
+      border: 1px solid rgba(36, 117, 255, 0.08);
+      color: #34425B;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }
+
+    .section-heading {
+      font-family: var(--font-display);
+      font-size: clamp(32px, 3.8vw, 48px);
+      font-weight: 500;
+      line-height: 1.12;
+      letter-spacing: -0.035em;
+      color: var(--ink);
+      text-wrap: balance;
+    }
+    .section-sub {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--muted);
+      max-width: 470px;
+    }
+
+    /* ================= HERO & ATMOSPHERIC BACKDROP ================= */
+    .hero-wrap {
+      position: relative;
+      padding: 24px 0 0;
+      overflow: hidden;
+      --mx: 50%;
+      --my: 32%;
+      --beam-x: 0px;
+      --beam-y: 0px;
+      background:
+        radial-gradient(ellipse 68% 54% at calc(15% + var(--beam-x, 0px) * 0.2) calc(18% + var(--beam-y, 0px) * 0.2), rgba(169, 203, 255, 0.8) 0%, rgba(212, 229, 255, 0.25) 55%, transparent 80%),
+        radial-gradient(ellipse 60% 58% at calc(88% - var(--beam-x, 0px) * 0.2) calc(12% + var(--beam-y, 0px) * 0.15), rgba(162, 199, 255, 0.86) 0%, rgba(214, 231, 255, 0.3) 50%, transparent 78%),
+        radial-gradient(ellipse 90% 45% at 50% 62%, rgba(196, 220, 255, 0.62) 0%, rgba(235, 244, 255, 0.35) 60%, #FFFFFF 100%),
+        linear-gradient(180deg, #DBE8FF 0%, #E3EEFF 46%, #EAF2FF 74%, #FFFFFF 100%);
+    }
+    /* Diagonal soft light rays + mouse-reactive luminous aurora */
+    .hero-wrap::before, .hero-wrap::after {
+      content: '';
+      position: absolute;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .hero-wrap::before {
+      inset: -12% -12% 8% -12%;
+      background:
+        linear-gradient(122deg, transparent 14%, rgba(255, 255, 255, 0.58) 24%, transparent 36%),
+        linear-gradient(124deg, transparent 44%, rgba(255, 255, 255, 0.64) 53%, transparent 64%),
+        linear-gradient(58deg, transparent 62%, rgba(255, 255, 255, 0.48) 74%, transparent 86%);
+      filter: blur(22px);
+      transform: translate3d(var(--beam-x), var(--beam-y), 0);
+      will-change: transform;
+      animation: heroRaysDrift 14s ease-in-out infinite alternate;
+    }
+    .hero-wrap::after {
+      inset: 0;
+      background:
+        radial-gradient(620px circle at var(--mx) var(--my), rgba(66, 145, 255, 0.32) 0%, rgba(139, 189, 255, 0.22) 32%, rgba(255, 255, 255, 0.24) 54%, transparent 74%),
+        radial-gradient(360px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.55) 0%, transparent 62%);
+      mix-blend-mode: normal;
+      will-change: background;
+    }
+    @keyframes heroRaysDrift {
+      0%   { opacity: 0.85; filter: blur(20px); }
+      50%  { opacity: 1;    filter: blur(25px); }
+      100% { opacity: 0.88; filter: blur(22px); }
+    }
+    .hero-wrap > * { position: relative; z-index: 1; }
+
+    /* Floating Top Navbar */
+    .navbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 32px;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      border-radius: 16px;
+      padding: 10px 12px 10px 24px;
+      box-shadow: 0 10px 34px rgba(30, 82, 180, 0.08);
+    }
+    .brand {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+    }
+    .nav-links a {
+      font-size: 13.5px;
+      font-weight: 500;
+      color: #262E3D;
+      white-space: nowrap;
+      transition: color 150ms ease;
+    }
+    .nav-links a:hover { color: var(--blue); }
+    .btn-dark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 24px;
+      border-radius: 10px;
+      background: var(--dark-grad);
+      color: #FFFFFF;
+      font-size: 13.5px;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 6px 18px rgba(15, 19, 28, 0.2);
+      transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms ease;
+    }
+    .btn-dark:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 10px 24px rgba(15, 19, 28, 0.25); }
+
+    /* Hero Content */
+    .hero-center {
+      text-align: center;
+      padding: 68px 0 54px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .announce-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 16px 4px 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.95);
+      box-shadow: 0 4px 16px rgba(36, 117, 255, 0.08);
+      margin-bottom: 24px;
+    }
+    .announce-badge {
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #2072FF 0%, #63A2FF 100%);
+      color: #FFFFFF;
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+    .announce-text {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: #2A3342;
+    }
+    .hero-title {
+      font-family: var(--font-display);
+      font-size: clamp(40px, 5.6vw, 68px);
+      font-weight: 500;
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+      color: #090C14;
+      max-width: 780px;
+      margin-bottom: 20px;
+    }
+    .hero-desc {
+      font-size: 14.5px;
+      line-height: 1.58;
+      color: #4D596E;
+      max-width: 470px;
+      margin-bottom: 30px;
+    }
+    .hero-ctas {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-primary-blue {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 13px 28px;
+      border-radius: 10px;
+      background: var(--btn-blue-grad);
+      color: #FFFFFF;
+      font-size: 13.5px;
+      font-weight: 500;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 10px 24px -6px rgba(36, 117, 255, 0.42);
+      transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), filter 160ms ease;
+    }
+    .btn-primary-blue:hover { transform: translateY(-1px); filter: brightness(1.03); }
+    .btn-white {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 13px 28px;
+      border-radius: 10px;
+      background: #FFFFFF;
+      color: var(--ink);
+      font-size: 13.5px;
+      font-weight: 500;
+      border: 1px solid rgba(226, 232, 240, 0.85);
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+      transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), background 160ms ease;
+    }
+    .btn-white:hover { transform: translateY(-1px); background: #F9FBFF; }
+
+    /* ================= DASHBOARD MOCKUP SHELL ================= */
+    .dash-outer {
+      position: relative;
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 10px;
+      border-radius: 24px 24px 0 0;
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.85);
+      border-bottom: none;
+      box-shadow: 0 -4px 40px rgba(36, 117, 255, 0.08), 0 24px 60px rgba(36, 117, 255, 0.12);
+    }
+    .dash-shell {
+      display: grid;
+      grid-template-columns: 205px 1fr;
+      background: #FAFBFD;
+      border-radius: 16px 16px 0 0;
+      overflow: hidden;
+      border: 1px solid #EEF2F8;
+      border-bottom: none;
+      position: relative;
+    }
+    .dash-fade-bottom {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 76px;
+      background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.88) 72%, #FFFFFF 100%);
+      pointer-events: none;
+      z-index: 4;
+    }
+    .dash-sidebar {
+      background: #FFFFFF;
+      border-right: 1px solid #F0F3F8;
+      padding: 18px 14px 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .dash-logo-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 2px 4px;
+    }
+    .dash-logo {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-weight: 600;
+      font-size: 14.5px;
+      color: var(--ink);
+      letter-spacing: -0.02em;
+    }
+    .dash-logo-icon {
+      width: 26px; height: 26px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #2575FF 0%, #6DA8FF 100%);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFFFFF;
+      box-shadow: 0 4px 10px rgba(37, 117, 255, 0.28);
+    }
+    .dash-search {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #F6F8FB;
+      border: 1px solid #EEF1F6;
+      border-radius: 9px;
+      padding: 7px 10px;
+      color: #8E98A8;
+      font-size: 11.5px;
+    }
+    .dash-search-left { display: flex; align-items: center; gap: 7px; }
+    .dash-kbd {
+      font-size: 10px;
+      color: #97A1B2;
+      font-weight: 500;
+    }
+    .dash-nav-group-label {
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      color: #A0A9B8;
+      padding: 4px 8px 0;
+    }
+    .dash-nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .dash-nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 9px;
+      border: none;
+      background: transparent;
+      color: #5D6778;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: background 150ms ease, color 150ms ease;
+    }
+    .dash-nav-item:hover { background: #F4F7FC; color: var(--ink); }
+    .dash-nav-item.active {
+      background: linear-gradient(180deg, #222836 0%, #11151E 100%);
+      color: #FFFFFF;
+      box-shadow: 0 4px 12px rgba(15, 20, 32, 0.2);
+    }
+    .dash-nav-left { display: flex; align-items: center; gap: 9px; }
+    .dash-badge-blue {
+      min-width: 18px; height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #4B8EFF, #8AB8FF);
+      color: #FFFFFF;
+      font-size: 9.5px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .dash-badge-soft {
+      font-size: 10px;
+      color: #6B7588;
+      background: #F1F4F9;
+      padding: 1px 6px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+
+    /* Dashboard Main */
+    .dash-main {
+      padding: 18px 20px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .dash-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .dash-welcome {
+      font-size: 15.5px;
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: -0.02em;
+    }
+    .dash-welcome-sub {
+      font-size: 10.5px;
+      color: #8C96A8;
+      margin-top: 2px;
+    }
+    .dash-top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .dash-icon-btn {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      border: 1px solid #ECEFF5;
+      background: #FFFFFF;
+      color: #4B5565;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .dash-profile {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-left: 6px;
+    }
+    .dash-profile-name { font-size: 11.5px; font-weight: 600; color: var(--ink); line-height: 1.2; }
+    .dash-profile-email { font-size: 10px; color: #8C96A8; line-height: 1.2; }
+
+    .dash-grid-top {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .dash-grid-bottom {
+      display: grid;
+      grid-template-columns: 1.45fr 1fr;
+      gap: 14px;
+    }
+    .dash-card {
+      background: #FFFFFF;
+      border: 1px solid #F0F3F9;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.02);
+    }
+    .dash-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .dash-card-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #3E485B;
+    }
+    .dash-select {
+      appearance: none;
+      background: #FFFFFF;
+      border: 1px solid #E9EDF5;
+      border-radius: 7px;
+      padding: 4px 22px 4px 9px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #3C4657;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235F6B7E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 6px center;
+    }
+    .dash-metric-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 12px;
+    }
+    .dash-metric-val {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+    }
+    .delta-dark {
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #1B202C;
+      color: #FFFFFF;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .delta-rose {
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #FFF1F2;
+      color: #E11D48;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .delta-mint {
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: #DCFCE7;
+      color: #15803D;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .chart-box {
+      position: relative;
+      height: 112px;
+      width: 100%;
+    }
+    .chart-tooltip {
+      position: absolute;
+      top: 4px;
+      left: 36%;
+      background: #FFFFFF;
+      border: 1px solid #EDF1F7;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 11px;
+      white-space: nowrap;
+      z-index: 2;
+    }
+    .chart-tooltip span { color: #7C879B; }
+    .chart-tooltip strong { color: var(--ink); font-weight: 600; }
+    .chart-months {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #8892A4;
+      margin-top: 4px;
+      padding: 0 2px;
+    }
+
+    /* Spending Breakdown */
+    .breakdown-label { font-size: 11px; color: #525E72; margin-bottom: 10px; font-weight: 500; }
+    .breakdown-cols {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .breakdown-item-head {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
+      font-weight: 500;
+      color: #2B3445;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; }
+    .breakdown-item-val { font-size: 10px; color: #8A94A6; padding-left: 12px; margin-top: 2px; }
+    .breakdown-bar {
+      display: flex;
+      height: 28px;
+      border-radius: 5px;
+      overflow: hidden;
+      gap: 2px;
+    }
+    .seg-1 { flex: 44; background: linear-gradient(135deg, #1E71FF 0%, #7BB2FF 100%); }
+    .seg-2 { flex: 33; background: #A5C3FF; }
+    .seg-3 { flex: 23; background: #F1F4F9; }
+
+    /* Cash Flow & Bills */
+    .cf-tabs {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .cf-tab {
+      padding: 4px 11px;
+      border-radius: 999px;
+      border: none;
+      background: transparent;
+      color: #7D8799;
+      font-size: 10.5px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .cf-tab.active {
+      background: #161B26;
+      color: #FFFFFF;
+    }
+    .cf-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      height: 70px;
+      position: relative;
+      padding-top: 14px;
+    }
+    .cf-bar {
+      flex: 1;
+      border-radius: 5px 5px 0 0;
+      background: #F1F4FA;
+      transition: height 260ms ease, background 200ms ease;
+    }
+    .cf-bar.highlight {
+      background: linear-gradient(180deg, #2173FF 0%, #99C2FF 100%);
+      position: relative;
+    }
+    .cf-bar.highlight::after {
+      content: '';
+      position: absolute;
+      top: 6px; left: 50%;
+      transform: translateX(-50%);
+      width: 9px; height: 9px;
+      border-radius: 999px;
+      background: #FFFFFF;
+      border: 2.5px solid #2173FF;
+    }
+    .bill-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px;
+      border-radius: 10px;
+      background: #FAFBFD;
+      border: 1px solid #F1F4FA;
+      margin-bottom: 8px;
+    }
+    .bill-left { display: flex; align-items: center; gap: 10px; }
+    .bill-logo {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      background: #FFFFFF;
+      border: 1px solid #EDF1F7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 14px;
+    }
+    .bill-name { font-size: 11.5px; font-weight: 600; color: var(--ink); }
+    .bill-date { font-size: 10px; color: #8C96A8; }
+    .bill-right { text-align: right; }
+    .bill-price { font-size: 11px; font-weight: 600; color: var(--ink); }
+    .bill-status { font-size: 9.5px; color: #647084; background: #EEF2F8; padding: 2px 7px; border-radius: 6px; display: inline-block; margin-top: 2px; }
+
+    /* ================= TRUSTED BRANDS ================= */
+    .brands-section {
+      padding: 72px 0 68px;
+      text-align: center;
+      background: #FFFFFF;
+    }
+    .brands-title {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--ink);
+      letter-spacing: -0.02em;
+      margin-bottom: 36px;
+    }
+    .brands-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 28px;
+      flex-wrap: wrap;
+    }
+    .brand-logo-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #161A23;
+      opacity: 0.92;
+      transition: opacity 150ms ease;
+    }
+    .brand-logo-item:hover { opacity: 1; }
+
+    /* ================= WHY CHOOSE US ================= */
+    .why-section { padding: 48px 0 96px; }
+    .why-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 32px;
+      margin-bottom: 44px;
+    }
+    .why-header-left { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+    .why-header-right { max-width: 340px; font-size: 13.5px; line-height: 1.6; color: var(--muted); }
+    .why-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+    .why-card {
+      min-height: 266px;
+      border-radius: 18px;
+      padding: 26px 24px;
+      background: #F4F7FD;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      cursor: pointer;
+      border: 1px solid rgba(226, 234, 248, 0.5);
+      transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 200ms ease, background 200ms ease;
+    }
+    .why-card:hover { transform: translateY(-3px); }
+    .why-card.active {
+      background: var(--blue-grad);
+      border-color: transparent;
+      box-shadow: 0 22px 44px -12px rgba(36, 117, 255, 0.38);
+    }
+    .why-icon {
+      width: 46px; height: 46px;
+      border-radius: 999px;
+      background: #FFFFFF;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink);
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+    }
+    .why-card-title {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 500;
+      line-height: 1.24;
+      letter-spacing: -0.025em;
+      color: var(--ink);
+      margin-bottom: 10px;
+    }
+    .why-card-desc {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    .why-card.active .why-card-title { color: #FFFFFF; }
+    .why-card.active .why-card-desc { color: rgba(255, 255, 255, 0.85); }
+
+    /* ================= FEATURES BENTO ================= */
+    .features-section { padding: 48px 0 104px; }
+    .center-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 16px;
+      margin-bottom: 52px;
+    }
+    .bento-row-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-bottom: 34px;
+    }
+    .bento-row-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+    .bento-visual {
+      height: 256px;
+      border-radius: 18px;
+      background: #F4F7FD;
+      border: 1px solid #EDF2FA;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      padding: 20px;
+      margin-bottom: 18px;
+    }
+    .bento-title {
+      font-family: var(--font-display);
+      font-size: 19px;
+      font-weight: 500;
+      line-height: 1.28;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+    .bento-desc {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--muted);
+      max-width: 290px;
+    }
+
+    /* Widget 1: Neo Cash */
+    .w-neocash {
+      width: 224px;
+      background: #FFFFFF;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 14px 36px rgba(36, 117, 255, 0.08);
+    }
+    .w-neo-pill {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid #96BCFF;
+      border-radius: 999px;
+      padding: 4px 5px 4px 12px;
+      font-size: 10px;
+      color: #4D5B74;
+      margin-bottom: 12px;
+    }
+    .w-neo-icon {
+      width: 20px; height: 20px;
+      border-radius: 999px;
+      background: #2475FF;
+      color: #FFFFFF;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .w-neo-balance {
+      font-family: var(--font-display);
+      font-size: 23px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+      margin-bottom: 12px;
+    }
+    .w-neo-meta {
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .w-neo-lbl { font-size: 9px; color: #8F99AB; margin-bottom: 2px; }
+    .w-neo-val { font-size: 10px; font-weight: 600; color: #242D3E; }
+    .w-neo-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .w-neo-btn-light {
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid #E9EEF6;
+      background: #F6F8FC;
+      color: #364154;
+      font-size: 10.5px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+    .w-neo-btn-blue {
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: none;
+      background: linear-gradient(135deg, #2173FF, #5D9EFF);
+      color: #FFFFFF;
+      font-size: 10.5px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      box-shadow: 0 6px 14px rgba(36, 117, 255, 0.28);
+    }
+
+    /* Widget 2: Package Selector */
+    .w-packages { width: 236px; display: flex; flex-direction: column; gap: 10px; }
+    .w-pkg-opt {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 11px 12px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      transition: all 150ms ease;
+    }
+    .w-pkg-opt.selected {
+      background: #FFFFFF;
+      border-color: #6EA4FF;
+      box-shadow: 0 8px 20px rgba(36, 117, 255, 0.08);
+    }
+    .w-radio {
+      width: 14px; height: 14px;
+      border-radius: 999px;
+      border: 1.5px solid #B5C2D8;
+      margin-top: 2px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .w-pkg-opt.selected .w-radio {
+      border-color: #2475FF;
+      background: #2475FF;
+      box-shadow: inset 0 0 0 3px #FFFFFF;
+    }
+    .w-pkg-top { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 8px; }
+    .w-pkg-name { font-size: 12px; font-weight: 600; color: var(--ink); }
+    .w-pkg-price { font-size: 11.5px; font-weight: 600; color: var(--ink); }
+    .w-pkg-sub { font-size: 9.5px; color: #7C879B; margin-top: 3px; line-height: 1.35; }
+    .w-pay-btn {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      background: var(--btn-blue-grad);
+      color: #FFFFFF;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(36, 117, 255, 0.28);
+    }
+
+    /* Widget 3: Income Statistics */
+    .w-income {
+      width: 248px;
+      background: #FFFFFF;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 14px 36px rgba(36, 117, 255, 0.08);
+    }
+    .w-inc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .w-inc-title { font-size: 12px; font-weight: 600; color: var(--ink); }
+    .w-inc-dl {
+      width: 26px; height: 26px;
+      border-radius: 999px;
+      background: #EEF4FF;
+      color: #2475FF;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .w-inc-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: #EEF4FF;
+      color: #2475FF;
+      font-size: 10px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .w-inc-chart {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 8px;
+      align-items: end;
+    }
+    .w-inc-yaxis {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 82px;
+      font-size: 8.5px;
+      color: #8E98A8;
+      padding-bottom: 12px;
+    }
+    .w-inc-bars {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      gap: 6px;
+      align-items: end;
+      height: 82px;
+    }
+    .w-inc-col { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+    .w-inc-track {
+      width: 11px;
+      border-radius: 3px;
+      background: linear-gradient(180deg, #E8F0FF 0%, #F5F8FF 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .w-inc-cap {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      border-radius: 3px 3px 1px 1px;
+      background: #2977FF;
+    }
+    .w-inc-cap.dark { background: #131722; }
+    .w-inc-x { font-size: 8px; color: #959FB0; }
+
+    /* Widget 4: Total Profit Stacked Cards */
+    .w-profit-stack { position: relative; width: 258px; height: 158px; }
+    .w-profit-back {
+      position: absolute;
+      left: 24px; bottom: 0;
+      width: 210px;
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid #EDF2FA;
+      border-radius: 14px;
+      padding: 14px 16px;
+      box-shadow: 0 10px 26px rgba(36, 117, 255, 0.06);
+    }
+    .w-profit-front {
+      position: absolute;
+      top: 8px; left: 0;
+      width: 238px;
+      background: #FFFFFF;
+      border: 1px solid #EDF2FA;
+      border-radius: 16px;
+      padding: 18px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 18px 40px rgba(36, 117, 255, 0.11);
+    }
+    .w-profit-chevron {
+      position: absolute;
+      top: -10px; right: -10px;
+      width: 28px; height: 28px;
+      border-radius: 999px;
+      background: #FFFFFF;
+      border: 1px solid #E5ECF7;
+      box-shadow: 0 6px 14px rgba(15, 23, 42, 0.09);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink);
+    }
+    .w-mini-bars { display: flex; align-items: flex-end; gap: 5px; height: 42px; }
+    .w-mini-bars span { width: 8px; border-radius: 3px; background: #EDF2FA; display: block; }
+    .w-mini-bars span.b { background: linear-gradient(180deg, #2475FF, #7EB2FF); }
+
+    /* Widget 5: Revenue Trend Line Graph */
+    .w-trend-wrap { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding: 12px 10px 6px; }
+    .w-trend-float {
+      position: absolute;
+      top: 14px; left: 50%;
+      transform: translateX(-56%);
+      background: #FFFFFF;
+      border: 1px solid #EBF0F9;
+      border-radius: 14px;
+      padding: 12px 16px;
+      box-shadow: 0 14px 32px rgba(36, 117, 255, 0.1);
+      min-width: 185px;
+      z-index: 2;
+    }
+
+    /* ================= TRANSACTIONS ACCORDION SECTION ================= */
+    .split-section { padding: 64px 0 96px; }
+    .split-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.04fr;
+      gap: 56px;
+      align-items: center;
+    }
+    .acc-list { display: flex; flex-direction: column; gap: 12px; margin-top: 28px; }
+    .acc-item {
+      border-radius: 14px;
+      background: #F6F9FE;
+      border: 1px solid #EEF3FB;
+      overflow: hidden;
+      transition: background 200ms ease, box-shadow 200ms ease;
+    }
+    .acc-item.open {
+      background: linear-gradient(180deg, #E2EEFF 0%, #F4F9FF 100%);
+      border-color: rgba(147, 190, 255, 0.45);
+      box-shadow: 0 10px 26px rgba(36, 117, 255, 0.08);
+    }
+    .acc-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+    }
+    .acc-btn-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--ink);
+    }
+    .acc-item.open .acc-btn-left { color: var(--blue); }
+    .acc-chevron { transition: transform 200ms ease; color: #3D4759; }
+    .acc-item.open .acc-chevron { transform: rotate(180deg); color: var(--blue); }
+    .acc-body {
+      display: none;
+      padding: 0 20px 18px 20px;
+      font-size: 13px;
+      line-height: 1.58;
+      color: #536075;
+    }
+    .acc-item.open .acc-body { display: block; }
+
+    /* Showcase Stage Right */
+    .tx-stage {
+      border-radius: 24px;
+      padding: 36px;
+      min-height: 410px;
+      background: linear-gradient(155deg, #EDF4FF 0%, #D9E8FF 52%, #B5D0FF 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .tx-panel {
+      display: none;
+      width: 100%;
+      max-width: 380px;
+      background: #FFFFFF;
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 22px 48px rgba(36, 117, 255, 0.14);
+      animation: fadeSlide 240ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .tx-panel.active { display: block; }
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .order-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #F3F6FB;
+    }
+    .order-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .order-row:first-child { padding-top: 0; }
+    .order-user { display: flex; align-items: center; gap: 12px; }
+    .order-name { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.25; }
+    .order-sub { font-size: 11.5px; color: #7E899D; }
+    .order-amt {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid #A4C6FF;
+      background: #F7FAFF;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* ================= SALES FUNNEL SECTION ================= */
+    .funnel-stage {
+      border-radius: 24px;
+      padding: 34px;
+      min-height: 390px;
+      background: linear-gradient(148deg, #F6FCFF 0%, #E7F6FE 100%);
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      overflow: hidden;
+    }
+    .sales-card {
+      width: 280px;
+      background: #FFFFFF;
+      border-radius: 20px;
+      padding: 22px;
+      box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06);
+      position: relative;
+      z-index: 1;
+    }
+    .invoice-card {
+      position: absolute;
+      top: 28px; right: 28px;
+      width: 238px;
+      background: #FFFFFF;
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 20px 48px rgba(36, 117, 255, 0.12);
+      z-index: 2;
+    }
+    .inv-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .inv-icon {
+      width: 38px; height: 38px;
+      border-radius: 999px;
+      border: 1.5px solid #96BCFF;
+      background: #F5F9FF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      color: #2475FF;
+    }
+    .inv-check-dot {
+      position: absolute;
+      right: -2px; bottom: -2px;
+      width: 15px; height: 15px;
+      border-radius: 999px;
+      background: #2475FF;
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      border: 2px solid #FFFFFF;
+    }
+    .inv-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      padding: 8px 4px;
+      color: #465266;
+    }
+    .inv-row strong { color: #8A94A6; font-weight: 500; }
+    .inv-row.highlighted {
+      border: 1px solid #92B9FF;
+      border-radius: 10px;
+      padding: 9px 12px;
+      background: #FAFDFE;
+      margin: 4px 0;
+    }
+    .inv-row.highlighted strong { color: #52627C; }
+    .check-list { display: flex; flex-direction: column; gap: 13px; margin-top: 26px; }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: #1F2736;
+    }
+    .check-circle {
+      width: 18px; height: 18px;
+      border-radius: 999px;
+      background: #11151E;
+      color: #FFFFFF;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* ================= PRICING SECTION ================= */
+    .pricing-section { padding: 72px 0 96px; }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+    .price-card {
+      border-radius: 22px;
+      padding: 24px 20px;
+      background: #F6F7FC;
+      border: 1px solid #EEF1F8;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .price-card:hover { transform: translateY(-3px); }
+    .price-card.featured {
+      background: linear-gradient(148deg, #1E72FF 0%, #5A9AFF 48%, #BBD6FF 100%);
+      border-color: transparent;
+      color: #FFFFFF;
+      box-shadow: 0 26px 56px -14px rgba(36, 117, 255, 0.38);
+    }
+    .price-head { display: flex; align-items: center; gap: 11px; }
+    .price-bolt {
+      width: 34px; height: 34px;
+      border-radius: 999px;
+      background: #0E121B;
+      color: #FFFFFF;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .price-card.featured .price-bolt { background: #FFFFFF; color: #2475FF; }
+    .price-name { font-family: var(--font-display); font-size: 16px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
+    .price-tag { font-size: 11.5px; color: #647084; margin-top: 4px; line-height: 1.45; }
+    .price-card.featured .price-tag { color: rgba(255, 255, 255, 0.86); }
+    .price-val-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .price-val {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.035em;
+    }
+    .price-period { font-size: 13px; color: #7C879B; text-decoration: line-through; }
+    .price-card.featured .price-period { color: rgba(255, 255, 255, 0.72); }
+
+    .active-user-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.55);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .price-card.featured .active-user-row {
+      background: rgba(255, 255, 255, 0.14);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      color: #FFFFFF;
+    }
+    .toggle-switch {
+      width: 36px; height: 20px;
+      border-radius: 999px;
+      background: #141926;
+      border: none;
+      position: relative;
+      cursor: pointer;
+      padding: 0;
+      transition: background 180ms ease;
+    }
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 3px; right: 3px;
+      width: 14px; height: 14px;
+      border-radius: 999px;
+      background: #FFFFFF;
+      transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .toggle-switch[aria-checked="false"] { background: #CBD5E1; }
+    .toggle-switch[aria-checked="false"]::after { transform: translateX(-16px); }
+
+    .price-quote-user { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .price-quote-left { display: flex; align-items: center; gap: 10px; }
+    .price-quote-name { font-size: 14px; font-weight: 600; line-height: 1.2; }
+    .price-quote-role { font-size: 11px; color: #7C879B; }
+    .price-card.featured .price-quote-role { color: rgba(255, 255, 255, 0.82); }
+    .stars { display: flex; gap: 2px; color: #F59E0B; font-size: 13px; }
+    .price-card.featured .stars { color: #FFFFFF; }
+    .price-quote-text {
+      font-size: 12px;
+      line-height: 1.55;
+      color: #5D6778;
+    }
+    .price-card.featured .price-quote-text { color: rgba(255, 255, 255, 0.9); }
+
+    .price-cta {
+      width: 100%;
+      padding: 13px;
+      border-radius: 10px;
+      border: 1px solid #E3E9F3;
+      background: #FFFFFF;
+      color: var(--ink);
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+      transition: transform 150ms ease, box-shadow 150ms ease;
+    }
+    .price-cta:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08); }
+    .price-card.featured .price-cta { border-color: transparent; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12); }
+
+    .price-features { display: flex; flex-direction: column; gap: 10px; margin-top: 2px; }
+    .price-feat {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 12.5px;
+      color: #465266;
+    }
+    .price-card.featured .price-feat { color: rgba(255, 255, 255, 0.92); }
+
+    /* ================= TESTIMONIALS DOTTED MAP ================= */
+    .testi-section { padding: 64px 0 88px; text-align: center; }
+    .map-stage {
+      position: relative;
+      max-width: 980px;
+      margin: 24px auto 0;
+      padding: 46px 24px 16px;
+      min-height: 410px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .world-map-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .map-pin {
+      position: absolute;
+      border-radius: 999px;
+      padding: 3px;
+      background: #FFFFFF;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14);
+      transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 180ms ease;
+      z-index: 2;
+    }
+    .map-pin:hover, .map-pin.active-pin {
+      transform: scale(1.1);
+      box-shadow: 0 14px 32px rgba(36, 117, 255, 0.28);
+    }
+    .testi-center {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 620px;
+    }
+    .testi-main-avatar {
+      width: 84px; height: 84px;
+      border-radius: 999px;
+      padding: 4px;
+      background: #FFFFFF;
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+      margin-bottom: 24px;
+    }
+    .testi-quote {
+      font-family: var(--font-display);
+      font-size: clamp(20px, 2.3vw, 27px);
+      font-weight: 500;
+      line-height: 1.38;
+      letter-spacing: -0.025em;
+      color: var(--ink);
+      margin-bottom: 28px;
+      position: relative;
+      padding: 0 28px;
+    }
+    .q-mark {
+      font-family: Georgia, serif;
+      font-size: 40px;
+      line-height: 0;
+      vertical-align: -12px;
+      color: #0B0F19;
+      margin: 0 6px;
+    }
+    .testi-author { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--ink); }
+    .testi-role { font-size: 12.5px; color: #7C879B; margin-top: 3px; }
+    .testi-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 26px;
+    }
+    .testi-arrow {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      border: 1px solid #EAEEF6;
+      background: #FFFFFF;
+      color: var(--ink);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+      transition: transform 150ms ease;
+    }
+    .testi-arrow:hover { transform: translateY(-1px); }
+    .testi-arrow.primary {
+      background: var(--btn-blue-grad);
+      color: #FFFFFF;
+      border-color: transparent;
+      box-shadow: 0 10px 22px rgba(36, 117, 255, 0.32);
+    }
+
+    /* ================= FAQ SECTION ================= */
+    .faq-section { padding: 52px 0 104px; }
+    .faq-list {
+      max-width: 720px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .faq-item {
+      border-radius: 14px;
+      background: #F4F7FD;
+      border: 1px solid #EDF2FA;
+      overflow: hidden;
+      transition: background 180ms ease;
+    }
+    .faq-item.open { background: #EEF4FF; border-color: #D7E6FF; }
+    .faq-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px 24px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+    }
+    .faq-btn-left { display: flex; align-items: center; gap: 18px; }
+    .faq-num { font-size: 13px; font-weight: 500; color: #6E7A8F; min-width: 22px; }
+    .faq-q { font-size: 14.5px; font-weight: 500; color: var(--ink); }
+    .faq-chev { color: #3A4456; transition: transform 180ms ease; flex-shrink: 0; }
+    .faq-item.open .faq-chev { transform: rotate(180deg); color: var(--blue); }
+    .faq-ans {
+      display: none;
+      padding: 0 24px 20px 64px;
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+    .faq-item.open .faq-ans { display: block; }
+
+    /* ================= CTA SHOWCASE SECTION ================= */
+    .cta-showcase {
+      position: relative;
+      padding: 64px 0 0;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse 65% 50% at 10% 72%, rgba(168, 203, 255, 0.72) 0%, transparent 72%),
+        radial-gradient(ellipse 65% 50% at 90% 72%, rgba(168, 203, 255, 0.72) 0%, transparent 72%),
+        linear-gradient(180deg, #FFFFFF 0%, #FFFFFF 36%, #E8F1FF 72%, #FFFFFF 100%);
+    }
+
+    /* ================= FOOTER ================= */
+    .site-footer {
+      position: relative;
+      background:
+        radial-gradient(ellipse 35% 60% at 12% 100%, rgba(212, 229, 255, 0.45) 0%, transparent 70%),
+        radial-gradient(ellipse 35% 60% at 88% 100%, rgba(212, 229, 255, 0.45) 0%, transparent 70%),
+        #FFFFFF;
+      padding: 76px 0 0;
+    }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.6fr repeat(4, 1fr);
+      gap: 36px;
+      padding-bottom: 56px;
+    }
+    .footer-brand {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+      margin-bottom: 16px;
+    }
+    .footer-addr {
+      font-size: 13.5px;
+      line-height: 1.65;
+      color: #5C677B;
+      max-width: 220px;
+      margin-bottom: 24px;
+    }
+    .footer-socials { display: flex; align-items: center; gap: 16px; }
+    .footer-socials a {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #121722;
+      transition: background 150ms ease, transform 150ms ease;
+    }
+    .footer-socials a:hover { background: #EEF4FF; transform: translateY(-1px); }
+    .footer-col-title {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--ink);
+      margin-bottom: 18px;
+    }
+    .footer-links { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+    .footer-links a { font-size: 13.5px; color: #5C677B; transition: color 150ms ease; }
+    .footer-links a:hover { color: var(--blue); }
+    .footer-bottom {
+      border-top: 1px solid #EEF2F7;
+      padding: 24px 0 30px;
+      text-align: center;
+      font-size: 12.5px;
+      color: #495467;
+    }
+
+    /* ================= MODAL & TOAST ================= */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(11, 15, 25, 0.45);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-box {
+      width: 100%;
+      max-width: 440px;
+      background: #FFFFFF;
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: 0 28px 64px rgba(15, 23, 42, 0.22);
+      position: relative;
+      animation: fadeSlide 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .modal-close {
+      position: absolute;
+      top: 16px; right: 16px;
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      border: 1px solid #EEF1F6;
+      background: #F8FAFD;
+      cursor: pointer;
+      color: #4B5565;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid #DCE3F0;
+      font-size: 14px;
+      margin-top: 6px;
+      margin-bottom: 14px;
+    }
+    .modal-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(36,117,255,0.12); }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #121722;
+      color: #FFFFFF;
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.25);
+      opacity: 0;
+      transform: translateY(10px);
+      pointer-events: none;
+      transition: opacity 200ms ease, transform 200ms ease;
+      z-index: 120;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ================= RESPONSIVE ================= */
+    @media (max-width: 980px) {
+      .why-grid { grid-template-columns: repeat(2, 1fr); }
+      .bento-row-3 { grid-template-columns: 1fr; }
+      .bento-row-2 { grid-template-columns: 1fr; }
+      .split-grid { grid-template-columns: 1fr; gap: 36px; }
+      .pricing-grid { grid-template-columns: repeat(2, 1fr); }
+      .footer-grid { grid-template-columns: 1fr 1fr; }
+      .dash-shell { grid-template-columns: 1fr; }
+      .dash-sidebar { display: none; }
+      .dash-grid-top, .dash-grid-bottom { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 680px) {
+      .nav-links { display: none; }
+      .why-header { flex-direction: column; align-items: flex-start; }
+      .why-grid { grid-template-columns: 1fr; }
+      .pricing-grid { grid-template-columns: 1fr; max-width: 440px; margin: 0 auto; }
+      .map-pin { display: none; }
+      .invoice-card { position: static; width: 100%; margin-top: 16px; }
+      .funnel-stage { flex-direction: column; align-items: stretch; }
+      .sales-card { width: 100%; }
+      .footer-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ================= MOTION, SCROLL REVEAL & MOUSE-REACTIVE EFFECTS ================= */
+    .cta-showcase {
+      --mx: 50%;
+      --my: 65%;
+    }
+    .cta-showcase::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(560px circle at var(--mx) var(--my), rgba(60, 140, 255, 0.24) 0%, rgba(147, 197, 255, 0.14) 38%, transparent 72%);
+    }
+    .cta-showcase > * { position: relative; z-index: 1; }
+
+    /* Hero Choreographed Entrance */
+    @keyframes heroFadeUp {
+      from { opacity: 0; transform: translate3d(0, 20px, 0) scale(0.985); }
+      to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+    }
+    .navbar       { animation: heroFadeUp 640ms cubic-bezier(0.16, 1, 0.3, 1) 40ms both; }
+    .announce-pill{ animation: heroFadeUp 640ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both; }
+    .hero-title   { animation: heroFadeUp 740ms cubic-bezier(0.16, 1, 0.3, 1) 200ms both; }
+    .hero-desc    { animation: heroFadeUp 700ms cubic-bezier(0.16, 1, 0.3, 1) 290ms both; }
+    .hero-ctas    { animation: heroFadeUp 700ms cubic-bezier(0.16, 1, 0.3, 1) 360ms both; }
+    .hero-wrap .dash-outer { animation: heroFadeUp 880ms cubic-bezier(0.16, 1, 0.3, 1) 430ms both; }
+
+    /* Scroll Reveal Primitives */
+    .reveal {
+      opacity: 0;
+      transform: translate3d(0, 26px, 0) scale(0.985);
+      transition:
+        opacity 680ms cubic-bezier(0.16, 1, 0.3, 1) var(--reveal-delay, 0ms),
+        transform 720ms cubic-bezier(0.16, 1, 0.3, 1) var(--reveal-delay, 0ms);
+      will-change: opacity, transform;
+    }
+    .reveal.is-visible {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+
+    /* Interactive 3D Tilt & Cursor Spotlight Sheen on Cards */
+    .tilt-card {
+      position: relative;
+      transform-style: preserve-3d;
+      --card-x: 50%;
+      --card-y: 50%;
+      --tilt-rx: 0deg;
+      --tilt-ry: 0deg;
+      --tilt-lift: 0px;
+      transition:
+        transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 260ms cubic-bezier(0.16, 1, 0.3, 1),
+        border-color 220ms ease,
+        background 280ms ease;
+    }
+    .tilt-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      opacity: 0;
+      background: radial-gradient(320px circle at var(--card-x) var(--card-y), rgba(96, 165, 255, 0.16) 0%, rgba(255, 255, 255, 0.32) 32%, transparent 68%);
+      transition: opacity 240ms ease;
+      z-index: 3;
+    }
+    .why-card.active.tilt-card::before,
+    .price-card.featured.tilt-card::before,
+    .tx-stage.tilt-card::before {
+      background: radial-gradient(340px circle at var(--card-x) var(--card-y), rgba(255, 255, 255, 0.34) 0%, rgba(191, 219, 254, 0.14) 38%, transparent 70%);
+    }
+    .tilt-card:hover::before { opacity: 1; }
+    .reveal.is-visible.tilt-card {
+      transition:
+        opacity 680ms cubic-bezier(0.16, 1, 0.3, 1),
+        transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 260ms cubic-bezier(0.16, 1, 0.3, 1),
+        border-color 220ms ease,
+        background 280ms ease;
+    }
+    .tilt-card.is-tilting,
+    .reveal.is-visible.tilt-card.is-tilting {
+      transform: perspective(900px) rotateX(var(--tilt-rx)) rotateY(var(--tilt-ry)) translate3d(0, var(--tilt-lift), 0);
+      transition:
+        transform 75ms ease-out,
+        box-shadow 220ms ease,
+        border-color 200ms ease;
+    }
+
+    /* Animated Gradient Flow on Featured Blue Cards & Primary CTA */
+    @keyframes gradientShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .why-card.active,
+    .price-card.featured,
+    .btn-primary-blue,
+    .testi-arrow.primary {
+      background-size: 180% 180%;
+      animation: gradientShift 7s ease-in-out infinite;
+    }
+
+    /* Button Sheen Sweep */
+    .btn-primary-blue, .btn-dark {
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-primary-blue::after, .btn-dark::after {
+      content: '';
+      position: absolute;
+      top: 0; left: -120%;
+      width: 65%; height: 100%;
+      background: linear-gradient(110deg, transparent 0%, rgba(255,255,255,0.28) 50%, transparent 100%);
+      transform: skewX(-18deg);
+      transition: left 520ms cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+    }
+    .btn-primary-blue:hover::after, .btn-dark:hover::after { left: 150%; }
+
+    /* Ambient Floating Micro-Motion for Nested UI Widgets */
+    @keyframes floatGentle {
+      0%, 100% { transform: translate3d(0, 0px, 0); }
+      50%      { transform: translate3d(0, -6px, 0); }
+    }
+    @keyframes floatGentleAlt {
+      0%, 100% { transform: translate3d(-56%, 0px, 0); }
+      50%      { transform: translate3d(-56%, -5px, 0); }
+    }
+    @keyframes pinBob {
+      0%, 100% { transform: translate3d(0, 0px, 0); }
+      50%      { transform: translate3d(0, -7px, 0); }
+    }
+    .invoice-card {
+      animation: floatGentle 6.4s ease-in-out infinite;
+      transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 280ms ease;
+    }
+    .funnel-stage:hover .invoice-card {
+      box-shadow: 0 28px 56px rgba(36, 117, 255, 0.18);
+    }
+    .w-trend-float {
+      animation: floatGentleAlt 5.8s ease-in-out infinite;
+    }
+    .w-profit-front {
+      transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 320ms ease;
+    }
+    .w-profit-back {
+      transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .bento-visual:hover .w-profit-front {
+      transform: translate3d(-4px, -6px, 0);
+      box-shadow: 0 24px 48px rgba(36, 117, 255, 0.16);
+    }
+    .bento-visual:hover .w-profit-back {
+      transform: translate3d(6px, 4px, 0);
+    }
+    .w-neocash, .w-income {
+      transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 300ms ease;
+    }
+    .bento-visual:hover .w-neocash,
+    .bento-visual:hover .w-income {
+      transform: translate3d(0, -5px, 0);
+      box-shadow: 0 20px 44px rgba(36, 117, 255, 0.14);
+    }
+    .why-icon {
+      transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .why-card:hover .why-icon {
+      transform: scale(1.08) translate3d(0, -2px, 0);
+    }
+    .dash-card {
+      transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 200ms ease, border-color 200ms ease;
+    }
+    .dash-card:hover {
+      transform: translate3d(0, -2px, 0);
+      border-color: #DCE7FA;
+      box-shadow: 0 10px 26px rgba(36, 117, 255, 0.06);
+    }
+    .bill-item, .order-row {
+      transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), background 180ms ease;
+    }
+    .bill-item:hover { transform: translate3d(3px, 0, 0); background: #F3F7FE; }
+    .order-row:hover { transform: translate3d(4px, 0, 0); }
+
+    /* Bar Grow & Chart Reveal Animations */
+    .w-inc-track {
+      transform-origin: bottom;
+      transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .bento-visual:not(.is-visible) .w-inc-track {
+      transform: scaleY(0.15);
+    }
+    .bento-visual:hover .w-inc-col:hover .w-inc-track {
+      transform: scaleY(1.07);
+    }
+    .brand-logo-item {
+      transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease;
+    }
+    .brand-logo-item:hover {
+      transform: translate3d(0, -2px, 0);
+    }
+
+    /* Map Pins Staggered Floating */
+    .map-pin {
+      animation: pinBob 5.2s ease-in-out infinite;
+    }
+    .map-pin:nth-of-type(2) { animation-delay: -1.1s; animation-duration: 5.8s; }
+    .map-pin:nth-of-type(3) { animation-delay: -2.4s; animation-duration: 6.2s; }
+    .map-pin:nth-of-type(4) { animation-delay: -0.7s; animation-duration: 5.5s; }
+    .map-pin:nth-of-type(5) { animation-delay: -3.1s; animation-duration: 6.0s; }
+    .map-pin:nth-of-type(6) { animation-delay: -1.8s; animation-duration: 5.4s; }
+    .map-pin:hover, .map-pin.active-pin {
+      animation-play-state: paused;
+      transform: scale(1.12);
+    }
+
+    /* Testimonial Crossfade Transition */
+    .testi-center.is-switching {
+      opacity: 0;
+      transform: translate3d(0, 8px, 0) scale(0.985);
+    }
+    .testi-center {
+      transition: opacity 220ms ease, transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Respect Reduced Motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .reveal { opacity: 1 !important; transform: none !important; }
+      .bento-visual:not(.is-visible) .w-inc-track { transform: none !important; }
+    }
+  
+    /* ===== Product previews: the real app's tray-and-surface design ===== */
+    .nx-app {
+      --nx-ink: #171717; --nx-text: #3f3f46; --nx-muted: #77777d; --nx-faint: #a3a3a8;
+      --nx-tray: #f1f1f2; --nx-line: #ececee; --nx-mid: #d2d2d6; --nx-empty: #f3f3f4;
+      position: relative; display: grid; grid-template-columns: 188px minmax(0, 1fr);
+      overflow: hidden; border-radius: 16px; background: #fff; color: var(--nx-text);
+      font-family: 'DM Sans', system-ui, sans-serif; font-size: 12px; line-height: 1.35; text-align: left;
+      box-shadow: 0 0 0 1px rgba(15, 35, 75, .07);
+    }
+    .nx-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .nx-side { display: flex; flex-direction: column; gap: 9px; padding: 9px; background: #f4f4f5; border-right: 1px solid #e6e6e8; }
+    .nx-pill { display: flex; align-items: center; gap: 8px; padding: 5px; border-radius: 10px; background: #e9e9eb; }
+    .nx-pill b, .nx-avatar { display: grid; flex: none; place-items: center; width: 27px; height: 27px; border-radius: 7px; font-size: 9.5px; font-weight: 700; }
+    .nx-pill b { background: #fff; color: var(--nx-ink); }
+    .nx-pill small, .nx-user small { display: block; color: var(--nx-muted); font-size: 9.5px; }
+    .nx-pill span, .nx-user span { min-width: 0; color: var(--nx-ink); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+    .nx-group { padding-top: 7px; border-top: 1px solid #e6e6e8; }
+    .nx-group:first-of-type { padding-top: 0; border-top: 0; }
+    .nx-group > p { padding: 0 7px 4px; color: var(--nx-muted); font-size: 9.5px; }
+    .nx-link { display: flex; align-items: center; gap: 7px; padding: 5px 7px; border-radius: 7px; color: #55555b; font-size: 11px; white-space: nowrap; }
+    .nx-link svg { width: 12px; height: 12px; flex: none; opacity: .75; }
+    .nx-link.on { background: #fff; color: var(--nx-ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.05); }
+    .nx-user { display: flex; align-items: center; gap: 7px; margin-top: auto; padding: 5px; border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 0 0 1px rgba(0,0,0,.05); }
+    .nx-avatar, .nx-user .nx-avatar { background: var(--nx-ink); color: #fff; font-size: 9.5px; }
+    .nx-main { min-width: 0; }
+    .nx-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 40px; padding: 0 14px; border-bottom: 1px solid var(--nx-line); color: var(--nx-faint); font-size: 11px; }
+    .nx-top b { color: var(--nx-ink); font-weight: 500; }
+    .nx-sample { padding: 3px 8px; border-radius: 999px; background: #eef4ff; color: #2475ff; font-size: 9.5px; font-weight: 600; white-space: nowrap; }
+    .nx-body { display: grid; gap: 9px; padding: 12px 14px 14px; }
+    .nx-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .nx-title h4 { color: var(--nx-ink); font-family: inherit; font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
+    .nx-btn { padding: 5px 9px; border-radius: 7px; background: var(--nx-ink); color: #fff; font-size: 10.5px; font-weight: 500; white-space: nowrap; }
+    .nx-tray { min-width: 0; padding: 3px; border-radius: 12px; background: var(--nx-tray); box-shadow: inset 0 0 0 1px rgba(0,0,0,.035); }
+    .nx-surface { min-width: 0; border-radius: 9px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 0 0 1px rgba(0,0,0,.05); }
+    .nx-eyebrow { color: var(--nx-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 8.5px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; }
+    .nx-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .nx-kpi { display: flex; align-items: center; justify-content: space-between; gap: 5px; padding: 9px 10px; }
+    .nx-kpi strong { display: block; margin-top: 5px; color: var(--nx-ink); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 15px; font-weight: 600; letter-spacing: -.04em; white-space: nowrap; }
+    .nx-needles { display: flex; flex: none; align-items: flex-end; gap: 3px; height: 27px; }
+    .nx-needles i { position: relative; display: block; overflow: hidden; width: 2px; height: 100%; border-radius: 2px; background: #ececee; }
+    .nx-needles i::after { content: ''; position: absolute; inset: auto 0 0; height: var(--h); border-radius: 2px; background: var(--c, #a9a9ae); }
+    .nx-foot { display: flex; justify-content: flex-end; gap: 3px; padding: 3px 7px 2px; color: var(--nx-muted); font-size: 9.5px; }
+    .nx-foot b { color: #059669; font-weight: 600; }
+    .nx-charts { display: grid; grid-template-columns: minmax(0, 2.15fr) minmax(0, 1fr); gap: 8px; }
+    .nx-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 25px; padding: 2px 8px; }
+    .nx-chart { padding: 10px 11px; }
+    .nx-chart-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .nx-total { color: var(--nx-muted); font-size: 10px; white-space: nowrap; }
+    .nx-total b { margin-left: 4px; color: var(--nx-ink); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 15px; font-weight: 600; letter-spacing: -.04em; }
+    .nx-seg { display: inline-flex; flex: none; padding: 2px; border-radius: 999px; background: var(--nx-tray); }
+    .nx-seg button { padding: 3px 8px; border: 0; border-radius: 999px; background: none; color: var(--nx-muted); font-size: 9.5px; font-weight: 500; cursor: pointer; transition: background .18s, color .18s; }
+    .nx-seg button[aria-pressed="true"] { background: #fff; color: var(--nx-ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+    .nx-pixels { position: relative; display: grid; gap: 2px; height: 174px; cursor: crosshair; }
+    .nx-col { display: flex; flex-direction: column-reverse; gap: 2px; min-width: 0; animation: nx-col .55s cubic-bezier(.22,1,.36,1) both; }
+    .nx-col i { display: block; flex: 1; min-height: 0; border-radius: 1px; background: var(--nx-empty); transition: background .1s; }
+    .nx-col i.d { background: var(--nx-ink); } .nx-col i.m { background: var(--nx-mid); }
+    .nx-col.on i:not(.d):not(.m) { background: #e7e7e9; }
+    @keyframes nx-col { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0); } }
+    .nx-axis { display: flex; margin-top: 5px; color: var(--nx-faint); font-size: 8.5px; letter-spacing: .03em; }
+    .nx-axis span { flex: 1; overflow: hidden; text-align: center; white-space: nowrap; }
+    .nx-tip { position: absolute; z-index: 3; width: 122px; padding: 3px; border-radius: 8px; background: #fff; box-shadow: 0 10px 24px rgba(0,0,0,.14), 0 0 0 1px rgba(0,0,0,.06); pointer-events: none; transition: left .1s, top .1s; }
+    .nx-tip p { padding: 2px 5px; border-radius: 5px; background: var(--nx-tray); color: var(--nx-muted); font-size: 9.5px; }
+    .nx-tip div { display: flex; justify-content: space-between; padding: 3px 5px 0; color: var(--nx-muted); font-size: 9.5px; }
+    .nx-tip b { color: var(--nx-ink); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .nx-bars { position: relative; display: flex; align-items: flex-end; justify-content: space-between; height: 128px; margin-top: 8px; background-image: repeating-linear-gradient(to bottom, #ececee 0, #ececee 1px, transparent 1px, transparent 25%); }
+    .nx-bars span { display: flex; flex-direction: column; overflow: hidden; width: 4px; height: var(--h); border-radius: 2px 2px 0 0; transform-origin: bottom; animation: nx-bar .5s cubic-bezier(.22,1,.36,1) both; }
+    .nx-bars u { display: block; flex: var(--e); background: var(--nx-mid); } .nx-bars em { display: block; flex: var(--v); background: var(--nx-ink); }
+    @keyframes nx-bar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+    .nx-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+    .nx-table th { padding: 6px 9px; border-bottom: 1px solid var(--nx-line); color: var(--nx-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 8.5px; font-weight: 500; letter-spacing: .05em; text-align: left; text-transform: uppercase; }
+    .nx-table td { padding: 6px 9px; border-bottom: 1px solid #f4f4f5; color: var(--nx-text); white-space: nowrap; }
+    .nx-table tr:last-child td { border-bottom: 0; }
+    .nx-status { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 999px; box-shadow: 0 0 0 1px rgba(0,0,0,.07); font-size: 9.5px; }
+    .nx-status::before { content: ''; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+    .nx-pos { display: grid; grid-template-columns: minmax(0, 1fr) 244px; gap: 9px; }
+    .nx-products { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; align-content: start; }
+    .nx-product { transition: background .18s; } .nx-product.sel { background: var(--nx-ink); }
+    .nx-product .nx-surface { display: flex; gap: 7px; padding: 7px; }
+    .nx-thumb { position: relative; display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: 7px; background: radial-gradient(circle, #dfdfe3 1px, transparent 1.2px) 0 0 / 6px 6px, #f7f7f8; color: #8a8a90; }
+    .nx-thumb svg { width: 19px; height: 19px; }
+    .nx-count { position: absolute; top: -5px; right: -5px; display: grid; place-items: center; min-width: 16px; height: 16px; border-radius: 99px; background: var(--nx-ink); color: #fff; font-size: 9px; font-weight: 600; box-shadow: 0 0 0 2px #fff; animation: nx-pop .24s cubic-bezier(.22,1,.36,1); }
+    @keyframes nx-pop { 0% { transform: scale(.55); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+    .nx-product h5 { overflow: hidden; color: var(--nx-ink); font-family: inherit; font-size: 10.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    .nx-product small { display: block; color: var(--nx-muted); font-size: 9px; }
+    .nx-product strong { color: var(--nx-ink); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+    .nx-prod-foot { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 28px; padding: 2px 3px 1px 6px; color: var(--nx-muted); font-size: 9px; }
+    .nx-product.sel .nx-prod-foot { color: #c9c9cd; }
+    .nx-add, .nx-step { display: inline-flex; align-items: center; height: 22px; border: 0; border-radius: 6px; background: #fff; color: var(--nx-ink); font-size: 9.5px; font-weight: 500; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+    .nx-add { padding: 0 7px; cursor: pointer; }
+    .nx-step button { width: 20px; height: 100%; border: 0; border-radius: 5px; background: none; color: var(--nx-ink); font-size: 12px; cursor: pointer; }
+    .nx-step button:hover { background: var(--nx-tray); }
+    .nx-step span { min-width: 15px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600; text-align: center; }
+    .nx-bill { display: flex; flex-direction: column; }
+    .nx-bill .nx-surface { flex: 1; padding: 8px; }
+    .nx-line { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; padding: 6px 7px; border-radius: 7px; background: #f7f7f8; animation: nx-line .2s ease-out; }
+    @keyframes nx-line { from { opacity: 0; transform: translateY(-3px); } }
+    .nx-line span { min-width: 0; overflow: hidden; color: var(--nx-ink); font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+    .nx-line b { flex: none; color: var(--nx-ink); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .nx-grand { display: flex; align-items: center; justify-content: space-between; margin-top: 3px; padding: 8px 9px; border-radius: 9px; background: var(--nx-ink); color: #fff; font-size: 10.5px; }
+    .nx-grand b { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 15px; letter-spacing: -.04em; }
+    .nx-finish { margin-top: 3px; padding: 7px; border-radius: 8px; background: #fff; color: var(--nx-ink); font-size: 10.5px; font-weight: 600; text-align: center; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+
+    /* ===== Plan overview ===== */
+    .px-switch { display: flex; width: max-content; max-width: 100%; margin: 0 auto 28px; padding: 4px; border-radius: 12px; background: #fff; border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(36,117,255,.07); }
+    .px-switch button { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border: 0; border-radius: 9px; background: none; color: var(--muted); font-size: 13.5px; font-weight: 500; cursor: pointer; transition: background .2s, color .2s; }
+    .px-switch button[aria-pressed="true"] { background: var(--btn-blue-grad); color: #fff; box-shadow: 0 6px 14px rgba(36,117,255,.25); }
+    .px-switch em { padding: 2px 7px; border-radius: 999px; background: #EEF4FF; color: var(--blue); font-size: 10.5px; font-style: normal; font-weight: 600; }
+    .px-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+    .px-card { display: flex; flex-direction: column; min-width: 0; padding: 4px; border-radius: 20px; background: #EEF3FB; border: 1px solid var(--border); transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s; }
+    .px-card:hover { transform: translateY(-4px); box-shadow: 0 18px 36px -18px rgba(36,117,255,.4); }
+    .px-card.featured { background: var(--blue-grad); border-color: transparent; box-shadow: 0 18px 40px -16px rgba(36,117,255,.6); }
+    .px-band { padding: 8px 8px 9px; color: var(--muted); font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-align: center; text-transform: uppercase; }
+    .px-card.featured .px-band { color: #fff; }
+    .px-inner { display: flex; flex: 1; flex-direction: column; padding: 18px 16px; border-radius: 16px; background: #fff; }
+    .px-inner h3 { font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -.03em; }
+    .px-sub { margin-top: 1px; color: var(--blue); font-size: 12.5px; font-weight: 600; }
+    .px-sum { min-height: 74px; margin-top: 8px; padding-bottom: 13px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+    .px-price { margin-top: 14px; font-family: var(--font-display); font-size: 27px; font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+    .px-was { min-height: 18px; color: var(--muted-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .px-was s { margin-right: 5px; }
+    .px-was b { color: #15803D; font-weight: 600; }
+    .px-cta { width: 100%; margin: 13px 0 14px; padding: 10px; border: 0; border-radius: 10px; background: #EEF4FF; color: var(--blue); font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background .18s, color .18s, transform .14s; }
+    .px-cta:hover { background: var(--blue); color: #fff; }
+    .px-cta:active { transform: scale(.98); }
+    .px-card.featured .px-cta { background: var(--btn-blue-grad); color: #fff; box-shadow: 0 8px 18px rgba(36,117,255,.3); }
+    .px-limits { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 13px; }
+    .px-limits div { padding: 7px 8px; border-radius: 9px; background: var(--surface-2); color: var(--muted); font-size: 10.5px; }
+    .px-limits b { display: block; color: var(--ink); font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+    .px-plus { margin-bottom: 7px; color: var(--ink); font-size: 12px; font-weight: 600; }
+    .px-list { display: grid; gap: 7px; list-style: none; }
+    .px-list li { display: flex; gap: 7px; color: var(--ink-2); font-size: 12.5px; line-height: 1.35; }
+    .px-yes { display: inline-grid; flex: none; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #E3EEFF; color: var(--blue); }
+    .px-yes svg, .px-no svg { width: 10px; height: 10px; }
+    .px-assure { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 26px; margin-top: 16px; padding: 13px 18px; border-radius: 14px; background: var(--surface); color: var(--ink-2); font-size: 13px; }
+    .px-assure span { display: inline-flex; align-items: center; gap: 7px; }
+
+    /* ===== Tick and cross comparison ===== */
+    .px-compare-head { margin: 58px 0 20px; text-align: center; }
+    .px-compare-head h3 { font-family: var(--font-display); font-size: 28px; font-weight: 600; letter-spacing: -.03em; }
+    .px-compare-head p { margin-top: 4px; color: var(--muted); font-size: 14.5px; }
+    .px-scroll { position: relative; overflow-x: auto; border: 1px solid var(--border); border-radius: 20px; background: linear-gradient(180deg, #fff 0%, #F7FAFF 62%, #E8F1FF 100%); box-shadow: 0 22px 50px -30px rgba(36,117,255,.5); }
+    .px-table { width: 100%; min-width: 800px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+    .px-table th, .px-table td { padding: 10px 12px; border-bottom: 1px solid rgba(36,117,255,.08); font-size: 13px; text-align: center; }
+    .px-table th:first-child, .px-table td:first-child { position: sticky; left: 0; z-index: 2; width: 31%; background: #fff; color: var(--ink-2); font-weight: 400; text-align: left; }
+    .px-table thead th { padding: 20px 10px 16px; vertical-align: top; background: #fff; }
+    .px-table thead th.hot, .px-table tbody td.hot { background: rgba(36,117,255,.055); }
+    .px-table thead th.hot { border-radius: 14px 14px 0 0; }
+    .px-table thead b { display: block; font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+    .px-table thead small { display: block; min-height: 32px; color: var(--muted); font-size: 11.5px; font-weight: 400; line-height: 1.3; }
+    .px-table thead strong { display: block; margin: 5px 0 9px; font-family: var(--font-display); font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .px-table thead button { padding: 7px 13px; border: 0; border-radius: 8px; background: #EEF4FF; color: var(--blue); font-size: 12px; font-weight: 600; cursor: pointer; transition: background .18s, color .18s; }
+    .px-table thead button:hover, .px-table thead .hot button { background: var(--blue); color: #fff; }
+    .px-table .px-cat td { padding: 18px 12px 7px; border-bottom: 1px solid rgba(36,117,255,.16); background: transparent; color: var(--ink); font-family: var(--font-display); font-size: 14.5px; font-weight: 600; text-align: left; }
+    .px-table .px-cat td:first-child { background: #fff; }
+    .px-table tbody tr:not(.px-cat):hover td { background: #F1F6FF; }
+    .px-table td small { display: block; margin-top: 1px; color: var(--muted-2); font-size: 11px; line-height: 1.3; }
+    .px-table td.val { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .px-table .px-yes { width: 20px; height: 20px; background: var(--blue); color: #fff; }
+    .px-no { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #F1F3F8; color: #A4ADBC; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+
+    @media (max-width: 1040px) {
+      .px-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .px-sum { min-height: 0; }
+    }
+    @media (max-width: 860px) {
+      .nx-app { grid-template-columns: minmax(0, 1fr); }
+      .nx-side { display: none; }
+      .nx-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .nx-charts, .nx-pos { grid-template-columns: minmax(0, 1fr); }
+      .nx-table th:nth-child(3), .nx-table td:nth-child(3) { display: none; }
+    }
+    @media (max-width: 980px) {
+      .bento-row-3, .bento-row-2 { grid-template-columns: minmax(0, 1fr); }
+      .bento-row-3 > div, .bento-row-2 > div, .bento-visual { min-width: 0; max-width: 100%; }
+      .bento-visual { overflow: hidden; }
+      .split-grid { grid-template-columns: minmax(0, 1fr); }
+      .split-grid > div, .acc-list, .acc-item, .tx-stage, .funnel-stage { min-width: 0; max-width: 100%; }
+      .tx-stage, .funnel-stage { overflow: hidden; }
+    }
+    @media (max-width: 420px) {
+      .navbar { gap: 8px; }
+      .navbar .brand { min-width: 0; font-size: 16px; white-space: nowrap; }
+      .navbar .btn-dark { padding: 9px 12px; font-size: 12px; }
+      .nx-table th:nth-child(1), .nx-table td:nth-child(1) { display: none; }
+      .nx-table th, .nx-table td { padding-left: 6px; padding-right: 6px; }
+    }
+    @media (max-width: 620px) {
+      .px-grid { grid-template-columns: minmax(0, 1fr); }
+      .nx-products { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .nx-chart-top { flex-wrap: wrap; }
+      .px-table { min-width: 680px; }
+      .px-table th:first-child, .px-table td:first-child { width: 170px; }
+      .px-compare-head h3 { font-size: 23px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .nx-col, .nx-bars span, .nx-count, .nx-line { animation: none; }
+      .px-card, .px-cta, .nx-tip { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <!-- ================= SECTION 1: HERO & FLOATING NAVBAR ================= -->
+  <section id="home" class="hero-wrap">
+    <div class="container">
+      <header class="navbar">
+        <a href="#home" class="brand">Nexus ERP</a>
+        <nav class="nav-links" aria-label="Primary Navigation">
+          <a href="#pricing">Pricing</a>
+          <a href="/s/imraan-footwear">Live Demo Storefront</a>
+          <a href="#about">Modules</a>
+          <a href="#features">Capabilities</a>
+        </nav>
+        <a class="btn-dark" href="/login" data-auth-link>Sign In</a>
+      </header>
+
+      <div class="hero-center">
+        <div class="announce-pill">
+          <span class="announce-badge">LIVE</span>
+          <span class="announce-text">2025–2026 Indian GST Ready • Offline-First PWA</span>
+        </div>
+        <h1 class="hero-title" style="max-width:860px;font-size:clamp(36px,4.9vw,60px);">One ERP for Factory, Retail Branches, GST Billing &amp; Live Storefronts.</h1>
+        <p class="hero-desc" style="max-width:600px;">
+          Built for Footwear, Apparel, Electronics, FMCG &amp; Hardware businesses. Connect your factory floor, wholesale dealers, retail counters, and WhatsApp catalogue on Phone &amp; PC — even when internet drops.
+        </p>
+        <div class="hero-ctas">
+          <a class="btn-primary-blue" href="/login" data-auth-link>Open ERP Portal</a>
+          <button type="button" class="btn-white" data-open-modal="Book a Demo">Book a Demo</button>
+        </div>
+      </div>
+
+      <!-- Hero Dashboard Mockup: Nexus ERP • Imraan Footwear (DEL + CHN) -->
+      <div class="dash-outer">
+        <div class="nx-app" id="hero-dashboard" data-nx-view="overview"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECTION 2: DYNAMIC MULTI-VERTICAL ENGINE ================= -->
+  <section class="brands-section">
+    <div class="container">
+      <p class="brands-title">Dynamic Multi-Vertical Engine — Pre-Configured Presets &amp; Custom Fields</p>
+      <div class="brands-row">
+        <!-- Footwear -->
+        <div class="brand-logo-item" style="flex-direction:column;gap:4px;align-items:center;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2475FF" stroke-width="1.9"><path d="M4 16v2a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-1c0-2-2-3-5-3l-3-3-3-5-3 2-3 8Z"/></svg>
+            <span style="font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink);">Footwear</span>
+          </div>
+          <span style="font-size:11.5px;color:#647084;">UOM: Pair</span>
+        </div>
+        <!-- Apparel & Garments -->
+        <div class="brand-logo-item" style="flex-direction:column;gap:4px;align-items:center;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#11151E" stroke-width="1.8"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>
+            <span style="font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink);">Apparel &amp; Garments</span>
+          </div>
+          <span style="font-size:11.5px;color:#647084;">UOM: Piece</span>
+        </div>
+        <!-- Electronics & Mobile -->
+        <div class="brand-logo-item" style="flex-direction:column;gap:4px;align-items:center;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#11151E" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
+            <span style="font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink);">Electronics &amp; Mobile</span>
+          </div>
+          <span style="font-size:11.5px;color:#647084;">UOM: Unit</span>
+        </div>
+        <!-- Grocery & FMCG -->
+        <div class="brand-logo-item" style="flex-direction:column;gap:4px;align-items:center;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#11151E" stroke-width="1.8"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            <span style="font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink);">Grocery &amp; FMCG</span>
+          </div>
+          <span style="font-size:11.5px;color:#647084;">UOM: Pack</span>
+        </div>
+        <!-- Hardware & Industrial -->
+        <div class="brand-logo-item" style="flex-direction:column;gap:4px;align-items:center;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#11151E" stroke-width="1.8"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <span style="font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink);">Hardware &amp; Industrial</span>
+          </div>
+          <span style="font-size:11.5px;color:#647084;">UOM: Piece</span>
+        </div>
+        <!-- Custom Business -->
+        <div class="brand-logo-item" style="flex-direction:column;gap:4px;align-items:center;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#11151E" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+            <span style="font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink);">Custom Business</span>
+          </div>
+          <span style="font-size:11.5px;color:#647084;">UOM: Unit</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECTION 3: BUILT FOR OWNERS, BRANCH MANAGERS & COUNTER STAFF ================= -->
+  <section id="about" class="why-section">
+    <div class="container">
+      <div class="why-header">
+        <div class="why-header-left">
+          <span class="section-pill">Role × Permission Matrix</span>
+          <h2 class="section-heading">Built for Owners, Branch<br />Managers &amp; Counter Staff</h2>
+        </div>
+        <p class="why-header-right">
+          Every permission is customizable in a live Role × Permission Matrix, with offline-first phone billing.
+        </p>
+      </div>
+
+      <div class="why-grid" id="why-grid">
+        <article class="why-card" tabindex="0">
+          <span class="why-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>
+          </span>
+          <div>
+            <h3 class="why-card-title">Factory &amp;<br />Production</h3>
+            <p class="why-card-desc">Log cutting-to-packed batches, Karigar output &amp; raw-material suppliers.</p>
+          </div>
+        </article>
+
+        <article class="why-card active" tabindex="0">
+          <span class="why-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+          </span>
+          <div>
+            <h3 class="why-card-title">GSTIN<br />Transfers</h3>
+            <p class="why-card-desc">Auto IGST Branch Transfer Invoice or Delivery Challan with size-run fill.</p>
+          </div>
+        </article>
+
+        <article class="why-card" tabindex="0">
+          <span class="why-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
+          </span>
+          <div>
+            <h3 class="why-card-title">Offline<br />Phone POS</h3>
+            <p class="why-card-desc">Scan barcodes, split Cash/UPI/Card &amp; print 80mm thermal or A4 bills offline.</p>
+          </div>
+        </article>
+
+        <article class="why-card" tabindex="0">
+          <span class="why-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+          </span>
+          <div>
+            <h3 class="why-card-title">Storefront<br />&amp; PDF</h3>
+            <p class="why-card-desc">Share compressed WebP shoe galleries &amp; 1-click PDF catalogues on WhatsApp.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECTION 4: CORE ERP MODULES ================= -->
+  <section id="features" class="features-section">
+    <div class="container">
+      <div class="center-header">
+        <span class="section-pill">Core ERP Capabilities</span>
+        <h2 class="section-heading">Factory, Branches, GST<br />&amp; Storefront in One</h2>
+        <p class="section-sub">
+          Connect your factory floor, wholesale dealers, retail counters, and WhatsApp catalogue on Phone &amp; PC — even when internet drops.
+        </p>
+      </div>
+
+      <!-- Row 1: 3 Feature Cards -->
+      <div class="bento-row-3">
+        <!-- Card 1: Offline Phone POS -->
+        <div>
+          <div class="bento-visual">
+            <div class="w-neocash">
+              <div class="w-neo-pill">
+                <span>Imraan Footwear • DEL + CHN</span>
+                <span class="w-neo-icon">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M2 12h3M19 12h3"/></svg>
+                </span>
+              </div>
+              <div class="w-neo-balance tabular">₹1,42,800</div>
+              <div class="w-neo-meta">
+                <div>
+                  <div class="w-neo-lbl">Net Profit</div>
+                  <div class="w-neo-val tabular">₹38,450</div>
+                </div>
+                <div>
+                  <div class="w-neo-lbl">In-Transit</div>
+                  <div class="w-neo-val tabular" style="color:#2475FF;">• <span style="color:#242D3E;">240 Pairs</span></div>
+                </div>
+              </div>
+              <div class="w-neo-btns">
+                <button type="button" class="w-neo-btn-light" data-toast="80mm thermal bill queued offline">
+                  <span>80mm Print</span><span>›</span>
+                </button>
+                <button type="button" class="w-neo-btn-blue" data-toast="Split Cash / UPI / Card ready">
+                  <span>Split Pay</span><span>›</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <h3 class="bento-title">Offline Phone<br />POS Billing</h3>
+          <p class="bento-desc">Scan barcodes, split Cash/UPI/Card &amp; print 80mm thermal or A4 bills offline.</p>
+        </div>
+
+        <!-- Card 2: GSTIN Transfers -->
+        <div>
+          <div class="bento-visual">
+            <div class="w-packages" id="pkg-widget">
+              <button type="button" class="w-pkg-opt" data-pkg-price="Delivery Challan">
+                <span class="w-radio"></span>
+                <div style="flex:1;">
+                  <div class="w-pkg-top">
+                    <span class="w-pkg-name">Delivery Challan</span>
+                    <span class="w-pkg-price tabular">HSN 6403</span>
+                  </div>
+                  <div class="w-pkg-sub">Size-run fill for DEL → CHN branch stock</div>
+                </div>
+              </button>
+              <button type="button" class="w-pkg-opt selected" data-pkg-price="IGST Invoice (5%)">
+                <span class="w-radio"></span>
+                <div style="flex:1;">
+                  <div class="w-pkg-top">
+                    <span class="w-pkg-name">IGST Branch Transfer</span>
+                    <span class="w-pkg-price tabular">5% GST</span>
+                  </div>
+                  <div class="w-pkg-sub">Auto IGST invoice for 240 Pairs IMR-101 Derby</div>
+                </div>
+              </button>
+              <button type="button" class="w-pay-btn tabular" id="pkg-pay-btn" data-toast="Auto IGST Transfer Invoice generated">Generate IGST Invoice (5%)</button>
+            </div>
+          </div>
+          <h3 class="bento-title">Auto GSTIN<br />Branch Transfers</h3>
+          <p class="bento-desc">Auto IGST Branch Transfer Invoice or Delivery Challan with size-run fill.</p>
+        </div>
+
+        <!-- Card 3: Size x Colour Matrix -->
+        <div>
+          <div class="bento-visual">
+            <div class="w-income">
+              <div class="w-inc-head">
+                <span class="w-inc-title">IMR-101 Derby Stock</span>
+                <span class="w-inc-dl">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </span>
+              </div>
+              <div class="w-inc-pill tabular">HSN 6403 • 5% GST</div>
+              <div class="w-inc-chart">
+                <div class="w-inc-yaxis tabular">
+                  <span>40</span><span>30</span><span>20</span><span>10</span>
+                </div>
+                <div class="w-inc-bars">
+                  <div class="w-inc-col"><div class="w-inc-track" style="height:44px;"><div class="w-inc-cap" style="height:18px;"></div></div><span class="w-inc-x">UK6</span></div>
+                  <div class="w-inc-col"><div class="w-inc-track" style="height:60px;"><div class="w-inc-cap" style="height:28px;"></div></div><span class="w-inc-x">UK7</span></div>
+                  <div class="w-inc-col"><div class="w-inc-track" style="height:72px;"><div class="w-inc-cap dark" style="height:36px;"></div></div><span class="w-inc-x">UK8</span></div>
+                  <div class="w-inc-col"><div class="w-inc-track" style="height:54px;"><div class="w-inc-cap" style="height:22px;"></div></div><span class="w-inc-x">UK9</span></div>
+                  <div class="w-inc-col"><div class="w-inc-track" style="height:38px;"><div class="w-inc-cap" style="height:14px;"></div></div><span class="w-inc-x">UK10</span></div>
+                  <div class="w-inc-col"><div class="w-inc-track" style="height:52px;"><div class="w-inc-cap" style="height:18px;"></div></div><span class="w-inc-x">BLK</span></div>
+                  <div class="w-inc-col"><div class="w-inc-track" style="height:60px;"><div class="w-inc-cap" style="height:24px;"></div></div><span class="w-inc-x">TAN</span></div>
+                  <div class="w-inc-col"><div class="w-inc-track" style="height:48px;"><div class="w-inc-cap" style="height:16px;"></div></div><span class="w-inc-x">BRN</span></div>
+                  <div class="w-inc-col"><div class="w-inc-track" style="height:46px;"><div class="w-inc-cap" style="height:14px;"></div></div><span class="w-inc-x">NVY</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <h3 class="bento-title">Size, Colour &amp;<br />Attribute Matrix</h3>
+          <p class="bento-desc">UK 6 (14) · UK 7 (28) · UK 8 (36) · UK 9 (22) · UK 10 (11) with auto stock minus.</p>
+        </div>
+      </div>
+
+      <!-- Row 2: 2 Wide Feature Cards -->
+      <div class="bento-row-2">
+        <!-- Wide Card 1: Combined Owner Profit Analytics -->
+        <div>
+          <div class="bento-visual">
+            <div class="w-profit-stack">
+              <div class="w-profit-back">
+                <div style="font-size:12px;font-weight:600;color:#111827;" class="tabular">₹1,42,800</div>
+                <div style="margin-top:8px;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;background:#EEF4FF;color:#2475FF;font-size:9.5px;font-weight:600;">LIVE SYNC</div>
+              </div>
+              <div class="w-profit-front">
+                <div>
+                  <div style="font-size:10.5px;color:#7C879B;margin-bottom:4px;">Combined Net Profit</div>
+                  <div style="font-family:var(--font-display);font-size:21px;font-weight:600;letter-spacing:-0.03em;color:#0B0F19;" class="tabular">₹38,450</div>
+                </div>
+                <div class="w-mini-bars">
+                  <span style="height:18px;"></span>
+                  <span class="b" style="height:34px;"></span>
+                  <span style="height:24px;"></span>
+                  <span class="b" style="height:40px;"></span>
+                  <span style="height:26px;"></span>
+                </div>
+                <div class="w-profit-chevron">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 18 6-6-6-6"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+          <h3 class="bento-title">Combined Owner<br />Profit Analytics</h3>
+          <p class="bento-desc">Separate branch stock ledgers, sales &amp; cashflow dashboards with daily backups.</p>
+        </div>
+
+        <!-- Wide Card 2: Factory & Production Flow -->
+        <div>
+          <div class="bento-visual" style="padding:0;">
+            <div class="w-trend-wrap">
+              <div style="position:absolute;top:24px;right:18px;font-size:10.5px;color:#6E7A8F;font-weight:500;">DEL + CHN Sync</div>
+              <div class="w-trend-float">
+                <div style="font-size:10px;color:#7E889B;margin-bottom:4px;">Today Sales (All Branches)</div>
+                <div style="font-family:var(--font-display);font-size:20px;font-weight:600;letter-spacing:-0.03em;color:#0B0F19;margin-bottom:6px;" class="tabular">₹1,42,800</div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span style="padding:2px 7px;border-radius:6px;background:#EEF4FF;color:#2475FF;font-size:9.5px;font-weight:600;">240 Pairs</span>
+                  <span style="font-size:10px;color:#7E889B;">In-Transit</span>
+                </div>
+              </div>
+              <svg viewBox="0 0 440 165" width="100%" height="165" style="margin-top:auto;">
+                <defs>
+                  <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.16"/>
+                    <stop offset="100%" stop-color="#3B82F6" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <!-- Subtle grid -->
+                <g stroke="#E3EBF7" stroke-width="1">
+                  <line x1="36" y1="30" x2="430" y2="30"/>
+                  <line x1="36" y1="68" x2="430" y2="68"/>
+                  <line x1="36" y1="106" x2="430" y2="106"/>
+                  <line x1="36" y1="138" x2="430" y2="138"/>
+                  <line x1="56" y1="20" x2="56" y2="138"/>
+                  <line x1="128" y1="20" x2="128" y2="138"/>
+                  <line x1="200" y1="20" x2="200" y2="138"/>
+                  <line x1="272" y1="20" x2="272" y2="138"/>
+                  <line x1="344" y1="20" x2="344" y2="138"/>
+                  <line x1="416" y1="20" x2="416" y2="138"/>
+                </g>
+                <g fill="#8C96A8" font-size="9" font-family="DM Sans, sans-serif">
+                  <text x="10" y="109">₹1L</text>
+                  <text x="16" y="140">0</text>
+                  <text x="48" y="153">Mon</text><text x="51" y="163">DEL</text>
+                  <text x="120" y="153">Tue</text><text x="123" y="163">CHN</text>
+                  <text x="190" y="153">Wed</text><text x="194" y="163">DEL</text>
+                  <text x="263" y="153">Thu</text><text x="267" y="163">CHN</text>
+                  <text x="338" y="153">Fri</text><text x="340" y="163">ALL</text>
+                  <text x="407" y="153">Sat</text><text x="410" y="163">ALL</text>
+                </g>
+                <path d="M 38 122 L 58 119 L 76 108 L 96 124 L 122 124 L 138 117 L 154 127 L 178 114 L 194 106 L 210 116 L 228 97 L 248 92 L 266 74 L 292 72 L 310 86 L 332 76 L 352 60 L 380 65 L 402 44 L 428 49 L 428 138 L 38 138 Z" fill="url(#trendFill)"/>
+                <path d="M 38 122 L 58 119 L 76 108 L 96 124 L 122 124 L 138 117 L 154 127 L 178 114 L 194 106 L 210 116 L 228 97 L 248 92 L 266 74 L 292 72 L 310 86 L 332 76 L 352 60 L 380 65 L 402 44 L 428 49" fill="none" stroke="#2977FF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+              </svg>
+            </div>
+          </div>
+          <h3 class="bento-title">Factory &amp; Karigar<br />Production Flow</h3>
+          <p class="bento-desc">Log cutting-to-packed batches, Karigar output, suppliers &amp; factory-to-shop transfers.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECTION 5: BILLING, CRM & STOREFRONT ACCORDION ================= -->
+  <section id="transactions" class="split-section">
+    <div class="container">
+      <div class="split-grid">
+        <div>
+          <h2 class="section-heading" style="margin-bottom:14px;">Built for Every Floor,<br />Counter &amp; Dealer</h2>
+          <p class="section-sub">
+            Start at any tier and unlock individual features or upgrade anytime — from single-shop GST billing to multi-branch factory ERP.
+          </p>
+
+          <div class="acc-list" id="tx-accordion">
+            <div class="acc-item" data-tx-index="0">
+              <button type="button" class="acc-btn" aria-expanded="false">
+                <span class="acc-btn-left">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+                  GST Bills, Returns &amp; Split Pay
+                </span>
+                <svg class="acc-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="acc-body">
+                Mobile/PC billing, custom bill design, 2025–2026 Indian GST bills, PDF download, discounts, returns, Cash/UPI/Card split pay &amp; Excel/CSV/PDF GST reports.
+              </div>
+            </div>
+
+            <div class="acc-item open" data-tx-index="1">
+              <button type="button" class="acc-btn" aria-expanded="true">
+                <span class="acc-btn-left">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M12 2v2"/></svg>
+                  Customer &amp; Wholesale CRM
+                </span>
+                <svg class="acc-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="acc-body">
+                Connect wholesale dealers and retail counters with separate branch stock ledgers, bulk stock &amp; price import, and auto stock minus alerts.
+              </div>
+            </div>
+
+            <div class="acc-item" data-tx-index="2">
+              <button type="button" class="acc-btn" aria-expanded="false">
+                <span class="acc-btn-left">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  Live R2 Storefront &amp; PDF
+                </span>
+                <svg class="acc-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="acc-body">
+                Share compressed WebP shoe galleries on your live R2 photo showcase website and export 1-click PDF catalogues directly on WhatsApp.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Dynamic Showcase Stage -->
+        <div class="tx-stage">
+          <!-- Panel 0: GST Sales & Cashflow -->
+          <div class="tx-panel" data-tx-panel="0">
+            <div class="dash-card-head" style="margin-bottom:14px;">
+              <div class="dash-card-title" style="font-size:13.5px;color:#1F2736;">
+                GST Sales &amp; Cashflow
+                <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;background:#EEF4FF;color:#2475FF;font-size:11px;">✦</span>
+              </div>
+              <select class="dash-select" aria-label="Branch sales period"><option>DEL + CHN</option><option>Delhi Branch</option></select>
+            </div>
+            <div class="dash-metric-row" style="margin-bottom:22px;">
+              <div class="dash-metric-val tabular" style="font-size:28px;">₹1,42,800</div>
+              <span class="delta-mint">LIVE SYNC</span>
+            </div>
+            <div class="chart-box" style="height:142px;">
+              <div class="chart-tooltip" style="top:0;left:34%;font-size:12px;"><span>Net Profit :</span> <strong class="tabular">₹38,450</strong></div>
+              <svg viewBox="0 0 320 116" width="100%" height="116" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="aiEarnGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.22"/>
+                    <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <path d="M 4 98 L 42 98 C 56 98 62 52 78 52 L 106 52 C 122 52 128 76 144 76 C 158 76 164 50 178 50 L 210 50 C 224 50 232 82 250 82 L 284 82 L 316 42 L 316 116 L 4 116 Z" fill="url(#aiEarnGrad)"/>
+                <path d="M 4 98 L 42 98 C 56 98 62 52 78 52 L 106 52 C 122 52 128 76 144 76 C 158 76 164 50 178 50 L 210 50 C 224 50 232 82 250 82 L 284 82 L 316 42" fill="none" stroke="#38A8F6" stroke-width="2.2" stroke-linecap="round"/>
+                <line x1="194" y1="50" x2="194" y2="112" stroke="#E11D48" stroke-opacity="0.35" stroke-width="1.2"/>
+                <circle cx="194" cy="50" r="6" fill="#2575FF" fill-opacity="0.22"/>
+                <circle cx="194" cy="50" r="4" fill="#2575FF" stroke="#FFFFFF" stroke-width="1.5"/>
+              </svg>
+              <div class="chart-months"><span>10 AM</span><span>12 PM</span><span>2 PM</span><span>4 PM</span><span>6 PM</span></div>
+            </div>
+          </div>
+
+          <!-- Panel 1: Recent Wholesale & Counter GST Bills -->
+          <div class="tx-panel active" data-tx-panel="1">
+            <div class="order-row">
+              <div class="order-user">
+                <div class="avatar-slot" data-avatar="albert" data-size="42"></div>
+                <div>
+                  <div class="order-name">Imraan Footwear (DEL)</div>
+                  <div class="order-sub">IMR-101 Derby • 36 Pairs</div>
+                </div>
+              </div>
+              <span class="order-amt tabular">₹43,200</span>
+            </div>
+            <div class="order-row">
+              <div class="order-user">
+                <div class="avatar-slot" data-avatar="alexo" data-size="42"></div>
+                <div>
+                  <div class="order-name">Chennai Retail Hub</div>
+                  <div class="order-sub">IGST Transfer • HSN 6403</div>
+                </div>
+              </div>
+              <span class="order-amt tabular">₹38,450</span>
+            </div>
+            <div class="order-row">
+              <div class="order-user">
+                <div class="avatar-slot" data-avatar="muayel" data-size="42"></div>
+                <div>
+                  <div class="order-name">Noor Apparel House</div>
+                  <div class="order-sub">Wholesale CRM • UPI Split</div>
+                </div>
+              </div>
+              <span class="order-amt tabular">₹29,800</span>
+            </div>
+            <div class="order-row">
+              <div class="order-user">
+                <div class="avatar-slot" data-avatar="harrison" data-size="42"></div>
+                <div>
+                  <div class="order-name">Deccan Hardware Co.</div>
+                  <div class="order-sub">80mm Offline POS • Synced</div>
+                </div>
+              </div>
+              <span class="order-amt tabular">₹31,350</span>
+            </div>
+          </div>
+
+          <!-- Panel 2: Live R2 Storefront & WhatsApp PDF -->
+          <div class="tx-panel" data-tx-panel="2">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+              <div>
+                <div style="font-size:15px;font-weight:600;color:var(--ink);">Storefront &amp; PDF Desk</div>
+                <div style="font-size:12px;color:var(--muted);">Compressed WebP photo sync</div>
+              </div>
+              <span class="delta-mint tabular">LIVE SYNC</span>
+            </div>
+            <div style="background:#F6F9FE;border-radius:14px;padding:14px;margin-bottom:12px;border:1px solid #EAF0FA;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                <div class="avatar-slot" data-avatar="oripio" data-size="32"></div>
+                <div>
+                  <div style="font-size:12.5px;font-weight:600;color:var(--ink);">Imraan Footwear • Catalogue</div>
+                  <div style="font-size:10.5px;color:#7C879B;">Exported to WhatsApp just now</div>
+                </div>
+              </div>
+              <p style="font-size:12.5px;color:#465266;line-height:1.5;">IMR-101 Derby WebP gallery (UK 6–10) &amp; 1-click PDF catalogue shared with 48 wholesale dealers.</p>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div style="background:#FAFBFD;border:1px solid #EEF2F8;border-radius:12px;padding:12px;">
+                <div style="font-size:10.5px;color:#7C879B;">Offline Billing</div>
+                <div style="font-size:20px;font-weight:600;color:var(--ink);margin-top:2px;" class="tabular">100% PWA</div>
+              </div>
+              <div style="background:#FAFBFD;border:1px solid #EEF2F8;border-radius:12px;padding:12px;">
+                <div style="font-size:10.5px;color:#7C879B;">GST Ready</div>
+                <div style="font-size:20px;font-weight:600;color:var(--blue);margin-top:2px;" class="tabular">2025–26</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECTION 6: STOREFRONT, GST & OFFLINE BACKUPS ================= -->
+  <section class="split-section" style="padding-top:24px;">
+    <div class="container">
+      <div class="split-grid">
+        <!-- Left Dual Floating Cards Visual -->
+        <div class="funnel-stage">
+          <div class="sales-card">
+            <div style="font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--ink);margin-bottom:14px;">Branch Stock Mix</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;position:relative;">
+              <svg width="146" height="146" viewBox="0 0 160 160">
+                <!-- Background subtle tracks -->
+                <circle cx="80" cy="80" r="64" fill="none" stroke="#F1F5FB" stroke-width="11"/>
+                <circle cx="80" cy="80" r="46" fill="none" stroke="#F1F5FB" stroke-width="10"/>
+                <circle cx="80" cy="80" r="29" fill="none" stroke="#F1F5FB" stroke-width="9"/>
+                <!-- Outer Blue Arc -->
+                <circle cx="80" cy="80" r="64" fill="none" stroke="#538EFF" stroke-width="11" stroke-linecap="round" stroke-dasharray="235 402" transform="rotate(-90 80 80)"/>
+                <!-- Middle Deep Navy Arc -->
+                <circle cx="80" cy="80" r="46" fill="none" stroke="#0B193D" stroke-width="10" stroke-linecap="round" stroke-dasharray="145 289" transform="rotate(-90 80 80)"/>
+                <!-- Inner Lavender Arc -->
+                <circle cx="80" cy="80" r="29" fill="none" stroke="#B6C0FA" stroke-width="9" stroke-linecap="round" stroke-dasharray="62 182" transform="rotate(-65 80 80)"/>
+                <!-- Badge 240 -->
+                <circle cx="134" cy="54" r="15" fill="#FFFFFF" filter="drop-shadow(0 4px 8px rgba(15,23,42,0.12))"/>
+                <text x="134" y="58" text-anchor="middle" font-size="10.5" font-weight="600" fill="#0B0F19">240</text>
+                <!-- Badge 111 -->
+                <circle cx="94" cy="108" r="13" fill="#FFFFFF" filter="drop-shadow(0 4px 8px rgba(15,23,42,0.1))"/>
+                <text x="94" y="112" text-anchor="middle" font-size="9.5" font-weight="600" fill="#0B0F19">111</text>
+              </svg>
+              <div style="display:flex;flex-direction:column;gap:14px;font-size:11px;color:#525E72;">
+                <div style="display:flex;align-items:center;gap:6px;"><span class="dot" style="background:#0B193D;"></span>DEL Branch</div>
+                <div style="display:flex;align-items:center;gap:6px;"><span class="dot" style="background:#B6C0FA;"></span>CHN Branch</div>
+              </div>
+              <!-- Floating IMR-101 pill -->
+              <div style="position:absolute;left:-10px;bottom:14px;background:#FFFFFF;border-radius:12px;padding:10px 14px;box-shadow:0 12px 28px rgba(15,23,42,0.1);border:1px solid #EEF3FA;">
+                <div style="font-size:13px;font-weight:700;color:var(--ink);" class="tabular">IMR-101 <span style="color:#6366F1;font-weight:600;font-size:11px;">UK 6–10</span></div>
+                <div style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:#6E7A8F;margin-top:3px;"><span class="dot" style="background:#2475FF;"></span>HSN 6403 • 5% GST</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="invoice-card">
+            <div class="inv-head">
+              <div class="inv-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
+                <span class="inv-check-dot">✓</span>
+              </div>
+              <div>
+                <div style="font-size:10px;color:#7C879B;">GST Tax Invoice</div>
+                <div style="font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--ink);" class="tabular">₹1,42,800</div>
+              </div>
+            </div>
+            <div class="inv-row"><span>HSN / Tax:</span><strong class="tabular">6403 • 5% GST</strong></div>
+            <div class="inv-row highlighted"><span>Branch Sync:</span><strong class="tabular">DEL + CHN Live</strong></div>
+            <div class="inv-row"><span>Split Payment</span><strong class="tabular">UPI / Cash</strong></div>
+          </div>
+        </div>
+
+        <!-- Right Copy & Checklist -->
+        <div>
+          <h2 class="section-heading" style="margin-bottom:16px;">Storefront, GST Reports<br />&amp; Offline-First PWA</h2>
+          <p class="section-sub">
+            Share compressed WebP shoe galleries &amp; 1-click PDF catalogues on WhatsApp while every retail counter keeps billing seamlessly — even when internet drops.
+          </p>
+          <div class="check-list">
+            <div class="check-row">
+              <span class="check-circle"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span>Custom Bill Design, 80mm Thermal &amp; A4 GST Print.</span>
+            </div>
+            <div class="check-row">
+              <span class="check-circle"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span>Excel / CSV / PDF GST Reports &amp; Daily 1-Click Backups.</span>
+            </div>
+            <div class="check-row">
+              <span class="check-circle"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span>Live R2 Photo Showcase Website &amp; 1-Click WhatsApp PDF.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECTION 7: ALL 18 CAPABILITIES ACROSS TIERS 1–4 ================= -->
+  <section id="pricing" class="pricing-section">
+    <div class="container">
+      <div class="center-header">
+        <span class="section-pill">Pricing</span>
+        <h2 class="section-heading">Choose the Plan That Fits Your Business</h2>
+        <p class="section-sub">
+          Start with billing and grow into stock, branches and a live storefront. Upgrade anytime.
+        </p>
+      </div>
+
+      <div class="px-switch" role="group" aria-label="Price type">
+        <button type="button" data-px-price="offer" aria-pressed="true">Launch Offer <em>Save up to 51%</em></button>
+        <button type="button" data-px-price="mrp" aria-pressed="false">Standard Price</button>
+      </div>
+      <div class="px-grid" id="px-cards"></div>
+      <div class="px-assure">
+        <span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>GST ready</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Works on phone and PC</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Offline billing</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Daily backups</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Upgrade anytime</span>
+      </div>
+
+      <div class="px-compare-head">
+        <h3>Compare Every Feature</h3>
+        <p>See exactly what is included in each plan.</p>
+      </div>
+      <div class="px-scroll" tabindex="0" role="region" aria-label="Plan comparison table">
+        <table class="px-table" id="px-table"></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECTION 8: TESTIMONIALS & DOTTED WORLD MAP ================= -->
+  <section class="testi-section">
+    <div class="container">
+      <div class="center-header" style="margin-bottom:12px;">
+        <span class="section-pill">Multi-Vertical Trust</span>
+        <h2 class="section-heading">Trusted Across Factories,<br />Wholesalers &amp; Retail Chains</h2>
+        <p class="section-sub">
+          Built for Footwear, Apparel, Electronics, FMCG &amp; Hardware businesses connecting branches and counters on Phone &amp; PC.
+        </p>
+      </div>
+
+      <div class="map-stage">
+        <svg class="world-map-svg" id="world-map-svg" viewBox="0 0 960 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+
+        <!-- 6 Interactive Floating Map Pins -->
+        <button type="button" class="map-pin" data-testi-idx="1" style="top:9%;left:15%;" aria-label="View testimonial from Ayesha Khan">
+          <div class="avatar-slot" data-avatar="elena" data-size="40"></div>
+        </button>
+        <button type="button" class="map-pin" data-testi-idx="2" style="top:44%;left:4%;" aria-label="View testimonial from Rajesh Verma">
+          <div class="avatar-slot" data-avatar="marcus" data-size="48"></div>
+        </button>
+        <button type="button" class="map-pin" data-testi-idx="3" style="bottom:8%;left:8%;" aria-label="View testimonial from Priya Nair">
+          <div class="avatar-slot" data-avatar="maya" data-size="60"></div>
+        </button>
+        <button type="button" class="map-pin" data-testi-idx="4" style="top:13%;right:16%;" aria-label="View testimonial from Vikram Mehta">
+          <div class="avatar-slot" data-avatar="kenji" data-size="52"></div>
+        </button>
+        <button type="button" class="map-pin" data-testi-idx="5" style="top:43%;right:4%;" aria-label="View testimonial from Arvind Patel">
+          <div class="avatar-slot" data-avatar="daniel" data-size="46"></div>
+        </button>
+        <button type="button" class="map-pin" data-testi-idx="0" style="bottom:11%;right:12%;" aria-label="View testimonial from Imraan Siddiqui">
+          <div class="avatar-slot" data-avatar="harrison" data-size="46"></div>
+        </button>
+
+        <div class="testi-center">
+          <div class="testi-main-avatar" id="testi-main-avatar"></div>
+          <blockquote class="testi-quote" id="testi-quote">
+            <span class="q-mark">“</span>Nexus ERP linked our Delhi factory and Chennai retail branch with live UK 6–10 stock runs and offline phone billing that never stalls.<span class="q-mark">”</span>
+          </blockquote>
+          <div class="testi-author" id="testi-author">Imraan Siddiqui</div>
+          <div class="testi-role" id="testi-role">Owner at Imraan Footwear (DEL + CHN)</div>
+          <div class="testi-controls">
+            <button type="button" class="testi-arrow" id="testi-prev" aria-label="Previous testimonial">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <button type="button" class="testi-arrow primary" id="testi-next" aria-label="Next testimonial">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECTION 9: FAQ ================= -->
+  <section class="faq-section">
+    <div class="container">
+      <div class="center-header" style="margin-bottom:44px;">
+        <span class="section-pill">Asked Question</span>
+        <h2 class="section-heading">Frequently asked Questions</h2>
+        <p class="section-sub">
+          Answers on 2025–2026 Indian GST compliance, offline-first PWA billing, size-matrix presets, and upgrading across Tiers 1–4.
+        </p>
+      </div>
+
+      <div class="faq-list" id="faq-list">
+        <div class="faq-item">
+          <button type="button" class="faq-btn" aria-expanded="false">
+            <span class="faq-btn-left">
+              <span class="faq-num tabular">01</span>
+              <span class="faq-q">Does Offline Phone POS keep working when store internet drops?</span>
+            </span>
+            <svg class="faq-chev" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="faq-ans">
+            Yes. Nexus ERP is built as an Offline-First PWA for Phone &amp; PC. Counter staff can scan barcodes, split Cash/UPI/Card payments, and print 80mm thermal or A4 bills offline — everything syncs automatically once connectivity returns.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button type="button" class="faq-btn" aria-expanded="false">
+            <span class="faq-btn-left">
+              <span class="faq-num tabular">02</span>
+              <span class="faq-q">How do GSTIN branch transfers and 2025–2026 Indian GST reports work?</span>
+            </span>
+            <svg class="faq-chev" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="faq-ans">
+            Moving stock from factory to retail branches automatically generates an IGST Branch Transfer Invoice or Delivery Challan with HSN codes (e.g., HSN 6403 • 5% GST) and size-run fills, ready for Excel, CSV, or PDF GST report exports.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button type="button" class="faq-btn" aria-expanded="false">
+            <span class="faq-btn-left">
+              <span class="faq-num tabular">03</span>
+              <span class="faq-q">Can we customize UOMs and attributes beyond Footwear?</span>
+            </span>
+            <svg class="faq-chev" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="faq-ans">
+            Yes. Our Dynamic Multi-Vertical Engine comes pre-configured for Footwear (Pair), Apparel &amp; Garments (Piece), Electronics &amp; Mobile (Unit), Grocery &amp; FMCG (Pack), Hardware &amp; Industrial (Piece), and Custom Business (Unit) with editable custom fields.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button type="button" class="faq-btn" aria-expanded="false">
+            <span class="faq-btn-left">
+              <span class="faq-num tabular">04</span>
+              <span class="faq-q">Can we start at Tier 1 and unlock individual features or upgrade later?</span>
+            </span>
+            <svg class="faq-chev" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="faq-ans">
+            Absolutely. Start at any tier — Simple Billing &amp; GST (Tier 1), Billing + Stock (Tier 2), Multi-Branch System (Tier 3), or Complete + Website &amp; PDF (Tier 4) — and unlock individual capabilities or upgrade seamlessly without migrating data.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECTION 10: LIVE DEMO STOREFRONT & PORTAL SHOWCASE ================= -->
+  <section id="storefront" class="cta-showcase">
+    <div class="container">
+      <div class="center-header" style="margin-bottom:46px;">
+        <span class="section-pill">Live Demo Storefront</span>
+        <h2 class="section-heading">Open Nexus ERP Portal<br />on Phone &amp; PC Today</h2>
+        <p class="section-sub">
+          Connect your factory floor, wholesale dealers, retail counters, and WhatsApp catalogue — even when internet drops.
+        </p>
+      </div>
+
+      <!-- Bottom Dashboard Mockup: Nexus ERP • Storefront & Branch Sync -->
+      <div class="dash-outer">
+        <div class="nx-app" data-nx-view="pos"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECTION 11: FOOTER ================= -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <div class="footer-brand">Nexus ERP</div>
+          <p class="footer-addr">
+            2025–2026 Indian GST Ready<br />
+            Offline-First PWA • Phone &amp; PC<br />
+            Factory, Branches &amp; Storefronts
+          </p>
+          <div class="footer-socials">
+            <a href="#home" aria-label="Book a demo" data-open-modal="Book a Demo">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+            </a>
+            <a href="/s/imraan-footwear" aria-label="Live Demo Storefront">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F6FF6" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#4F6FF6" stroke="none"/></svg>
+            </a>
+            <a href="#pricing" aria-label="Pricing Tiers">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9.5"/><path d="M8.56 2.75c4.37 6.03 6.02 9.42 8.03 17.72m2.54-15.38c-3.72 4.35-8.94 5.66-16.88 5.85m19.5 1.9c-3.5-.93-6.63-.82-8.94 0-2.58.92-5.01 2.86-7.44 6.32"/></svg>
+            </a>
+            <a href="/login" data-auth-link aria-label="Open ERP Portal">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="footer-col-title">ERP Modules</h4>
+          <ul class="footer-links">
+            <li><a href="#about">Factory &amp; Production</a></li>
+            <li><a href="#about">GSTIN Transfers</a></li>
+            <li><a href="#about">Offline Phone POS</a></li>
+            <li><a href="#about">Storefront &amp; PDF</a></li>
+            <li><a href="#features">Size × Colour Matrix</a></li>
+            <li><a href="#features">Role × Permission Matrix</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="footer-col-title">Vertical Presets</h4>
+          <ul class="footer-links">
+            <li><a href="/signup?vertical=footwear">Footwear (Pair)</a></li>
+            <li><a href="/signup?vertical=apparel">Apparel &amp; Garments</a></li>
+            <li><a href="/signup?vertical=electronics">Electronics &amp; Mobile</a></li>
+            <li><a href="/signup?vertical=fmcg">Grocery &amp; FMCG</a></li>
+            <li><a href="/signup?vertical=hardware">Hardware &amp; Industrial</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="footer-col-title">Tiers 1–4</h4>
+          <ul class="footer-links">
+            <li><a href="#pricing">Tier 1 — Simple Billing &amp; GST</a></li>
+            <li><a href="#pricing">Tier 2 — Billing + Stock</a></li>
+            <li><a href="#pricing">Tier 3 — Multi-Branch System</a></li>
+            <li><a href="#pricing">Tier 4 — Complete + Website &amp; PDF</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="footer-col-title">Access</h4>
+          <ul class="footer-links">
+            <li><a href="#pricing">Pricing</a></li>
+            <li><a href="/s/imraan-footwear">Live Demo Storefront</a></li>
+            <li><a href="/login" data-auth-link>Sign In</a></li>
+            <li><a href="/login" data-auth-link>Open ERP Portal</a></li>
+            <li><a href="#home" data-open-modal="Book a Demo">Book a Demo</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        All rights reserved, 2025–2026 Nexus ERP • Indian GST Ready Offline-First PWA
+      </div>
+    </div>
+  </footer>
+
+  <!-- ================= PORTAL / WHATSAPP DEMO / TIER ENQUIRY MODAL ================= -->
+  <div class="modal-backdrop" id="signup-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-box">
+      <button type="button" class="modal-close" id="modal-close" aria-label="Close modal">✕</button>
+      <span class="section-pill" id="modal-plan-pill" style="margin-bottom:12px;">Book a Demo</span>
+      <h3 id="modal-title" style="font-family:var(--font-display);font-size:24px;font-weight:600;letter-spacing:-0.03em;margin-bottom:6px;">Nexus ERP Access</h3>
+      <p style="font-size:13.5px;color:var(--muted);margin-bottom:18px;">Share your details and our team will contact you for a guided walkthrough.</p>
+      <form id="signup-form">
+        <label style="font-size:12.5px;font-weight:500;color:var(--ink);">Phone Number or Email</label>
+        <input type="text" id="signup-email" class="modal-input" placeholder="+91 98XXX XXXXX or owner@business.in" maxlength="160" autocomplete="email" required />
+        <label style="font-size:12.5px;font-weight:500;color:var(--ink);">Business Name &amp; Vertical</label>
+        <input type="text" id="signup-company" class="modal-input" placeholder="Your business name" maxlength="160" autocomplete="organization" required />
+        <input type="text" id="signup-website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />
+        <p id="signup-error" role="alert" style="display:none;font-size:12.5px;color:#DC2626;margin:0 0 10px;"></p>
+        <button type="submit" class="btn-primary-blue" style="width:100%;margin-top:4px;" id="signup-submit">Send Request</button>
+      </form>
+      <div id="signup-success" style="display:none;text-align:center;padding:12px 0;">
+        <div style="width:46px;height:46px;border-radius:999px;background:#DCFCE7;color:#15803D;display:inline-flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:12px;">✓</div>
+        <div style="font-family:var(--font-display);font-size:18px;font-weight:600;margin-bottom:6px;">Request Received</div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:18px;" id="signup-success-msg"></p>
+        <button type="button" class="btn-dark" id="signup-done" style="width:100%;">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (function () {
+      /* ===== 1. INLINE BESPOKE SVG PORTRAIT AVATARS (ZERO EXTERNAL DEPENDENCIES) ===== */
+      const AVATARS = {
+        oripio:    { bg: '#E5ECF6', skin: '#E5B89B', hair: '#2A221E', shirt: '#3B4252', beard: true,  glasses: false, beanie: false },
+        albert:    { bg: '#E3E9F3', skin: '#ECC2A6', hair: '#3B2F2F', shirt: '#1E293B', beard: false, glasses: false, beanie: false },
+        alexo:     { bg: '#E9E2F5', skin: '#D9A587', hair: '#1F1B18', shirt: '#4C1D95', beard: false, glasses: true,  beanie: false },
+        muayel:    { bg: '#FCE7D4', skin: '#E3B08E', hair: '#2D201B', shirt: '#EA580C', beard: false, glasses: false, beanie: false, longHair: true },
+        harrison:  { bg: '#E6DDF5', skin: '#E0AE8E', hair: '#2B201C', shirt: '#312E81', beard: false, glasses: true,  beanie: false },
+        alexander: { bg: '#EDF1F7', skin: '#EAC0A4', hair: '#26201D', shirt: '#F8FAFC', beard: false, glasses: true,  beanie: false },
+        tukara:    { bg: '#E5ECF4', skin: '#D8A382', hair: '#453126', shirt: '#F1F5F9', beard: true,  glasses: true,  beanie: true  },
+        elena:     { bg: '#F3E5D8', skin: '#EBC2A8', hair: '#221C1A', shirt: '#1E293B', beard: false, glasses: false, beanie: false, longHair: true },
+        marcus:    { bg: '#D6E4DD', skin: '#D49E7A', hair: '#2A211C', shirt: '#14532D', beard: true,  glasses: true,  beanie: false },
+        maya:      { bg: '#DCE5E1', skin: '#EBC0A3', hair: '#1E1A18', shirt: '#334155', beard: false, glasses: false, beanie: false, longHair: true },
+        kenji:     { bg: '#EFEAE4', skin: '#E8BC9F', hair: '#1D1B1A', shirt: '#27272A', beard: false, glasses: false, beanie: false },
+        daniel:    { bg: '#E8DFF4', skin: '#DFAF90', hair: '#28201E', shirt: '#581C87', beard: false, glasses: true,  beanie: false }
+      };
+
+      function createAvatarSVG(key, size) {
+        const a = AVATARS[key] || AVATARS.alexander;
+        return `
+          <svg width="${size}" height="${size}" viewBox="0 0 64 64" style="display:block;border-radius:999px;flex-shrink:0;" aria-hidden="true">
+            <rect width="64" height="64" rx="32" fill="${a.bg}"/>
+            <circle cx="32" cy="62" r="22" fill="${a.shirt}"/>
+            <rect x="26" y="38" width="12" height="10" rx="5" fill="${a.skin}"/>
+            ${a.longHair ? `<path d="M16 28c0-11 7-17 16-17s16 6 16 17v18c-3 2-6 3-10 3H26c-4 0-7-1-10-3V28z" fill="${a.hair}"/>` : ''}
+            <ellipse cx="32" cy="29" rx="11.5" ry="13.5" fill="${a.skin}"/>
+            ${a.beanie
+              ? `<path d="M20 24c1-9 6-14 12-14s11 5 12 14c-4-2-8-3-12-3s-8 1-12 3z" fill="#6E8BA3"/>
+                 <rect x="19" y="21" width="26" height="4.5" rx="2.2" fill="#5A768E"/>`
+              : `<path d="M20 26c0-8 5.2-13.5 12-13.5S44 18 44 26c-2.5-3.5-6.5-5-12-5s-9.5 1.5-12 5z" fill="${a.hair}"/>`
+            }
+            <circle cx="27.5" cy="29" r="1.4" fill="#1F242D"/>
+            <circle cx="36.5" cy="29" r="1.4" fill="#1F242D"/>
+            ${a.glasses ? `
+              <g fill="none" stroke="#222834" stroke-width="1.4">
+                <circle cx="27.5" cy="29" r="3.8"/>
+                <circle cx="36.5" cy="29" r="3.8"/>
+                <path d="M31.3 29h1.4"/>
+              </g>` : ''}
+            ${a.beard ? `<path d="M22.5 33c1.5 6.2 5.4 9.2 9.5 9.2s8-3 9.5-9.2c-2.2 1.8-5.2 2.8-9.5 2.8s-7.3-1-9.5-2.8z" fill="${a.hair}" opacity="0.72"/>` : ''}
+            <path d="M28.5 35.5c1.8 1.8 5.2 1.8 7 0" fill="none" stroke="#FFFFFF" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>`;
+      }
+
+      document.querySelectorAll('.avatar-slot').forEach(el => {
+        el.innerHTML = createAvatarSVG(el.dataset.avatar, el.dataset.size || 36);
+      });
+
+      /* ===== 2. DOTTED WORLD MAP SVG GENERATOR (MATCHING IMAGE 8) ===== */
+      const mapSvg = document.getElementById('world-map-svg');
+      if (mapSvg) {
+        // Normalized continent polygon masks (approximate world silhouette on 960x400 grid)
+        const continents = [
+          // North America
+          [[85,55],[195,48],[268,68],[290,110],[250,155],[212,186],[175,205],[155,180],[120,145],[95,105]],
+          // Greenland
+          [[280,28],[355,22],[372,58],[325,84],[288,65]],
+          // South America
+          [[188,214],[248,224],[284,268],[264,335],[226,382],[196,360],[192,292],[175,245]],
+          // Europe
+          [[408,58],[485,48],[535,70],[520,126],[458,136],[412,124],[396,90]],
+          // Africa
+          [[402,146],[492,142],[542,188],[528,255],[486,326],[452,324],[432,256],[394,205]],
+          // Asia
+          [[526,52],[675,46],[795,78],[842,126],[800,192],[735,232],[662,238],[598,205],[545,172],[518,120]],
+          // SE Asia / Indonesia
+          [[708,244],[792,248],[812,272],[724,274]],
+          // Australia
+          [[742,278],[842,274],[862,332],[822,360],[750,342],[732,306]]
+        ];
+
+        function pointInPoly(x, y, poly) {
+          let inside = false;
+          for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            const xi = poly[i][0], yi = poly[i][1];
+            const xj = poly[j][0], yj = poly[j][1];
+            const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+          }
+          return inside;
+        }
+
+        let dots = '';
+        const step = 10;
+        for (let y = 24; y <= 386; y += step) {
+          for (let x = 70; x <= 885; x += step) {
+            if (continents.some(poly => pointInPoly(x, y, poly))) {
+              dots += `<circle cx="${x}" cy="${y}" r="2.2" fill="#DCE7FA"/>`;
+            }
+          }
+        }
+        mapSvg.innerHTML = dots;
+      }
+
+      /* ===== PRODUCT PREVIEWS (SAMPLE DATA, REAL APP DESIGN) ===== */
+      const nxEsc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const nxInr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+      const nxCompact = (n) => n >= 100000 ? '₹' + (n / 100000).toFixed(1).replace(/\.0$/, '') + 'L' : n >= 1000 ? '₹' + Math.round(n / 1000) + 'k' : '₹' + Math.round(n);
+      const NX_ICON = {
+        grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+        plus: '<path d="M12 5v14M5 12h14"/>',
+        bill: '<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+        box: '<path d="M21 8l-9-5-9 5 9 5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/>',
+        truck: '<path d="M2 6h12v10H2zM14 10h4l4 3v3h-8z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',
+        users: '<circle cx="9" cy="8" r="3.5"/><path d="M3 21c0-4 3-6 6-6s6 2 6 6M16 5a3 3 0 010 6M18 15c2 .7 3 2.6 3 6"/>',
+        globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+        file: '<path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5M9 13h7M9 17h7"/>',
+        gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>'
+      };
+      const nxIcon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${NX_ICON[name]}</svg>`;
+      const nxLink = (label, icon, active) => `<span class="nx-link${label === active ? ' on' : ''}">${nxIcon(icon)}${label}</span>`;
+      function nxSidebar(active) {
+        return `<aside class="nx-side">
+          <div class="nx-pill"><b>DF</b><span><small>Tier 4 workspace</small>Demo Footwear</span></div>
+          <div class="nx-group"><p>Main Menu</p>${nxLink('Dashboard', 'grid', active)}${nxLink('POS Terminal', 'plus', active)}${nxLink('Billing & Ledger', 'bill', active)}${nxLink('Stock & Matrix', 'box', active)}${nxLink('Factory & Transfers', 'truck', active)}</div>
+          <div class="nx-group"><p>Customers</p>${nxLink('Customer List', 'users', active)}${nxLink('Website & PDF', 'globe', active)}</div>
+          <div class="nx-group"><p>Management</p>${nxLink('GST & Reports', 'file', active)}${nxLink('System Settings', 'gear', active)}</div>
+          <div class="nx-user"><span class="nx-avatar">DO</span><span>Demo Owner<small>Owner</small></span></div>
+        </aside>`;
+      }
+      const nxTop = (section) => `<div class="nx-top"><span>Dashboard &nbsp;›&nbsp; <b>${section}</b></span><span class="nx-sample">Sample data</span></div>`;
+      const nxNeedles = (vals) => {
+        const max = Math.max(...vals), peak = vals.lastIndexOf(max);
+        return `<span class="nx-needles" aria-hidden="true">${vals.map((v, i) => `<i style="--h:${Math.max(18, v / max * 100)}%;${i === peak ? '--c:#171717' : ''}"></i>`).join('')}</span>`;
+      };
+      const nxKpi = (label, value, vals, change) => `<div class="nx-tray"><div class="nx-surface nx-kpi"><span><span class="nx-eyebrow">${label}</span><strong>${value}</strong></span>${nxNeedles(vals)}</div><div class="nx-foot"><b>${change}</b> last month</div></div>`;
+
+      const NX_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      const NX_SHAPE = [2, 3, 5, 8, 6, 3, 2, 4, 7, 5, 3, 2, 4, 6, 4, 2, 3, 5, 10, 7, 4, 3, 5, 3, 2, 6, 12, 6, 3, 2, 4, 8, 5, 3, 2, 3, 7, 9, 5, 3, 2, 4, 3, 6, 11, 7, 4, 3];
+      const nxSeries = {
+        Weekly: { cols: 42, label: (i) => `Day ${i + 1}`, axis: ['WK 1', 'WK 2', 'WK 3', 'WK 4', 'WK 5', 'WK 6'], scale: 3200 },
+        Monthly: { cols: 48, label: (i) => `Week ${i % 4 + 1}, ${NX_MONTHS[Math.floor(i / 4)]}`, axis: NX_MONTHS, scale: 5200 },
+        Yearly: { cols: 36, label: (i) => `${NX_MONTHS[i % 12]} ${2024 + Math.floor(i / 12)}`, axis: ['2024', '2025', '2026'], scale: 18000 }
+      };
+      function nxPoints(period) {
+        const s = nxSeries[period];
+        return Array.from({ length: s.cols }, (_, i) => {
+          const base = NX_SHAPE[(i * (period === 'Yearly' ? 4 : 1) + (period === 'Weekly' ? 7 : 0)) % NX_SHAPE.length];
+          return { label: s.label(i), collected: base * s.scale, outstanding: Math.round(base * s.scale * (0.22 + (i % 5) * 0.1)) };
+        });
+      }
+      function nxPixelChart(root, period) {
+        const pts = nxPoints(period), ROWS = 18;
+        const max = Math.max(...pts.map((p) => p.collected + p.outstanding));
+        const total = pts.reduce((a, p) => a + p.collected + p.outstanding, 0);
+        root.querySelector('[data-nx-total]').textContent = nxCompact(total);
+        const area = root.querySelector('[data-nx-pixels]');
+        area.style.gridTemplateColumns = `repeat(${pts.length}, minmax(0, 1fr))`;
+        area.innerHTML = pts.map((p, i) => {
+          const all = p.collected + p.outstanding;
+          const filled = Math.max(1, Math.round(all / max * ROWS));
+          const dark = Math.max(1, Math.round(p.collected / all * filled));
+          return `<div class="nx-col" data-i="${i}" style="animation-delay:${Math.min(i * 9, 380)}ms">${Array.from({ length: ROWS }, (_, r) => `<i class="${r < dark ? 'd' : r < filled ? 'm' : ''}"></i>`).join('')}</div>`;
+        }).join('') + '<div class="nx-tip" data-nx-tip></div>';
+        root.querySelector('[data-nx-axis]').innerHTML = nxSeries[period].axis.map((a) => `<span>${a}</span>`).join('');
+        const tip = area.querySelector('[data-nx-tip]');
+        const show = (i) => {
+          const p = pts[i];
+          area.querySelectorAll('.nx-col.on').forEach((c) => c.classList.remove('on'));
+          area.children[i].classList.add('on');
+          const left = (i + 0.5) / pts.length * 100;
+          tip.style.left = left > 66 ? `calc(${left}% - 132px)` : `calc(${left}% + 9px)`;
+          tip.style.top = `${Math.max(2, 72 - (p.collected + p.outstanding) / max * 70)}%`;
+          tip.innerHTML = `<p>${p.label}</p><div>Outstanding <b>${nxCompact(p.outstanding)}</b></div><div>Collected <b>${nxCompact(p.collected)}</b></div>`;
+        };
+        let best = 0;
+        pts.forEach((p, i) => { if (p.collected + p.outstanding > pts[best].collected + pts[best].outstanding) best = i; });
+        show(best);
+        area.onpointermove = (e) => {
+          const col = e.target.closest('.nx-col');
+          if (col) show(Number(col.dataset.i));
+        };
+      }
+      function nxRenderOverview(el) {
+        const rows = [
+          ['#04910', 'Sample Retail Co', 'Chennai Shop', 'Paid', '#059669', 8450],
+          ['#04911', 'Demo Traders', 'Delhi Factory', 'Partial', '#b45309', 41200],
+          ['#04912', 'Walk-In Customer', 'Chennai Shop', 'Paid', '#059669', 2199]
+        ];
+        const bars = [[62, 14], [78, 10], [48, 22], [88, 6], [66, 18], [42, 16], [72, 12], [54, 20], [84, 8], [60, 14], [76, 10], [50, 18]];
+        el.innerHTML = nxSidebar('Dashboard') + `<div class="nx-main">${nxTop('Overview')}<div class="nx-body">
+          <div class="nx-title"><h4>Welcome back, Demo</h4><span class="nx-btn">Export CSV</span></div>
+          <div class="nx-kpis">
+            ${nxKpi("Today's Sales", '₹42,380', [3, 5, 4, 7, 5, 8, 6, 9, 7], '+12.4%')}
+            ${nxKpi('Month Revenue', '₹8.6L', [4, 6, 5, 7, 8, 6, 9, 8, 10], '+8.1%')}
+            ${nxKpi('Receivables', '₹72,000', [7, 5, 6, 4, 6, 5, 3, 4, 3], '-4.2%')}
+            ${nxKpi('Inventory', '2,431', [6, 7, 5, 8, 7, 9, 6, 8, 7], '+3.0%')}
+          </div>
+          <div class="nx-charts">
+            <div class="nx-tray"><div class="nx-head"><span class="nx-eyebrow">Sales Trend</span></div><div class="nx-surface nx-chart" data-nx-trend>
+              <div class="nx-chart-top"><span class="nx-total">Total Billed :<b data-nx-total></b></span>
+                <span class="nx-seg" role="group" aria-label="Preview period">${['Weekly', 'Monthly', 'Yearly'].map((p) => `<button type="button" data-nx-period="${p}" aria-pressed="${p === 'Monthly'}">${p}</button>`).join('')}</span></div>
+              <div class="nx-pixels" data-nx-pixels role="img" aria-label="Sample sales trend chart"></div><div class="nx-axis" data-nx-axis aria-hidden="true"></div>
+            </div></div>
+            <div class="nx-tray"><div class="nx-head"><span class="nx-eyebrow">Revenue Breakdown</span></div><div class="nx-surface nx-chart">
+              <span class="nx-total">By Branch<br /><b style="margin:0;">₹8,64,200</b></span>
+              <div class="nx-bars" aria-hidden="true" style="height:166px;">${bars.map(([v, e], i) => `<span style="--h:${v + e}%;--v:${v};--e:${e};animation-delay:${i * 30}ms"><u></u><em></em></span>`).join('')}</div>
+            </div></div>
+          </div>
+          <div class="nx-tray"><div class="nx-head"><span class="nx-eyebrow">Recent Transactions</span><span class="nx-add" style="box-shadow:none;">+ Add Transaction</span></div><div class="nx-surface" style="overflow:hidden;">
+            <table class="nx-table"><thead><tr><th>ID</th><th>Customer</th><th>Branch</th><th>Status</th><th style="text-align:right;">Total</th></tr></thead>
+            <tbody>${rows.map((r) => `<tr><td class="nx-mono" style="color:#a3a3a8;">${r[0]}</td><td style="color:#171717;font-weight:500;">${r[1]}</td><td>${r[2]}</td><td><span class="nx-status" style="color:${r[4]}">${r[3]}</span></td><td class="nx-mono" style="text-align:right;color:#171717;font-weight:600;">${nxInr(r[5])}</td></tr>`).join('')}</tbody></table>
+          </div></div>
+        </div></div>`;
+        const trend = el.querySelector('[data-nx-trend]');
+        nxPixelChart(trend, 'Monthly');
+        trend.querySelector('.nx-seg').addEventListener('click', (e) => {
+          const b = e.target.closest('[data-nx-period]');
+          if (!b) return;
+          trend.querySelectorAll('[data-nx-period]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+          nxPixelChart(trend, b.dataset.nxPeriod);
+        });
+      }
+      function nxRenderPos(el) {
+        const items = [
+          ['Classic Derby', 'UK 8 · Black', 2199, 22], ['Aero Runner', 'UK 9 · Navy', 1699, 15], ['Handcrafted Loafer', 'UK 8 · Brown', 3199, 10],
+          ['Classic Derby', 'UK 9 · Tan', 2199, 12], ['Aero Runner', 'UK 7 · White', 1699, 8], ['Street Sneaker', 'UK 10 · Grey', 1899, 18]
+        ];
+        const qty = { 0: 2, 2: 1 };
+        el.innerHTML = nxSidebar('POS Terminal') + `<div class="nx-main">${nxTop('POS Terminal')}<div class="nx-body"><div class="nx-title"><h4>POS Terminal</h4><span class="nx-btn">+ Quick Item</span></div><div class="nx-pos"><div class="nx-products" data-nx-products></div><div class="nx-tray nx-bill"><div class="nx-head"><span class="nx-eyebrow">Current Bill</span></div><div class="nx-surface" data-nx-lines></div><div class="nx-grand"><span>Grand Total</span><b data-nx-grand></b></div><div class="nx-finish">Finalize &amp; Print</div></div></div></div></div>`;
+        const list = el.querySelector('[data-nx-products]'), lines = el.querySelector('[data-nx-lines]'), grand = el.querySelector('[data-nx-grand]');
+        function paint() {
+          list.innerHTML = items.map((it, i) => {
+            const q = qty[i] || 0;
+            return `<div class="nx-tray nx-product${q ? ' sel' : ''}"><div class="nx-surface"><span class="nx-thumb">${nxIcon('box')}${q ? `<span class="nx-count">${q}</span>` : ''}</span><span style="min-width:0;"><h5>${it[0]}</h5><small>${it[1]}</small><strong>${nxInr(it[2])}</strong></span></div><div class="nx-prod-foot"><span>${it[3] - q} left</span>${q ? `<span class="nx-step"><button type="button" data-nx-q="${i}" data-d="-1" aria-label="Decrease ${it[0]}">−</button><span>${q}</span><button type="button" data-nx-q="${i}" data-d="1" aria-label="Increase ${it[0]}">+</button></span>` : `<button type="button" class="nx-add" data-nx-q="${i}" data-d="1" aria-label="Add ${it[0]}">+ Add</button>`}</div></div>`;
+          }).join('');
+          const active = items.map((it, i) => [it, qty[i] || 0]).filter(([, q]) => q > 0);
+          lines.innerHTML = active.length ? active.map(([it, q]) => `<div class="nx-line"><span>${q} × ${it[0]}</span><b>${nxInr(it[2] * q)}</b></div>`).join('') : '<p style="padding:24px 6px;text-align:center;color:#77777d;font-size:10.5px;">Tap a product to add it</p>';
+          grand.textContent = nxInr(active.reduce((a, [it, q]) => a + it[2] * q, 0));
+        }
+        list.addEventListener('click', (e) => {
+          const b = e.target.closest('[data-nx-q]');
+          if (!b) return;
+          const i = Number(b.dataset.nxQ);
+          qty[i] = Math.max(0, Math.min(items[i][3], (qty[i] || 0) + Number(b.dataset.d)));
+          paint();
+        });
+        paint();
+      }
+      document.querySelectorAll('[data-nx-view]').forEach((el) => (el.dataset.nxView === 'pos' ? nxRenderPos(el) : nxRenderOverview(el)));
+
+      /* ===== PLAN OVERVIEW & TICK / CROSS COMPARISON ===== */
+      let pxData = {"plans":[{"key":"tier_1","name":"Tier 1 — Simple Billing & GST","summary":"Mobile/PC billing, custom bill design, GST bills, sales charts, exports & daily backups.","priceInr":50000,"marketPriceInr":85000,"maxUsers":5,"maxBranches":1},{"key":"tier_2","name":"Tier 2 — Billing + Stock","summary":"Everything in Tier 1 plus customer CRM, size/colour stock matrix, Excel import & alerts.","priceInr":100000,"marketPriceInr":175000,"maxUsers":5,"maxBranches":1},{"key":"tier_3","name":"Tier 3 — Multi-Branch System","summary":"Everything in Tier 2 plus separate branch ledgers, suppliers, production, transfers & profit analytics.","priceInr":150000,"marketPriceInr":295000,"maxUsers":10,"maxBranches":5},{"key":"tier_4","name":"Tier 4 — Complete + Website & PDF","summary":"Everything in Tier 3 plus live R2 photo showcase storefront & 1-click WhatsApp PDF catalogue.","priceInr":190000,"marketPriceInr":385000,"maxUsers":15,"maxBranches":10}],"features":[{"key":"mobile_pc_access","label":"Mobile & PC Access","category":"Core","description":"Responsive PWA & offline-first remote control anywhere","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"rbac_logins","label":"Owner, Admin & Worker Logins","category":"Core","description":"Role-based logins, password management & permission matrix","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"bill_designer","label":"Custom Bill Design & Print","category":"Billing","description":"A4 / 80mm / 58mm print studio & billing screen customizer","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"gst_billing_pdf","label":"GST Bills & PDF Download","category":"Billing","description":"Local & outstation GST billing, estimates & PDF download","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"discounts_returns_payments","label":"Discounts, Returns & Split Pay","category":"Billing","description":"Line/bill discounts, credit notes, size exchanges & Cash/UPI/Card","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"analytics_basic","label":"Sales & Cashflow Dashboards","category":"Analytics","description":"Daily sales, payment split & Day-End cash reconciliation","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"data_exports_gst","label":"Excel / CSV / PDF GST Reports","category":"Reports","description":"Sales & Purchase registers, GSTR-1, HSN & e-Way/IRP JSON","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"daily_backups","label":"Daily Backups + 1-Click Download","category":"Core","description":"Automated daily compressed snapshots to private R2","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"customer_crm","label":"Customer & Wholesale CRM","category":"CRM","description":"Retail & dealer ledgers, aging buckets, credit limits & history","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"dynamic_stock_matrix","label":"Size, Colour & Attribute Matrix","category":"Inventory","description":"Multi-vertical product variants, 2D matrix & Legal Metrology labels","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"bulk_excel_import","label":"Bulk Stock & Price Import","category":"Inventory","description":"Dynamic Excel/CSV template, validation & atomic commit","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"auto_stock_and_alerts","label":"Auto Stock Minus & Alerts","category":"Inventory","description":"Atomic stock deduction, low-stock & broken-size alerts","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"multi_branch_ledgers","label":"Separate Branch Stock Ledgers","category":"Multi-Branch","description":"Independent stock & immutable ledgers per branch","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"supplier_and_production","label":"Suppliers, Purchases & Factory","category":"Operations","description":"Suppliers, material/goods purchases, dues & production batches","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"stock_transfers","label":"Factory-to-Shop Transfers","category":"Multi-Branch","description":"Size-run dispatch, GSTIN-aware Tax Invoice/Challan & receive","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"owner_profit_analytics","label":"Combined Owner Profit Analytics","category":"Analytics","description":"Cross-branch revenue, weighted-avg COGS, expenses & net margin","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"public_website_cms","label":"Live Website & Photo Showcase","category":"Storefront","description":"WebP R2 gallery, New Arrivals storefront & WhatsApp Inquiry Cart","tiers":{"tier_1":false,"tier_2":false,"tier_3":false,"tier_4":true}},{"key":"pdf_catalogue_export","label":"1-Click PDF Catalogue Export","category":"Storefront","description":"WhatsApp-ready PDF brochure with configurable price display","tiers":{"tier_1":false,"tier_2":false,"tier_3":false,"tier_4":true}}]};
+      let pxOffer = true;
+      const PX_BANDS = ['Start billing', 'Add stock', 'Best for multi-branch', 'Complete + online'];
+      const PX_FEATURED = 2;
+      const PX_TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+      const PX_CROSS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>';
+      const pxParts = (name) => { const [t, s] = String(name).split('—'); return { tier: (t || '').trim(), title: (s || '').trim() }; };
+      const pxInr = (n) => '₹' + Number(n).toLocaleString('en-IN');
+      const pxPrice = (p) => (pxOffer ? p.priceInr : p.marketPriceInr);
+      const pxInterest = (p) => `${p.name} (${pxInr(pxPrice(p))})`.slice(0, 120);
+
+      function renderPricing(data) {
+        if (data && Array.isArray(data.plans) && Array.isArray(data.features)) pxData = { plans: data.plans, features: data.features };
+        const { plans, features } = pxData;
+        const cards = document.getElementById('px-cards');
+        if (!cards) return;
+        if (cards.children.length !== plans.length) {
+          cards.innerHTML = plans.map((_, i) => `<article class="px-card${i === PX_FEATURED ? ' featured' : ''}"></article>`).join('');
+        }
+        plans.forEach((p, i) => {
+          const { tier, title } = pxParts(p.name);
+          const prev = plans[i - 1];
+          const added = features.filter((f) => f.tiers[p.key] && !(prev && f.tiers[prev.key]));
+          const save = p.marketPriceInr > p.priceInr ? Math.round((1 - p.priceInr / p.marketPriceInr) * 100) : 0;
+          cards.children[i].innerHTML = `<div class="px-band">${PX_BANDS[i] || nxEsc(tier)}</div><div class="px-inner">
+            <h3>${nxEsc(tier)}</h3><div class="px-sub">${nxEsc(title)}</div><p class="px-sum">${nxEsc(p.summary)}</p>
+            <div class="px-price">${pxInr(pxPrice(p))}</div>
+            <div class="px-was">${pxOffer && save ? `<s>${pxInr(p.marketPriceInr)}</s><b>Save ${save}%</b>` : 'Standard price'}</div>
+            <button type="button" class="px-cta" data-plan-cta="${nxEsc(pxInterest(p))}">Enquire for ${nxEsc(tier)}</button>
+            <div class="px-limits"><div><b>${p.maxUsers}</b>Staff logins</div><div><b>${p.maxBranches}</b>${p.maxBranches === 1 ? 'Branch' : 'Branches'}</div></div>
+            <p class="px-plus">${prev ? `Everything in ${nxEsc(pxParts(prev.name).tier)}, plus:` : 'Includes:'}</p>
+            <ul class="px-list">${added.map((f) => `<li><span class="px-yes">${PX_TICK}</span>${nxEsc(f.label)}</li>`).join('')}</ul>
+          </div>`;
+        });
+
+        const cats = [...new Set(features.map((f) => f.category))];
+        const hot = (i) => (i === PX_FEATURED ? ' class="hot"' : '');
+        const limitRow = (label, key) => `<tr><td>${label}</td>${plans.map((p, i) => `<td class="val${i === PX_FEATURED ? ' hot' : ''}">${p[key]}</td>`).join('')}</tr>`;
+        const table = document.getElementById('px-table');
+        table.innerHTML = `<caption class="sr-only">Features included in each plan</caption><thead><tr><th scope="col"><span class="sr-only">Feature</span></th>${plans.map((p, i) => {
+          const { tier, title } = pxParts(p.name);
+          return `<th scope="col"${hot(i)}><b>${nxEsc(tier)}</b><small>${nxEsc(title)}</small><strong>${pxInr(pxPrice(p))}</strong><button type="button" data-plan-cta="${nxEsc(pxInterest(p))}" aria-label="Enquire for ${nxEsc(tier)}">Enquire</button></th>`;
+        }).join('')}</tr></thead><tbody>
+          <tr class="px-cat"><td colspan="${plans.length + 1}">Capacity</td></tr>
+          ${limitRow('Staff logins', 'maxUsers')}${limitRow('Branches', 'maxBranches')}
+          ${cats.map((c) => `<tr class="px-cat"><td colspan="${plans.length + 1}">${nxEsc(c)}</td></tr>${features.filter((f) => f.category === c).map((f) => `<tr><td>${nxEsc(f.label)}<small>${nxEsc(f.description)}</small></td>${plans.map((p, i) => `<td${hot(i)}>${f.tiers[p.key] ? `<span class="px-yes">${PX_TICK}</span><span class="sr-only">Included</span>` : `<span class="px-no">${PX_CROSS}</span><span class="sr-only">Not included</span>`}</td>`).join('')}</tr>`).join('')}`).join('')}
+        </tbody>`;
+      }
+      renderPricing();
+
+      document.addEventListener('click', (e) => {
+        const cta = e.target.closest('[data-plan-cta]');
+        if (cta) { openModal(cta.dataset.planCta); return; }
+        const sw = e.target.closest('[data-px-price]');
+        if (!sw) return;
+        pxOffer = sw.dataset.pxPrice === 'offer';
+        document.querySelectorAll('[data-px-price]').forEach((b) => b.setAttribute('aria-pressed', String(b === sw)));
+        renderPricing();
+      });
+
+      /* ===== 3. TOAST HELPER ===== */
+      const toastEl = document.getElementById('toast');
+      let toastTimer;
+      function showToast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
+      }
+      document.querySelectorAll('[data-toast]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          if (btn.tagName === 'A') e.preventDefault();
+          showToast(btn.dataset.toast);
+        });
+      });
+
+      /* ===== 4. HERO DASHBOARD INTERACTIONS ===== */
+      document.querySelectorAll('[data-dash-nav]').forEach(group => {
+        group.addEventListener('click', (e) => {
+          const item = e.target.closest('.dash-nav-item');
+          if (!item) return;
+          const sidebar = group.closest('.dash-sidebar');
+          sidebar.querySelectorAll('.dash-nav-item').forEach(b => b.classList.remove('active'));
+          item.classList.add('active');
+        });
+      });
+
+      const earnData = {
+        month:   { val: '₹1,42,800', delta: 'Net Profit ₹38,450', tip: 'Net Profit : <strong>₹38,450</strong>' },
+        last:    { val: '₹84,600',   delta: 'Net Profit ₹22,900', tip: 'Delhi Branch : <strong>₹22,900</strong>' },
+        quarter: { val: '₹58,200',   delta: 'Net Profit ₹15,550', tip: 'Chennai Branch : <strong>₹15,550</strong>' }
+      };
+      const earnSelect = document.getElementById('hero-earning-select');
+      if (earnSelect) {
+        earnSelect.addEventListener('change', () => {
+          const d = earnData[earnSelect.value];
+          document.getElementById('hero-earning-val').textContent = d.val;
+          document.getElementById('hero-earning-delta').textContent = d.delta;
+          document.getElementById('hero-earning-tip').innerHTML = `<span>${d.tip.split(' : ')[0]} :</span> ${d.tip.split(' : ')[1]}`;
+        });
+      }
+
+      const cfData = {
+        income:  { val: '₹38,450',   bars: [44, 56, 36, 64, 48, 58, 42, 92, 52, 66] },
+        expense: { val: '₹1,42,800', bars: [52, 62, 48, 70, 58, 66, 54, 96, 68, 78] },
+        savings: { val: '240 Pairs', bars: [34, 46, 40, 58, 52, 68, 56, 86, 64, 74] }
+      };
+      const cfTabs = document.getElementById('hero-cf-tabs');
+      if (cfTabs) {
+        cfTabs.addEventListener('click', (e) => {
+          const tab = e.target.closest('.cf-tab');
+          if (!tab) return;
+          cfTabs.querySelectorAll('.cf-tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          const d = cfData[tab.dataset.cf];
+          document.getElementById('hero-cf-val').textContent = d.val;
+          document.querySelectorAll('#hero-cf-bars .cf-bar').forEach((bar, i) => {
+            bar.style.height = d.bars[i] + '%';
+          });
+        });
+      }
+
+      /* ===== 5. ROLE MATRIX CARD HIGHLIGHT ===== */
+      const whyGrid = document.getElementById('why-grid');
+      if (whyGrid) {
+        whyGrid.addEventListener('click', (e) => {
+          const card = e.target.closest('.why-card');
+          if (!card) return;
+          whyGrid.querySelectorAll('.why-card').forEach(c => c.classList.remove('active'));
+          card.classList.add('active');
+        });
+      }
+
+      /* ===== 6. GSTIN TRANSFER WIDGET ===== */
+      const pkgWidget = document.getElementById('pkg-widget');
+      const pkgPayBtn = document.getElementById('pkg-pay-btn');
+      if (pkgWidget && pkgPayBtn) {
+        pkgWidget.addEventListener('click', (e) => {
+          const opt = e.target.closest('.w-pkg-opt');
+          if (!opt) return;
+          pkgWidget.querySelectorAll('.w-pkg-opt').forEach(o => o.classList.remove('selected'));
+          opt.classList.add('selected');
+          pkgPayBtn.textContent = `Generate ${opt.dataset.pkgPrice}`;
+        });
+      }
+
+      /* ===== 7. ERP WORKFLOW ACCORDION & VISUAL SWITCHER ===== */
+      const txAcc = document.getElementById('tx-accordion');
+      if (txAcc) {
+        txAcc.addEventListener('click', (e) => {
+          const item = e.target.closest('.acc-item');
+          if (!item) return;
+          const idx = item.dataset.txIndex;
+          txAcc.querySelectorAll('.acc-item').forEach(el => {
+            const isTarget = el === item;
+            el.classList.toggle('open', isTarget);
+            el.querySelector('.acc-btn').setAttribute('aria-expanded', String(isTarget));
+          });
+          document.querySelectorAll('[data-tx-panel]').forEach(p => {
+            p.classList.toggle('active', p.dataset.txPanel === idx);
+          });
+        });
+      }
+
+      /* ===== 9. TESTIMONIALS CAROUSEL & WORLD MAP PINS ===== */
+      const TESTIMONIALS = [
+        {
+          avatar: 'tukara',
+          quote: 'Nexus ERP linked our Delhi factory and Chennai retail branch with live UK 6–10 stock runs and offline phone billing that never stalls.',
+          author: 'Imraan Siddiqui',
+          role: 'Owner at Imraan Footwear (DEL + CHN)'
+        },
+        {
+          avatar: 'elena',
+          quote: 'Cutting-to-packed Karigar batches and auto IGST branch transfer invoices eliminated our manual tally sheets overnight.',
+          author: 'Ayesha Khan',
+          role: 'Director at Noor Apparel & Garments'
+        },
+        {
+          avatar: 'marcus',
+          quote: 'Even when store Wi-Fi drops during festival rush, our counters keep scanning barcodes and printing 80mm GST bills offline.',
+          author: 'Rajesh Verma',
+          role: 'Founder at Verma Electronics & Mobile'
+        },
+        {
+          avatar: 'maya',
+          quote: 'Bulk Excel stock import and auto low-stock alerts keep all four of our Grocery & FMCG outlets synced without missing a pack.',
+          author: 'Priya Nair',
+          role: 'Operations Lead at FreshBasket FMCG'
+        },
+        {
+          avatar: 'kenji',
+          quote: 'The Role × Permission Matrix gives branch managers and counter staff exact access while I view combined owner profit analytics live.',
+          author: 'Vikram Mehta',
+          role: 'Partner at Deccan Hardware & Industrial'
+        },
+        {
+          avatar: 'daniel',
+          quote: 'Sharing our live R2 WebP product gallery and 1-click PDF catalogue on WhatsApp doubled repeat orders from wholesale dealers.',
+          author: 'Arvind Patel',
+          role: 'Owner at Apex Wholesale Distributors'
+        }
+      ];
+
+      let currentTesti = 0;
+      const tAvatar = document.getElementById('testi-main-avatar');
+      const tQuote = document.getElementById('testi-quote');
+      const tAuthor = document.getElementById('testi-author');
+      const tRole = document.getElementById('testi-role');
+
+      function renderTesti(idx) {
+        currentTesti = (idx + TESTIMONIALS.length) % TESTIMONIALS.length;
+        const item = TESTIMONIALS[currentTesti];
+        tAvatar.innerHTML = createAvatarSVG(item.avatar, 76);
+        tQuote.innerHTML = `<span class="q-mark">“</span>${item.quote}<span class="q-mark">”</span>`;
+        tAuthor.textContent = item.author;
+        tRole.textContent = item.role;
+        document.querySelectorAll('.map-pin').forEach(pin => {
+          pin.classList.toggle('active-pin', Number(pin.dataset.testiIdx) === currentTesti);
+        });
+      }
+      renderTesti(0);
+
+      document.getElementById('testi-prev').addEventListener('click', () => renderTesti(currentTesti - 1));
+      document.getElementById('testi-next').addEventListener('click', () => renderTesti(currentTesti + 1));
+      document.querySelectorAll('.map-pin').forEach(pin => {
+        pin.addEventListener('click', () => renderTesti(Number(pin.dataset.testiIdx)));
+      });
+
+      /* ===== 10. FAQ ACCORDION ===== */
+      const faqList = document.getElementById('faq-list');
+      if (faqList) {
+        faqList.addEventListener('click', (e) => {
+          const btn = e.target.closest('.faq-btn');
+          if (!btn) return;
+          const item = btn.closest('.faq-item');
+          const wasOpen = item.classList.contains('open');
+          faqList.querySelectorAll('.faq-item').forEach(el => {
+            el.classList.remove('open');
+            el.querySelector('.faq-btn').setAttribute('aria-expanded', 'false');
+          });
+          if (!wasOpen) {
+            item.classList.add('open');
+            btn.setAttribute('aria-expanded', 'true');
+          }
+        });
+      }
+
+      /* ===== 11. ERP PORTAL / DEMO MODAL ===== */
+      const modal = document.getElementById('signup-modal');
+      const modalPlan = document.getElementById('modal-plan-pill');
+      const form = document.getElementById('signup-form');
+      const successBox = document.getElementById('signup-success');
+      const successMsg = document.getElementById('signup-success-msg');
+
+      function openModal(plan) {
+        modalPlan.textContent = plan || 'Book a Demo';
+        form.style.display = 'block';
+        successBox.style.display = 'none';
+        form.reset();
+        modal.classList.add('open');
+        setTimeout(() => document.getElementById('signup-email').focus(), 40);
+      }
+      function closeModal() { modal.classList.remove('open'); }
+
+      document.querySelectorAll('[data-open-modal]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          if (btn.tagName === 'A') e.preventDefault();
+          openModal(btn.dataset.openModal);
+        });
+      });
+      document.getElementById('modal-close').addEventListener('click', closeModal);
+      document.getElementById('signup-done').addEventListener('click', closeModal);
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+      const submitBtn = document.getElementById('signup-submit');
+      const errorEl = document.getElementById('signup-error');
+      function showFormError(message) {
+        errorEl.textContent = message;
+        errorEl.style.display = message ? 'block' : 'none';
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const contact = document.getElementById('signup-email').value.trim();
+        const business = document.getElementById('signup-company').value.trim();
+        if (!contact || !business || submitBtn.disabled) return;
+        showFormError('');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Sending...';
+        try {
+          const res = await fetch('/api/public/enquiry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contact,
+              business,
+              interest: modalPlan.textContent.slice(0, 120),
+              website: document.getElementById('signup-website').value
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            showFormError(data.error || 'Could not send your request. Please try again.');
+            return;
+          }
+          form.style.display = 'none';
+          successMsg.textContent = `Thanks, ${business}. We will contact you at ${contact}.`;
+          successBox.style.display = 'block';
+        } catch {
+          showFormError('Network error. Please check your connection and try again.');
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Send Request';
+        }
+      });
+
+      /* ===== LIVE PLAN PRICES & SIGNED-IN STATE ===== */
+      fetch('/api/public/landing', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data) return;
+          renderPricing(data);
+          if (data.account.signedIn) {
+            document.querySelectorAll('[data-auth-link]').forEach((link) => {
+              link.href = data.account.href;
+              if (!link.getAttribute('aria-label') && link.textContent.trim()) link.textContent = link.closest('.navbar') ? 'Dashboard' : 'Open Dashboard';
+            });
+          }
+        })
+        .catch(() => {});
+
+      /* ===== 12. SMOOTH TESTIMONIAL CROSSFADE HOOK ===== */
+      const testiCenterEl = document.querySelector('.testi-center');
+      const originalRenderTesti = renderTesti;
+      let testiInitialized = false;
+      function animatedRenderTesti(idx) {
+        if (!testiInitialized || !testiCenterEl) {
+          testiInitialized = true;
+          originalRenderTesti(idx);
+          return;
+        }
+        testiCenterEl.classList.add('is-switching');
+        setTimeout(() => {
+          originalRenderTesti(idx);
+          requestAnimationFrame(() => testiCenterEl.classList.remove('is-switching'));
+        }, 160);
+      }
+      // Re-bind testimonial controls cleanly with animated transition
+      const prevBtn = document.getElementById('testi-prev');
+      const nextBtn = document.getElementById('testi-next');
+      if (prevBtn && nextBtn) {
+        const pClone = prevBtn.cloneNode(true);
+        const nClone = nextBtn.cloneNode(true);
+        prevBtn.replaceWith(pClone);
+        nextBtn.replaceWith(nClone);
+        pClone.addEventListener('click', () => animatedRenderTesti(currentTesti - 1));
+        nClone.addEventListener('click', () => animatedRenderTesti(currentTesti + 1));
+      }
+      document.querySelectorAll('.map-pin').forEach(pin => {
+        const clone = pin.cloneNode(true);
+        pin.replaceWith(clone);
+        clone.addEventListener('click', () => animatedRenderTesti(Number(clone.dataset.testiIdx)));
+      });
+      testiInitialized = true;
+
+      /* ===== 13. SCROLL REVEAL ENGINE (INTERSECTION OBSERVER) ===== */
+      const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      const revealGroups = [
+        { selector: '.brands-title', stagger: 0 },
+        { selector: '.brand-logo-item', stagger: 55 },
+        { selector: '.why-header-left, .why-header-right', stagger: 90 },
+        { selector: '.why-card', stagger: 80 },
+        { selector: '.center-header', stagger: 0 },
+        { selector: '.bento-row-3 > div', stagger: 90 },
+        { selector: '.bento-row-2 > div', stagger: 110 },
+        { selector: '.bento-visual', stagger: 0 },
+        { selector: '.split-grid > div', stagger: 100 },
+        { selector: '.acc-item', stagger: 70 },
+        { selector: '.check-row', stagger: 75 },
+        { selector: '.px-card', stagger: 95 },
+        { selector: '.map-stage', stagger: 0 },
+        { selector: '.faq-item', stagger: 65 },
+        { selector: '.cta-showcase .dash-outer', stagger: 80 },
+        { selector: '.footer-grid > div', stagger: 60 }
+      ];
+
+      const revealTargets = new Set();
+      revealGroups.forEach(({ selector, stagger }) => {
+        const nodes = document.querySelectorAll(selector);
+        nodes.forEach((node, idx) => {
+          if (!revealTargets.has(node)) {
+            node.classList.add('reveal');
+            if (stagger > 0) {
+              node.style.setProperty('--reveal-delay', `${Math.min(idx * stagger, 360)}ms`);
+            }
+            revealTargets.add(node);
+          }
+        });
+      });
+
+      if (!prefersReduced && 'IntersectionObserver' in window) {
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('is-visible');
+              observer.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+
+        revealTargets.forEach(el => observer.observe(el));
+      } else {
+        revealTargets.forEach(el => el.classList.add('is-visible'));
+      }
+
+      /* ===== 14. MOUSE-REACTIVE GRADIENT BACKGROUNDS (SMOOTH SPRING LERP) ===== */
+      if (!prefersReduced) {
+        function bindReactiveGradient(el, hasBeams) {
+          if (!el) return;
+          const state = { tx: 50, ty: 35, cx: 50, cy: 35, active: false, raf: 0 };
+
+          function tick() {
+            state.cx += (state.tx - state.cx) * 0.085;
+            state.cy += (state.ty - state.cy) * 0.085;
+            el.style.setProperty('--mx', `${state.cx.toFixed(2)}%`);
+            el.style.setProperty('--my', `${state.cy.toFixed(2)}%`);
+            if (hasBeams) {
+              const bx = ((state.cx - 50) / 50) * 34;
+              const by = ((state.cy - 35) / 50) * 20;
+              el.style.setProperty('--beam-x', `${bx.toFixed(2)}px`);
+              el.style.setProperty('--beam-y', `${by.toFixed(2)}px`);
+            }
+            if (Math.abs(state.tx - state.cx) > 0.05 || Math.abs(state.ty - state.cy) > 0.05) {
+              state.raf = requestAnimationFrame(tick);
+            } else {
+              state.raf = 0;
+            }
+          }
+
+          el.addEventListener('pointermove', (e) => {
+            const rect = el.getBoundingClientRect();
+            state.tx = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+            state.ty = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+            if (!state.raf) state.raf = requestAnimationFrame(tick);
+          }, { passive: true });
+
+          el.addEventListener('pointerleave', () => {
+            state.tx = 50;
+            state.ty = hasBeams ? 32 : 65;
+            if (!state.raf) state.raf = requestAnimationFrame(tick);
+          });
+        }
+
+        bindReactiveGradient(document.querySelector('.hero-wrap'), true);
+        bindReactiveGradient(document.querySelector('.cta-showcase'), false);
+
+        /* ===== 15. TACTILE 3D CARD TILT & CURSOR SPOTLIGHT SHEEN ===== */
+        const tiltSelectors = '.why-card, .bento-visual, .tx-stage, .funnel-stage';
+        document.querySelectorAll(tiltSelectors).forEach(card => {
+          card.classList.add('tilt-card');
+          const maxTilt = card.classList.contains('tx-stage') || card.classList.contains('funnel-stage') ? 2.4 : 4.2;
+
+          card.addEventListener('pointermove', (e) => {
+            if (e.pointerType === 'touch') return;
+            const rect = card.getBoundingClientRect();
+            const px = (e.clientX - rect.left) / rect.width;
+            const py = (e.clientY - rect.top) / rect.height;
+            const rx = (0.5 - py) * maxTilt * 2;
+            const ry = (px - 0.5) * maxTilt * 2;
+            card.style.setProperty('--card-x', `${(px * 100).toFixed(1)}%`);
+            card.style.setProperty('--card-y', `${(py * 100).toFixed(1)}%`);
+            card.style.setProperty('--tilt-rx', `${rx.toFixed(2)}deg`);
+            card.style.setProperty('--tilt-ry', `${ry.toFixed(2)}deg`);
+            card.style.setProperty('--tilt-lift', '-4px');
+            card.classList.add('is-tilting');
+          }, { passive: true });
+
+          card.addEventListener('pointerleave', () => {
+            card.classList.remove('is-tilting');
+            card.style.setProperty('--tilt-rx', '0deg');
+            card.style.setProperty('--tilt-ry', '0deg');
+            card.style.setProperty('--tilt-lift', '0px');
+          });
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
