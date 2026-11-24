@@ -38,7 +38,7 @@ import { confirmProductImageAction } from "@/actions/storefront";
 import { BarcodeLabelSheet } from "@/components/stock/barcode-sheet";
 import { CustomFieldRenderer, HsnCombobox, VariantMatrixGrid } from "@/components/ui/dynamic-fields";
 import { KpiGrid } from "@/components/ui/kpi-grid";
-import { Alert, Badge, Button, Card, CardContent, Dialog, Input, Label, Select, Switch } from "@/components/ui/primitives";
+import { Form, Alert, Badge, Button, Card, CardContent, Dialog, Input, Label, Select, Switch } from "@/components/ui/primitives";
 import { resolveCategoryTemplates } from "@/lib/catalog/category-templates";
 import { generateVariantCombinations } from "@/lib/catalog/verticals";
 import { uploadProductPhotoToStorage } from "@/lib/storage/image-compress";
@@ -1065,7 +1065,7 @@ export function StockHubClient({
 
                       {/* Inline Add / Deduct Stock Panel inside the Sidebar */}
                       {isExpanded && canAdjust && (
-                        <form
+                        <Form
                           onSubmit={async (e) => {
                             e.preventDefault();
                             const sign = adjDirection === "remove" ? -1 : 1;
@@ -1219,7 +1219,7 @@ export function StockHubClient({
                               {drawerSaving ? "Saving..." : adjDirection === "remove" ? "Save Deduction" : "Save Added Stock"}
                             </Button>
                           </div>
-                        </form>
+                        </Form>
                       )}
                     </div>
                   );
@@ -1239,7 +1239,7 @@ export function StockHubClient({
         subtitle="Enter product name, stock quantity (pairs or cartons), price and sizes."
         maxWidth="max-w-3xl"
       >
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             // Deduplicate axes by lowercase name so duplicate "Size" axes never split combinations
@@ -1270,7 +1270,7 @@ export function StockHubClient({
                   : `Opening stock: ${finalOpeningPairs} ${uom}`
                 : undefined;
 
-            const productId = await createProductWithVariantsAction({
+            const created = await createProductWithVariantsAction({
               modelCode,
               name: prodName,
               category,
@@ -1293,6 +1293,11 @@ export function StockHubClient({
                   ? { branchId: openingBranchId, quantity: finalOpeningPairs, note: openingNote }
                   : undefined,
             });
+            if (!created.ok) {
+              toast.error(created.error);
+              return;
+            }
+            const productId = created.productId;
             if (newProdPhoto && productId) {
               await handleUploadProductPhoto(productId, newProdPhoto);
               setNewProdPhoto(null);
@@ -1691,7 +1696,7 @@ export function StockHubClient({
               <Plus className="h-3.5 w-3.5" /> Save Product
             </Button>
           </div>
-        </form>
+        </Form>
       </Dialog>
 
       {/* Simple Category & Fields Manager Modal */}
@@ -1791,12 +1796,12 @@ export function StockHubClient({
         title={`Edit Product — ${editTarget?.product_name ?? ""}`}
         maxWidth="max-w-xl"
       >
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             if (!editTarget) return;
             try {
-              await updateProductAction({
+              const res = await updateProductAction({
                 productId: editTarget.product_id,
                 modelCode: editCode,
                 name: editName,
@@ -1810,6 +1815,10 @@ export function StockHubClient({
                 sellingPrice: editRetail,
                 wholesalePrice: editWholesale,
               });
+              if (!res.ok) {
+                toast.error(res.error);
+                return;
+              }
               toast.success("Product updated!");
               setEditTarget(null);
               router.refresh();
@@ -1899,7 +1908,7 @@ export function StockHubClient({
             <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
             <Button type="submit">Save Changes</Button>
           </div>
-        </form>
+        </Form>
       </Dialog>
 
       {/* Delete / Archive Confirm Modal */}
@@ -1937,7 +1946,7 @@ export function StockHubClient({
         onClose={() => setAdjTarget(null)}
         title={`Add or Deduct Stock — ${adjTarget?.sku ?? ""}`}
       >
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             if (!adjTarget) return;
@@ -2111,7 +2120,7 @@ export function StockHubClient({
               {adjDirection === "remove" ? "Save Deduction" : "Save Added Stock"}
             </Button>
           </div>
-        </form>
+        </Form>
       </Dialog>
     </div>
   );

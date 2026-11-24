@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { NexusLogo } from "@/components/brand/nexus-logo";
-import { Button, Card, CardContent, Input, Label } from "@/components/ui/primitives";
+import { Form, Button, Card, CardContent, Input, Label } from "@/components/ui/primitives";
 
 export default function PlatformSetupPage() {
   const router = useRouter();
@@ -50,7 +50,7 @@ export default function PlatformSetupPage() {
 
         <Card>
           <CardContent className="p-6">
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <Form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <Label>Bootstrap Token (`APP_OWNER_BOOTSTRAP_TOKEN`)</Label>
                 <Input
@@ -91,7 +91,7 @@ export default function PlatformSetupPage() {
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                 Create Platform Super Admin
               </Button>
-            </form>
+            </Form>
           </CardContent>
         </Card>
       </div>

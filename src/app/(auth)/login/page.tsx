@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Crown, GitBranch, Server, Store, UserRound, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { AuthField, AuthSplitLayout, Spinner } from "@/components/auth/auth-split-layout";
+import { Form } from "@/components/ui/primitives";
 
 type ViewMode = "login" | "reset";
 
@@ -211,7 +212,7 @@ function LoginView() {
             </div>
           ) : null}
 
-          <form onSubmit={handleResetRequest}>
+          <Form onSubmit={handleResetRequest}>
             <AuthField
               label="Email or Staff Username"
               name="resetIdent"
@@ -237,7 +238,7 @@ function LoginView() {
                 "Notify Administrator"
               )}
             </button>
-          </form>
+          </Form>
 
           <div className="as-alt">
             <button
@@ -281,7 +282,7 @@ function LoginView() {
 
           {error ? <div className="as-alert">{error}</div> : null}
 
-          <form onSubmit={handleLogin}>
+          <Form onSubmit={handleLogin}>
             <AuthField
               label="Email or Staff Username"
               name="identifier"
@@ -333,7 +334,7 @@ function LoginView() {
                 "Log In"
               )}
             </button>
-          </form>
+          </Form>
 
           <div className="as-alt">
             <Link href="/signup" className="as-btn as-btn--ghost as-btn--stacked">

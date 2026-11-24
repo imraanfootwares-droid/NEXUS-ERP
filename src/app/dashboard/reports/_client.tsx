@@ -11,7 +11,7 @@ import {
   recordExpenseAction,
   updateExpenseAction,
 } from "@/actions/billing";
-import { Badge, Button, Card, CardContent, CardHeader, Input, Label, Select, Tabs } from "@/components/ui/primitives";
+import { Form, Badge, Button, Card, CardContent, CardHeader, Input, Label, Select, Tabs } from "@/components/ui/primitives";
 import type { BranchRow, PaymentMode } from "@/types/database";
 
 export function ReportsAndDayEndClient({
@@ -104,7 +104,7 @@ export function ReportsAndDayEndClient({
           <Card>
             <CardHeader><h3 className="text-sm font-semibold">{editExpId ? "Edit Expense" : "Record Business Expense"}</h3></CardHeader>
             <CardContent>
-              <form
+              <Form
                 onSubmit={async (e) => {
                   e.preventDefault();
                   if (editExpId) {
@@ -164,7 +164,7 @@ export function ReportsAndDayEndClient({
                     </Button>
                   )}
                 </div>
-              </form>
+              </Form>
             </CardContent>
           </Card>
 

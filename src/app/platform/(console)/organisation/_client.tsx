@@ -15,7 +15,7 @@ import {
   platformUpdatePersonAction,
   setPersonTierAction,
 } from "@/actions/platform-org";
-import { Select } from "@/components/ui/primitives";
+import { Form, Select } from "@/components/ui/primitives";
 import { OrgTreeView } from "@/components/org/org-tree-view";
 import type { ActivityItem, OrgFlow, OrgNode } from "@/components/org/org-tree-layout";
 import { TIER_ORDER, effectiveUserTier, tierRank } from "@/lib/auth/access";
@@ -394,7 +394,7 @@ export function OrganisationVisualEditorClient({
                 <p className="dr-hint" style={{ marginBottom: 16 }}>
                   Add a new retail shop, factory, or warehouse to this business.
                 </p>
-                <form
+                <Form
                   onSubmit={async (e) => {
                     e.preventDefault();
                     setBusy(true);
@@ -473,7 +473,7 @@ export function OrganisationVisualEditorClient({
                       {busy ? "Saving…" : "Create Branch"}
                     </button>
                   </div>
-                </form>
+                </Form>
               </>
             ) : sheet.kind === "add-person" ? (
               <>
@@ -482,7 +482,7 @@ export function OrganisationVisualEditorClient({
                 <p className="dr-hint" style={{ marginBottom: 16 }}>
                   Add a branch manager or counter/stock worker and assign them to a branch.
                 </p>
-                <form
+                <Form
                   onSubmit={async (e) => {
                     e.preventDefault();
                     setBusy(true);
@@ -572,7 +572,7 @@ export function OrganisationVisualEditorClient({
                       {busy ? "Creating…" : "Create Person"}
                     </button>
                   </div>
-                </form>
+                </Form>
               </>
             ) : sheet.node.kind === "root" ? (
               <>
@@ -657,7 +657,7 @@ export function OrganisationVisualEditorClient({
                   </button>
                 </div>
 
-                <form
+                <Form
                   onSubmit={async (e) => {
                     e.preventDefault();
                     setBusy(true);
@@ -753,7 +753,7 @@ export function OrganisationVisualEditorClient({
                       {busy ? "Saving…" : "Save Branch"}
                     </button>
                   </div>
-                </form>
+                </Form>
               </>
             ) : (
               <>
@@ -771,7 +771,7 @@ export function OrganisationVisualEditorClient({
                     Workspace Owner account. Use password reset below if needed.
                   </p>
                 ) : (
-                  <form
+                  <Form
                     onSubmit={async (e) => {
                       e.preventDefault();
                       setBusy(true);
@@ -878,7 +878,7 @@ export function OrganisationVisualEditorClient({
                         {busy ? "Saving…" : "Save Person"}
                       </button>
                     </div>
-                  </form>
+                  </Form>
                 )}
 
                 {(() => {
@@ -921,7 +921,7 @@ export function OrganisationVisualEditorClient({
                 })()}
 
                 <hr />
-                <form
+                <Form
                   onSubmit={async (e) => {
                     e.preventDefault();
                     setBusy(true);
@@ -957,7 +957,7 @@ export function OrganisationVisualEditorClient({
                       Reset Password
                     </button>
                   </div>
-                </form>
+                </Form>
               </>
             )}
           </div>

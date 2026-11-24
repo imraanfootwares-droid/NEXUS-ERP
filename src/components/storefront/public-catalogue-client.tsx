@@ -13,7 +13,7 @@ import {
   ShoppingBag,
   Trash2,
 } from "lucide-react";
-import { Badge, Button, Dialog, Input, Label } from "@/components/ui/primitives";
+import { Form, Badge, Button, Dialog, Input, Label } from "@/components/ui/primitives";
 import type { EnquiryChannel } from "@/types/database";
 
 export interface PublicCatalogueItem {
@@ -451,7 +451,7 @@ export function PublicCatalogueClient({
             </Button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <Form onSubmit={handleSubmit} className="space-y-3">
             {cart.length > 0 && (
               <div className="max-h-40 space-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -551,7 +551,7 @@ export function PublicCatalogueClient({
             ) : (
               <p className="text-xs text-amber-700">Enquiries are not configured for this catalogue yet.</p>
             )}
-          </form>
+          </Form>
         )}
       </Dialog>
     </div>

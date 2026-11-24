@@ -30,7 +30,7 @@ import { PosProductCard, QtyStepper, money } from "@/components/billing/pos-part
 import { normalizeGstin, normalizePhone } from "@/lib/billing/walk-in-identity";
 import { readCachedBlock } from "@/lib/offline/access-block";
 import { GstinInput, SizeRunQuickFill } from "@/components/ui/dynamic-fields";
-import { Alert, Button, Card, CardContent, Dialog, Input, Label, Select } from "@/components/ui/primitives";
+import { Form, Alert, Button, Card, CardContent, Dialog, Input, Label, Select } from "@/components/ui/primitives";
 import { Paged } from "@/components/ui/pagination";
 import { Segmented } from "@/components/ui/spark";
 import { INDIAN_STATES } from "@/lib/constants/saas";
@@ -188,6 +188,7 @@ export function PosTerminal({
   const [previewOpen, setPreviewOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const lastSyncRef = useRef<string>(new Date().toISOString());
+  const submitLockRef = useRef(false);
   const initialBranchRef = useRef<string>(startBranchId);
 
   const posUi = tenant.brand_config?.pos_ui ?? {
@@ -614,6 +615,9 @@ export function PosTerminal({
       toast.error(finalizeBlock);
       return;
     }
+    // Double-click / double-Enter guard: state updates are async, a ref is not.
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setSubmitting(true);
     const idempotencyKey = crypto.randomUUID();
     const payments: Array<{ mode: PaymentMode; amount: number }> = [
@@ -706,6 +710,7 @@ export function PosTerminal({
         toast.error(err instanceof Error ? err.message : "Failed to save invoice");
       }
     } finally {
+      submitLockRef.current = false;
       setSubmitting(false);
     }
   };
@@ -726,8 +731,8 @@ export function PosTerminal({
       : null;
 
   const customerFields = (
-    <div className="space-y-2">
-      <div className="grid grid-cols-2 gap-2">
+    <div className="space-y-2.5">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         <Input
           aria-label="Customer name"
           placeholder="Customer name"
@@ -738,13 +743,13 @@ export function PosTerminal({
         <Input aria-label="Customer phone" placeholder="Phone number" inputMode="tel" value={walkInPhone} onChange={(e) => setWalkInPhone(e.target.value)} />
       </div>
       {detailsOpen || invoiceType === "sale" ? (
-        <div className="ui-page space-y-2 rounded-xl border border-[#ececee] bg-[#fafafa] p-2.5">
+        <div className="ui-page space-y-2.5 rounded-xl border border-[#ececee] bg-[#fafafa] p-3 sm:p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-1.5">
-            <span className="text-[10.5px] font-semibold text-[#55555b]">
+            <span className="text-[12px] font-semibold text-[#3f3f46]">
               Receiving Party GST Details <span className="font-normal text-[#77777d]">(Optional · Recommended)</span>
             </span>
             <span
-              className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold ${
+              className={`max-w-full truncate rounded-full px-2.5 py-1 font-mono text-[10.5px] font-semibold ${
                 gstCalc.supply_type === "inter_state"
                   ? "bg-sky-100 text-sky-800"
                   : "bg-emerald-50 text-emerald-700"
@@ -755,7 +760,7 @@ export function PosTerminal({
                 : `Same State → CGST + SGST`}
             </span>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <GstinInput value={walkInGstin} onChange={setWalkInGstin} onStateDetected={setWalkInState} />
             <Select aria-label="Place of supply" value={effectivePlaceOfSupply} onChange={(e) => setWalkInState(e.target.value)}>
               {stateOptions}
@@ -786,8 +791,8 @@ export function PosTerminal({
   );
 
   const billBody = (
-    <div className="space-y-4 p-3.5">
-      <section className="space-y-2">
+    <div className="space-y-5 divide-y divide-[#f0f0f1] p-4 sm:p-5 [&>section+section]:pt-5">
+      <section className="space-y-2.5">
         <div className="flex items-center justify-between gap-2">
           <p className="ui-eyebrow">Customer</p>
           {!customerId && (
@@ -809,13 +814,13 @@ export function PosTerminal({
         ) : null}
         {!customerId ? customerFields : null}
         {customerId && invoiceType === "sale" ? (
-          <div className="ui-page space-y-2 rounded-xl border border-[#ececee] bg-[#fafafa] p-2.5">
+          <div className="ui-page space-y-2.5 rounded-xl border border-[#ececee] bg-[#fafafa] p-3 sm:p-3.5">
             <div className="flex flex-wrap items-center justify-between gap-1.5">
-              <span className="text-[10.5px] font-semibold text-[#55555b]">
+              <span className="text-[12px] font-semibold text-[#3f3f46]">
                 Buyer GST &amp; Delivery <span className="font-normal text-[#77777d]">(Optional · Recommended)</span>
               </span>
               <span
-                className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold ${
+                className={`max-w-full truncate rounded-full px-2.5 py-1 font-mono text-[10.5px] font-semibold ${
                   gstCalc.supply_type === "inter_state"
                     ? "bg-sky-100 text-sky-800"
                     : "bg-emerald-50 text-emerald-700"
@@ -826,7 +831,7 @@ export function PosTerminal({
                   : `Same State → CGST + SGST`}
               </span>
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <Input
                 aria-label="Buyer company name"
                 placeholder="Company / Party Name"
@@ -841,7 +846,7 @@ export function PosTerminal({
                 onChange={(e) => setWalkInPhone(e.target.value)}
               />
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <GstinInput value={walkInGstin} onChange={setWalkInGstin} onStateDetected={setWalkInState} />
               <Select aria-label="Place of supply" value={effectivePlaceOfSupply} onChange={(e) => setWalkInState(e.target.value)}>
                 {stateOptions}
@@ -882,22 +887,22 @@ export function PosTerminal({
           )}
       </section>
 
-      <section className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="ui-eyebrow">Bill Mode</p>
           {invoiceType === "sale" && (
             <div className="flex items-center gap-1.5">
               {activeBranch?.gstin && (
-                <span className="font-mono text-[10px] font-semibold text-[#55555b]">
+                <span className="truncate font-mono text-[11px] font-semibold text-[#55555b]">
                   {activeBranch.gstin}
                 </span>
               )}
               <Link
                 href="/dashboard/settings?tab=tax"
-                className="inline-flex items-center gap-1 rounded-md bg-[#f1f1f2] px-1.5 py-0.5 text-[10px] font-semibold text-[#171717] transition-colors hover:bg-[#e4e4e7]"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[#f1f1f2] px-2 py-1 text-[11px] font-semibold text-[#171717] transition-colors hover:bg-[#e4e4e7]"
                 title="Set or change GST number & tax settings"
               >
-                <Settings className="h-2.5 w-2.5" />
+                <Settings className="h-3 w-3" />
                 GST Settings
               </Link>
             </div>
@@ -910,7 +915,7 @@ export function PosTerminal({
               setInvoiceType("estimate_bill_of_supply");
               setTaxMode("none");
             }}
-            className={`cursor-pointer rounded-[9px] px-3 py-1.5 text-xs font-semibold transition-all ${
+            className={`min-h-[38px] cursor-pointer rounded-[9px] px-3 py-2 text-[13px] font-semibold transition-all ${
               invoiceType === "estimate_bill_of_supply"
                 ? "bg-white text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,.08)]"
                 : "text-[#55555b] hover:text-[#171717]"
@@ -924,7 +929,7 @@ export function PosTerminal({
               setInvoiceType("sale");
               setTaxMode(tenant.tax_config.default_tax_mode === "exclusive" ? "exclusive" : "inclusive");
             }}
-            className={`cursor-pointer rounded-[9px] px-3 py-1.5 text-xs font-semibold transition-all ${
+            className={`min-h-[38px] cursor-pointer rounded-[9px] px-3 py-2 text-[13px] font-semibold transition-all ${
               invoiceType === "sale"
                 ? "bg-[#171717] text-white shadow-[0_1px_2px_rgba(0,0,0,.18)]"
                 : "text-[#55555b] hover:text-[#171717]"
@@ -937,13 +942,13 @@ export function PosTerminal({
         {invoiceType === "sale" && (
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-[#77777d]">Tax Calculation</span>
-              <div className="w-40">
+              <span className="text-[12.5px] font-medium text-[#55555b]">Tax Calculation</span>
+              <div className="w-44 sm:w-48">
                 <Select
                   aria-label="Tax mode"
                   value={taxMode}
                   onChange={(e) => setTaxMode(e.target.value as TaxMode)}
-                  className="!min-h-[30px] !py-1 !text-[11.5px]"
+                  className="!text-[12.5px]"
                 >
                   <option value="inclusive">Inclusive (MRP)</option>
                   <option value="exclusive">Exclusive (B2B)</option>
@@ -980,8 +985,8 @@ export function PosTerminal({
       </section>
 
       <section>
-        <div className="mb-1.5 flex items-center justify-between">
-          <p className="ui-eyebrow">Items</p>
+        <div className="mb-2.5 flex items-center justify-between">
+          <p className="ui-eyebrow">Items{cart.length > 0 ? ` (${cart.length})` : ""}</p>
           {discountsEnabled && cart.length > 0 ? (
             <button type="button" className="pos-link" aria-pressed={lineDiscOpen} onClick={() => setLineDiscOpen((v) => !v)}>
               {lineDiscOpen ? "Hide item discounts" : "Item discounts"}
@@ -1007,16 +1012,16 @@ export function PosTerminal({
                 <li key={c.key} className="pos-line">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-[12.5px] font-medium text-[#171717]" title={c.product_name}>{c.product_name}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-[#77777d]">
+                      <p className="truncate text-[13.5px] font-semibold text-[#171717]" title={c.product_name}>{c.product_name}</p>
+                      <p className="mt-0.5 truncate text-[11.5px] text-[#77777d]">
                         {money(c.unit_price)} each
                         {posUi.show_hsn_col ? ` · HSN ${c.hsn_code || "—"} · GST ${gstCalc.items[idx]?.gst_rate ?? c.fallback_gst_rate}%` : ""}
                       </p>
                     </div>
-                    <span className="shrink-0 font-mono text-[12.5px] font-semibold text-[#171717]">{money(lineNet)}</span>
+                    <span className="shrink-0 font-mono text-[14px] font-semibold text-[#171717]">{money(lineNet)}</span>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <QtyStepper value={c.qty} max={limit} label={c.product_name} onChange={(q) => setLineQty(c.key, q)} />
                       <label className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-[#55555b]" title="Edit price per piece">
                         <span>₹</span>
@@ -1181,7 +1186,7 @@ export function PosTerminal({
 
       {discountsEnabled && cart.length > 0 && (
         <section>
-          <p className="ui-eyebrow mb-1.5">Bill Discount</p>
+          <p className="ui-eyebrow mb-2.5">Bill Discount</p>
           <div className="flex gap-2">
             <Segmented
               label="Discount type"
@@ -1212,11 +1217,11 @@ export function PosTerminal({
 
       {cart.length > 0 && (
         <section>
-          <div className="mb-1.5 flex items-center justify-between">
+          <div className="mb-2.5 flex items-center justify-between gap-2">
             <p className="ui-eyebrow">Payment</p>
-            <span className="text-[11px] text-[#77777d]">Tap a method to pay in full</span>
+            <span className="text-[11.5px] text-[#77777d]">Tap a method to pay in full</span>
           </div>
-          <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${payModes.length}, minmax(0, 1fr))` }}>
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${payModes.length}, minmax(0, 1fr))` }}>
             {payModes.map((m) => {
               const Icon = PAY_ICON[m];
               const amount = payAmounts[m];
@@ -1254,7 +1259,7 @@ export function PosTerminal({
 
       {gstCalc.grand_total >= 50000 && (
         <section>
-          <p className="ui-eyebrow mb-1.5">E-Way Bill No</p>
+          <p className="ui-eyebrow mb-2.5">E-Way Bill No</p>
           <Input value={ewayBillNo} onChange={(e) => setEwayBillNo(e.target.value)} placeholder="12-digit EWB number" />
         </section>
       )}
@@ -1262,7 +1267,7 @@ export function PosTerminal({
   );
 
   const billFooter = (
-    <div className="space-y-2 p-[3px] pt-1">
+    <div className="space-y-2.5 p-[3px] pt-1.5">
       <div className="pos-total">
         {showBreakdown ? (
           <dl className="ui-page mb-2 space-y-1 border-b border-white/15 pb-2 text-[11.5px] text-white/70">
@@ -1287,28 +1292,29 @@ export function PosTerminal({
               {itemCount} {itemCount === 1 ? "item" : "items"} · Tax details
               <ChevronUp className={`h-3 w-3 transition-transform duration-200 ${showBreakdown ? "rotate-180" : ""}`} />
             </span>
-            <span className="text-[13px] font-medium">Grand Total</span>
+            <span className="text-[14px] font-semibold">Grand Total</span>
           </span>
           <span key={gstCalc.grand_total} className="pos-total-value">{money(gstCalc.grand_total)}</span>
         </button>
       </div>
       {finalizeBlock && cart.length > 0 ? <p className="px-1 text-[11px] font-medium text-rose-600">{finalizeBlock}</p> : null}
-      <div className="flex gap-1.5">
+      <div className="flex gap-2">
         {canEditDraft && (
-          <Button variant="outline" className="!min-h-[40px] flex-none" disabled={submitting || cart.length === 0} onClick={() => submitInvoice(true)}>
+          <Button variant="outline" size="lg" className="!min-h-[46px] flex-none !px-3.5" disabled={submitting || cart.length === 0} onClick={() => submitInvoice(true)}>
             <Save className="h-4 w-4" /> Hold
           </Button>
         )}
         <Button
           variant="outline"
-          className="!min-h-[40px] flex-none"
+          size="lg"
+          className="!min-h-[46px] flex-none !px-3.5"
           disabled={submitting || cart.length === 0}
           onClick={() => setPreviewOpen(true)}
           title="Preview bill before printing"
         >
           <Eye className="h-4 w-4" /> Preview
         </Button>
-        <Button className="!min-h-[40px] flex-1" disabled={submitting || Boolean(finalizeBlock)} onClick={() => submitInvoice(false)}>
+        <Button size="lg" className="!min-h-[46px] flex-1" disabled={submitting || cart.length === 0 || Boolean(finalizeBlock)} onClick={() => submitInvoice(false)}>
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
           {submitting ? "Saving..." : "Finalize & Print"}
         </Button>
@@ -1317,7 +1323,7 @@ export function PosTerminal({
   );
 
   const billHeader = (
-    <header className="flex min-h-[38px] items-center justify-between gap-2 px-3 py-1.5">
+    <header className="flex min-h-[44px] items-center justify-between gap-2 px-3.5 py-2">
       <span className="ui-eyebrow flex min-w-0 items-center gap-2">
         Current Bill
         {itemCount > 0 ? <span key={itemCount} className="pos-header-count">{itemCount}</span> : null}
@@ -1370,7 +1376,7 @@ export function PosTerminal({
         </Alert>
       ) : null}
 
-      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_410px]">
+      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[minmax(0,1fr)_470px] 2xl:grid-cols-[minmax(0,1fr)_520px]">
         <div className="min-w-0 space-y-3 pb-20 lg:pb-0">
           <div className="ui-tray flex gap-1 !p-1">
             <div className="relative flex-1">
@@ -1420,7 +1426,7 @@ export function PosTerminal({
           ) : filteredVariants.length === 0 ? (
             <div className="ui-tray"><p className="ui-surface p-8 text-center text-[13px] text-[#77777d]">No products match your search.</p></div>
           ) : (
-            <div className={posUi.layout === "list" ? "grid grid-cols-1 gap-2" : "grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-3"}>
+            <div className={posUi.layout === "list" ? "grid grid-cols-1 gap-2" : "grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3"}>
               <Paged items={filteredVariants} size={12} key={`${search}|${modelFilter}`}>{(pagedRows) => pagedRows.map((v) => (
                 <PosProductCard
                   key={v.variant_id}
@@ -1441,7 +1447,7 @@ export function PosTerminal({
           )}
         </div>
 
-        <aside className="ui-tray sticky top-[64px] hidden max-h-[calc(100vh-76px)] flex-col lg:flex" aria-label="Current bill">
+        <aside className="ui-tray sticky top-[64px] hidden max-h-[calc(100dvh-76px)] flex-col lg:flex" aria-label="Current bill">
           {billHeader}
           <div className="ui-surface min-h-0 flex-1 overflow-y-auto">{billBody}</div>
           {billFooter}
@@ -1460,7 +1466,7 @@ export function PosTerminal({
       <Dialog open={mobileCartOpen} onClose={() => setMobileCartOpen(false)} title="Current Bill">
         <div className="-m-4 sm:-m-5">
           {billBody}
-          <div className="sticky bottom-0 bg-white p-2">{billFooter}</div>
+          <div className="sticky bottom-0 border-t border-[#ececee] bg-white p-2 pb-[max(8px,env(safe-area-inset-bottom))]">{billFooter}</div>
         </div>
       </Dialog>
       <Dialog open={sizeRunOpen} onClose={() => setSizeRunOpen(false)} title="Wholesale Size-Run Carton Fill">
@@ -1508,7 +1514,7 @@ export function PosTerminal({
       </Dialog>
 
       <Dialog open={freeOpen} onClose={() => setFreeOpen(false)} title="Add Quick / Free-Text Item">
-        <form
+        <Form
           onSubmit={(e) => {
             e.preventDefault();
             setCart((prev) => [
@@ -1538,7 +1544,7 @@ export function PosTerminal({
           </div>
           <div><Label>Unit Price ₹</Label><Input type="number" min={0} step="0.01" value={freeRate} onChange={(e) => setFreeRate(Number(e.target.value) || 0)} required /></div>
           <Button type="submit" className="w-full">Add to Bill</Button>
-        </form>
+        </Form>
       </Dialog>
 
       {/* Live Bill Preview Modal (before finalizing & printing) */}

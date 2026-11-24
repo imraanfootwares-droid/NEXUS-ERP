@@ -7,7 +7,7 @@ import { Paged } from "@/components/ui/pagination";
 import { toast } from "sonner";
 import { setAccessBlockAction } from "@/actions/access-control";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
-import { Button, Dialog, Input, Label, Textarea } from "@/components/ui/primitives";
+import { Form, Button, Dialog, Input, Label, Textarea } from "@/components/ui/primitives";
 import { Segmented, StatTray, StatusPill, TrayCard } from "@/components/ui/spark";
 
 interface BlockFields {
@@ -307,7 +307,7 @@ export function AccessControlClient({
               </div>
             </div>
           ) : (
-            <form
+            <Form
               className="space-y-3"
               onSubmit={(e) => {
                 e.preventDefault();
@@ -334,7 +334,7 @@ export function AccessControlClient({
               <Button type="submit" variant="danger" className="w-full" disabled={busy}>
                 <LockKeyhole className="h-4 w-4" /> {busy ? "Saving..." : target.access_blocked ? "Save Block" : "Block Access"}
               </Button>
-            </form>
+            </Form>
           )
         ) : null}
       </Dialog>

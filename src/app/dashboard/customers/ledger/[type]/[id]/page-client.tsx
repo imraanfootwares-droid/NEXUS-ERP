@@ -18,7 +18,7 @@ import {
   deleteManualPartyLedgerEntryAction,
   savePartyLedgerEntryAction,
 } from "@/actions/party-ledger";
-import { Badge, Button, Card, CardContent, Dialog, Input, Label } from "@/components/ui/primitives";
+import { Form, Badge, Button, Card, CardContent, Dialog, Input, Label } from "@/components/ui/primitives";
 import { StatTray } from "@/components/ui/spark";
 import type {
   LedgerItemLine,
@@ -361,13 +361,22 @@ export function PartyLedgerClient({
                             {r.sourceType === "manual" && r.entryId && (
                               <button
                                 type="button"
-                                onClick={async () => {
+                                onClick={async (e) => {
+                                  const btn = e.currentTarget;
+                                  if (btn.disabled) return;
                                   if (!confirm("Delete this manual ledger entry?")) return;
-                                  await deleteManualPartyLedgerEntryAction(party.type, party.id, r.entryId!);
-                                  toast.success("Manual entry deleted.");
-                                  router.refresh();
+                                  btn.disabled = true;
+                                  try {
+                                    await deleteManualPartyLedgerEntryAction(party.type, party.id, r.entryId!);
+                                    toast.success("Manual entry deleted.");
+                                    router.refresh();
+                                  } catch {
+                                    toast.error("Could not delete this entry. Please try again.");
+                                  } finally {
+                                    btn.disabled = false;
+                                  }
                                 }}
-                                className="cursor-pointer rounded-lg border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50"
+                                className="cursor-pointer rounded-lg border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"
                                 title="Delete manual entry"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -464,7 +473,7 @@ export function PartyLedgerClient({
         maxWidth="max-w-3xl"
       >
         {editRow && (
-          <form onSubmit={handleSave} className="space-y-4">
+          <Form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div>
                 <Label>Date &amp; Time</Label>
@@ -611,7 +620,7 @@ export function PartyLedgerClient({
                 {saving ? "Saving..." : "Save Changes"}
               </Button>
             </div>
-          </form>
+          </Form>
         )}
       </Dialog>
     </div>

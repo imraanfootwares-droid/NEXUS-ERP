@@ -24,7 +24,7 @@ import {
 } from "@/actions/inventory";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 import { GstinInput } from "@/components/ui/dynamic-fields";
-import { Badge, Button, Dialog, Input, Label, Select, Tabs } from "@/components/ui/primitives";
+import { Form, Badge, Button, Dialog, Input, Label, Select, Tabs } from "@/components/ui/primitives";
 import { StatTray } from "@/components/ui/spark";
 import type { CustomerRow, PaymentMode } from "@/types/database";
 
@@ -616,7 +616,7 @@ export function CustomersClient({
         onClose={() => setAddOpen(false)}
         title={editingId ? "Edit Customer / Wholesale Dealer" : "Add Customer / Wholesale Dealer"}
       >
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             if (editingId) {
@@ -674,7 +674,7 @@ export function CustomersClient({
             </div>
           )}
           <Button type="submit" className="w-full">Save Customer</Button>
-        </form>
+        </Form>
       </Dialog>
 
       <Dialog
@@ -682,7 +682,7 @@ export function CustomersClient({
         onClose={() => setPayTarget(null)}
         title={`Collect Due — ${payTarget?.name ?? ""}`}
       >
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             if (!payTarget) return;
@@ -704,7 +704,7 @@ export function CustomersClient({
             </Select>
           </div>
           <Button type="submit" className="w-full">Record Collection</Button>
-        </form>
+        </Form>
       </Dialog>
 
       <Dialog
@@ -789,7 +789,7 @@ export function CustomersClient({
               </div>
 
               {/* Form Body */}
-              <form
+              <Form
                 onSubmit={async (e) => {
                   e.preventDefault();
                   if (!supName.trim()) {
@@ -998,7 +998,7 @@ export function CustomersClient({
                     {supSaving ? "Saving..." : editSupId ? "Save Supplier" : "Add Supplier"}
                   </Button>
                 </div>
-              </form>
+              </Form>
             </aside>
           </div>,
           document.body
@@ -1010,7 +1010,7 @@ export function CustomersClient({
         onClose={() => setSupPayTarget(null)}
         title={`Pay Supplier Due — ${supPayTarget?.name ?? ""}`}
       >
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             if (!supPayTarget) return;
@@ -1038,7 +1038,7 @@ export function CustomersClient({
           </div>
           <div><Label>Reference / UTR (optional)</Label><Input value={supPayRef} onChange={(e) => setSupPayRef(e.target.value)} placeholder="UTR / cheque / receipt no." /></div>
           <Button type="submit" className="w-full">Record Payment</Button>
-        </form>
+        </Form>
       </Dialog>
 
       <Dialog
@@ -1104,7 +1104,7 @@ export function CustomersClient({
           );
           const isSup = txTarget.partyType === "supplier";
           return (
-            <form
+            <Form
               onSubmit={async (e) => {
                 e.preventDefault();
                 if (!amtNum || amtNum <= 0) {
@@ -1230,7 +1230,7 @@ export function CustomersClient({
                   </Button>
                 </div>
               </div>
-            </form>
+            </Form>
           );
         })()}
       </Dialog>

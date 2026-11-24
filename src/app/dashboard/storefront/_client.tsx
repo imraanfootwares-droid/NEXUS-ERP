@@ -25,7 +25,7 @@ import {
   updateStorefrontConfigAction,
 } from "@/actions/storefront";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
-import {
+import { Form,
   Badge,
   Button,
   Dialog,
@@ -558,7 +558,7 @@ export function StorefrontHubClient({
         title="Quick Add Website Product"
         subtitle="Add a product directly to your website and PDF catalogue."
       >
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             await createQuickCatalogueItemAction({
@@ -625,7 +625,7 @@ export function StorefrontHubClient({
               <Plus className="h-3.5 w-3.5" /> Add &amp; Show on Website
             </Button>
           </div>
-        </form>
+        </Form>
       </Dialog>
     </div>
   );

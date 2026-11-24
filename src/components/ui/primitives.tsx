@@ -2,7 +2,8 @@
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Search, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Search, X } from "lucide-react";
+import { toast } from "sonner";
 
 export function cn(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
@@ -13,8 +14,115 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   size?: "sm" | "md" | "lg";
 }
 
+function isThenable(v: unknown): v is PromiseLike<unknown> {
+  return Boolean(v) && typeof (v as PromiseLike<unknown>).then === "function";
+}
+
+/** Turns any thrown value into a message that is safe to show a shop user. */
+export function friendlyErrorMessage(err: unknown, fallback = "Something went wrong. Please try again."): string {
+  const raw = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  if (!raw) return fallback;
+  // Production builds mask server-action errors behind this generic text.
+  if (/Server Components render|digest|An error occurred in the Server|Internal Server Error/i.test(raw)) return fallback;
+  if (/Failed to fetch|NetworkError|Load failed/i.test(raw)) return "Network problem. Check your connection and try again.";
+  return raw.length > 220 ? `${raw.slice(0, 220)}…` : raw;
+}
+
+/** True while the nearest <Form> is running its submit handler. */
+const FormBusyContext = React.createContext(false);
+export function useFormBusy(): boolean {
+  return React.useContext(FormBusyContext);
+}
+
+export type FormProps = Omit<React.FormHTMLAttributes<HTMLFormElement>, "onSubmit"> & {
+  onSubmit?: (e: React.FormEvent<HTMLFormElement>) => unknown;
+};
+
+/**
+ * Drop-in <form> replacement with a double-submit guard: while an async onSubmit is
+ * running, further submits (double-clicks, repeated Enter) are ignored and every
+ * submit <Button> inside is disabled with a spinner. Unhandled errors become a toast.
+ */
+export const Form = React.forwardRef<HTMLFormElement, FormProps>(({ onSubmit, children, ...props }, ref) => {
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    if (busyRef.current) {
+      e.preventDefault();
+      return;
+    }
+    if (!onSubmit) return;
+    let res: unknown;
+    try {
+      res = onSubmit(e);
+    } catch (err) {
+      e.preventDefault();
+      toast.error(friendlyErrorMessage(err));
+      return;
+    }
+    if (isThenable(res)) {
+      busyRef.current = true;
+      setBusy(true);
+      Promise.resolve(res)
+        .catch((err) => {
+          console.error(err);
+          toast.error(friendlyErrorMessage(err));
+        })
+        .finally(() => {
+          busyRef.current = false;
+          setBusy(false);
+        });
+    }
+  };
+
+  return (
+    <FormBusyContext.Provider value={busy}>
+      <form ref={ref} onSubmit={handleSubmit} aria-busy={busy || undefined} {...props}>
+        {children}
+      </form>
+    </FormBusyContext.Provider>
+  );
+});
+Form.displayName = "Form";
+
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "md", type = "button", ...props }, ref) => {
+  ({ className, variant = "primary", size = "md", type = "button", onClick, disabled, children, ...props }, ref) => {
+    const busyRef = useRef(false);
+    const [pending, setPending] = useState(false);
+    const formBusy = React.useContext(FormBusyContext);
+    const submitBusy = type === "submit" && formBusy;
+    const busy = pending || submitBusy;
+
+    const handleClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
+      if (disabled || busyRef.current || submitBusy) {
+        e.preventDefault();
+        return;
+      }
+      if (!onClick) return;
+      let res: unknown;
+      try {
+        res = onClick(e);
+      } catch (err) {
+        console.error(err);
+        toast.error(friendlyErrorMessage(err));
+        return;
+      }
+      if (isThenable(res)) {
+        busyRef.current = true;
+        setPending(true);
+        Promise.resolve(res)
+          .catch((err) => {
+            console.error(err);
+            toast.error(friendlyErrorMessage(err));
+          })
+          .finally(() => {
+            busyRef.current = false;
+            setPending(false);
+          });
+      }
+    };
+
     const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
       primary: "bg-[#171717] text-white hover:bg-[#2a2a2a] shadow-[0_1px_2px_rgba(0,0,0,.25),inset_0_1px_0_rgba(255,255,255,.12)]",
       secondary: "bg-[#f1f1f2] text-[#171717] hover:bg-[#e7e7e9]",
@@ -31,6 +139,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         type={type}
+        disabled={Boolean(disabled || busy)}
+        aria-busy={busy || undefined}
+        onClick={handleClick}
         className={cn(
           "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-150 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#171717] disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
           variant === "danger" && size === "sm"
@@ -40,7 +151,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           className
         )}
         {...props}
-      />
+      >
+        {busy && !disabled && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />}
+        {children}
+      </button>
     );
   }
 );

@@ -4,7 +4,7 @@ import React, { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Select } from "@/components/ui/primitives";
+import { Form, Select } from "@/components/ui/primitives";
 import { AuthField, AuthSplitLayout, Spinner } from "@/components/auth/auth-split-layout";
 import { VERTICAL_PRESETS } from "@/lib/catalog/verticals";
 import type { VerticalKey } from "@/types/database";
@@ -110,7 +110,7 @@ function SignUpView() {
 
       {error ? <div className="as-alert">{error}</div> : null}
 
-      <form onSubmit={handleSubmit}>
+      <Form onSubmit={handleSubmit}>
         <AuthField
           label="Business Name"
           name="businessName"
@@ -205,7 +205,7 @@ function SignUpView() {
             <span className="as-btn__label">Log in</span>
           </Link>
         </div>
-      </form>
+      </Form>
     </AuthSplitLayout>
   );
 }

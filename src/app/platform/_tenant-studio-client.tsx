@@ -55,7 +55,7 @@ import {
   type TenantStatus,
   type TierKey,
 } from "@/lib/constants/saas";
-import {
+import { Form,
   Alert,
   Badge,
   Button,
@@ -1108,7 +1108,7 @@ export function TenantStudioClient({
         title="Set / Replace User Password"
         subtitle={pwTarget ? `${pwTarget.full_name} (${pwTarget.role})` : ""}
       >
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             if (!pwTarget) return;
@@ -1141,7 +1141,7 @@ export function TenantStudioClient({
             {savingPw && <Loader2 className="h-4 w-4 animate-spin" />}
             {savingPw ? "Saving..." : "Save Password & Revoke Sessions"}
           </Button>
-        </form>
+        </Form>
       </Dialog>
     </div>
   );

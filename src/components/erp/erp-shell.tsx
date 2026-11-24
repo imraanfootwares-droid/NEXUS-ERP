@@ -33,7 +33,7 @@ import {
 import { toast } from "sonner";
 import { setActiveBranchAction } from "@/actions/branch";
 import { exitImpersonationAction } from "@/actions/platform";
-import { Button, Dialog, Input, Label, Select } from "@/components/ui/primitives";
+import { Form, Button, Dialog, Input, Label, Select } from "@/components/ui/primitives";
 import { AccessBlockedScreen } from "@/components/access/access-blocked-screen";
 import { canAccess } from "@/lib/auth/access";
 import { fetchAccessStatus, readCachedBlock, writeCachedBlock } from "@/lib/offline/access-block";
@@ -484,11 +484,11 @@ export function ErpShell({
           <span>
             Support View: Inspecting <strong>{tenant.name}</strong> ({ctx.impersonation.mode.toUpperCase()} mode)
           </span>
-          <form action={exitImpersonationAction}>
+          <Form action={exitImpersonationAction}>
             <button type="submit" className="rounded-md bg-white/20 px-2.5 py-1 font-semibold hover:bg-white/30 cursor-pointer">
               Exit Support View
             </button>
-          </form>
+          </Form>
         </div>
       )}
 
@@ -736,7 +736,7 @@ export function ErpShell({
         title={ctx.user.must_change_password ? "Set Your New Password" : "Change Password"}
         subtitle={ctx.user.must_change_password ? "Replace your temporary password with a personal password." : ""}
       >
-        <form onSubmit={handlePasswordChange} className="space-y-3">
+        <Form onSubmit={handlePasswordChange} className="space-y-3">
           <div>
             <Label>Current Password</Label>
             <Input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} required />
@@ -753,7 +753,7 @@ export function ErpShell({
               {pwBusy ? "Updating..." : "Update Password"}
             </Button>
           </div>
-        </form>
+        </Form>
       </Dialog>
     </div>
   );

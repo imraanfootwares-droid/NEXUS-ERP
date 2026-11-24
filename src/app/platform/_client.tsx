@@ -47,7 +47,7 @@ import {
   type TenantStatus,
   type TierKey,
 } from "@/lib/constants/saas";
-import {
+import { Form,
   Alert,
   Badge,
   Button,
@@ -68,10 +68,16 @@ export function PlatformLogoutButton({ fullWidth = false }: { fullWidth?: boolea
   return (
     <button
       type="button"
-      onClick={async () => {
-        await fetch("/api/auth?scope=platform", { method: "DELETE" });
-        router.push("/login?portal=super");
-        router.refresh();
+      onClick={async (e) => {
+        const btn = e.currentTarget;
+        if (btn.disabled) return;
+        btn.disabled = true;
+        try {
+          await fetch("/api/auth?scope=platform", { method: "DELETE" });
+        } finally {
+          router.push("/login?portal=super");
+          router.refresh();
+        }
       }}
       className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-[#55555b] hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer ${
         fullWidth ? "w-full" : ""
@@ -241,7 +247,7 @@ export function PasswordResetQueueCard({
         title="Set New Password"
         subtitle={selected ? `User: ${selected.full_name ?? selected.identifier_submitted}` : ""}
       >
-        <form onSubmit={submit} className="space-y-3">
+        <Form onSubmit={submit} className="space-y-3">
           <div>
             <Label>New Temporary Password (min 8 chars)</Label>
             <Input
@@ -256,7 +262,7 @@ export function PasswordResetQueueCard({
           <Button type="submit" className="w-full" disabled={busy}>
             Save Password &amp; Revoke Old Sessions
           </Button>
-        </form>
+        </Form>
       </Dialog>
     </>
   );
@@ -340,7 +346,7 @@ export function ProvisionTenantModal() {
             <Button className="w-full" onClick={() => setOpen(false)}>Done</Button>
           </div>
         ) : (
-          <form onSubmit={submit} className="space-y-3">
+          <Form onSubmit={submit} className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Business Name *</Label>
@@ -413,7 +419,7 @@ export function ProvisionTenantModal() {
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Provisioning..." : "Create Tenant & Seed Workspace"}
             </Button>
-          </form>
+          </Form>
         )}
       </Dialog>
     </>
@@ -656,7 +662,7 @@ export function TenantDetailControls({
         title="Set / Replace User Password"
         subtitle={pwTarget ? `${pwTarget.full_name} (${pwTarget.role})` : ""}
       >
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             if (!pwTarget) return;
@@ -672,7 +678,7 @@ export function TenantDetailControls({
             <Input type="text" minLength={8} value={newPw} onChange={(e) => setNewPw(e.target.value)} required />
           </div>
           <Button type="submit" className="w-full">Save Password</Button>
-        </form>
+        </Form>
       </Dialog>
     </div>
   );
@@ -859,7 +865,7 @@ export function PlatformPermissionsAndHsnClient({
       )}
 
       <Dialog open={hsnOpen} onClose={() => setHsnOpen(false)} title="Add Master HSN / SAC Code">
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             await upsertMasterHsnAction({
@@ -904,7 +910,7 @@ export function PlatformPermissionsAndHsnClient({
             </div>
           )}
           <Button type="submit" className="w-full">Save Master HSN</Button>
-        </form>
+        </Form>
       </Dialog>
     </div>
   );

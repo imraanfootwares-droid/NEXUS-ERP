@@ -31,7 +31,7 @@ import {
 } from "@/actions/settings";
 import { GstinInput } from "@/components/ui/dynamic-fields";
 import { compressLogoImage, IMAGE_CACHE_CONTROL } from "@/lib/storage/image-compress";
-import {
+import { Form,
   Alert,
   Badge,
   Button,
@@ -311,7 +311,7 @@ export function SettingsHubClient({
               </div>
             </CardHeader>
             <CardContent>
-              <form
+              <Form
                 onSubmit={async (e) => {
                   e.preventDefault();
                   setSavingProfile(true);
@@ -361,7 +361,7 @@ export function SettingsHubClient({
                 <Button type="submit" disabled={savingProfile}>
                   {savingProfile ? "Saving..." : "Save My Profile"}
                 </Button>
-              </form>
+              </Form>
             </CardContent>
           </Card>
 
@@ -373,7 +373,7 @@ export function SettingsHubClient({
               </p>
             </CardHeader>
             <CardContent>
-              <form
+              <Form
                 onSubmit={async (e) => {
                   e.preventDefault();
                   if (newPw !== confirmPw) {
@@ -431,7 +431,7 @@ export function SettingsHubClient({
                   <KeyRound className="h-3.5 w-3.5" />
                   {savingPw ? "Updating..." : "Update Password"}
                 </Button>
-              </form>
+              </Form>
             </CardContent>
           </Card>
         </div>
@@ -716,7 +716,7 @@ export function SettingsHubClient({
                       )}
                     </div>
                   ))}</Paged>
-                  <form
+                  <Form
                     onSubmit={async (e) => {
                       e.preventDefault();
                       await upsertVariantAxisAction({
@@ -736,7 +736,7 @@ export function SettingsHubClient({
                     <Button type="submit" size="sm" disabled={!permissions["settings.catalog_schema"]}>
                       <Plus className="h-3.5 w-3.5" /> Add Option Group
                     </Button>
-                  </form>
+                  </Form>
                 </CardContent>
               </Card>
 
@@ -776,7 +776,7 @@ export function SettingsHubClient({
                       )}
                     </div>
                   ))}</Paged>
-                  <form
+                  <Form
                     onSubmit={async (e) => {
                       e.preventDefault();
                       await createCustomFieldAction({
@@ -812,7 +812,7 @@ export function SettingsHubClient({
                     <Button type="submit" size="sm" disabled={!permissions["settings.catalog_schema"]}>
                       <Plus className="h-3.5 w-3.5" /> Add Detail Field
                     </Button>
-                  </form>
+                  </Form>
                 </CardContent>
               </Card>
             </div>
@@ -902,7 +902,7 @@ export function SettingsHubClient({
                 </p>
               </CardHeader>
               <CardContent>
-                <form
+                <Form
                   onSubmit={async (e) => {
                     e.preventDefault();
                     const b = branches.find((x) => x.id === gstBranchId);
@@ -967,7 +967,7 @@ export function SettingsHubClient({
                       {savingGstBranch ? "Saving..." : "Save GST Number"}
                     </Button>
                   </div>
-                </form>
+                </Form>
               </CardContent>
             </Card>
           )}
@@ -1099,7 +1099,7 @@ export function SettingsHubClient({
           <Card>
             <CardHeader><h3 className="text-sm font-semibold">{editBranchId ? "Edit Branch" : "Add Branch"}</h3></CardHeader>
             <CardContent>
-              <form
+              <Form
                 onSubmit={async (e) => {
                   e.preventDefault();
                   try {
@@ -1155,7 +1155,7 @@ export function SettingsHubClient({
                     </Button>
                   )}
                 </div>
-              </form>
+              </Form>
             </CardContent>
           </Card>
         </div>
@@ -1243,7 +1243,7 @@ export function SettingsHubClient({
               <Card>
                 <CardHeader><h3 className="text-sm font-semibold">Add Staff Account</h3></CardHeader>
                 <CardContent>
-                  <form
+                  <Form
                     onSubmit={async (e) => {
                       e.preventDefault();
                       try {
@@ -1286,7 +1286,7 @@ export function SettingsHubClient({
                     <div><Label>Email (optional)</Label><Input type="email" value={sEmail} onChange={(e) => setSEmail(e.target.value)} /></div>
                     <div><Label>Temporary Password (min 8 chars)</Label><Input type="text" minLength={8} value={sPw} onChange={(e) => setSPw(e.target.value)} required /></div>
                     <Button type="submit">Add Staff Member</Button>
-                  </form>
+                  </Form>
                 </CardContent>
               </Card>
             )}
@@ -1483,7 +1483,7 @@ export function SettingsHubClient({
         onClose={() => setResetTarget(null)}
         title={`Reset Password — ${resetTarget?.name ?? ""}`}
       >
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             if (!resetTarget) return;
@@ -1504,7 +1504,7 @@ export function SettingsHubClient({
             <Input type="text" minLength={8} value={resetPw} onChange={(e) => setResetPw(e.target.value)} required />
           </div>
           <Button type="submit" className="w-full">Save Password</Button>
-        </form>
+        </Form>
       </Dialog>
 
       <Dialog
@@ -1513,7 +1513,7 @@ export function SettingsHubClient({
         title={`Edit Staff — ${editStaffTarget?.full_name ?? ""}`}
       >
         {editStaffTarget && (
-          <form
+          <Form
             onSubmit={async (e) => {
               e.preventDefault();
               await updateStaffAction({
@@ -1555,7 +1555,7 @@ export function SettingsHubClient({
               </Select>
             </div>
             <Button type="submit" className="w-full">Save Staff Changes</Button>
-          </form>
+          </Form>
         )}
       </Dialog>
     </div>

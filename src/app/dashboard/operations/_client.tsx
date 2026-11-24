@@ -13,7 +13,7 @@ import {
   receiveTransferAction,
   recordPurchaseAction,
 } from "@/actions/inventory";
-import {
+import { Form,
   Alert,
   Badge,
   Button,
@@ -641,7 +641,7 @@ export function OperationsHubClient({
                   </Link>
                 </p>
               ) : (
-                <form
+                <Form
                   onSubmit={async (e) => {
                     e.preventDefault();
                     const v = variants.find((x) => x.id === poVariantId);
@@ -791,7 +791,7 @@ export function OperationsHubClient({
                     <ShoppingBag className="h-4 w-4" />
                     {poSaving ? "Saving..." : "Save Purchase & Add Stock"}
                   </Button>
-                </form>
+                </Form>
               )}
             </CardContent>
           </Card>
@@ -809,7 +809,7 @@ export function OperationsHubClient({
         {receiveLoading ? (
           <InlineRowsSkeleton label="Loading shipment items" />
         ) : (
-          <form
+          <Form
             onSubmit={async (e) => {
               e.preventDefault();
               if (!receiveTarget) return;
@@ -861,7 +861,7 @@ export function OperationsHubClient({
             <Button type="submit" className="w-full">
               Confirm &amp; Add to Branch Stock
             </Button>
-          </form>
+          </Form>
         )}
       </Dialog>
     </div>

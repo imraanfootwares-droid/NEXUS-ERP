@@ -13,7 +13,7 @@ import {
   processReturnOrExchangeAction,
 } from "@/actions/billing";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
-import { Badge, Button, Dialog, Input, Label, Select } from "@/components/ui/primitives";
+import { Form, Badge, Button, Dialog, Input, Label, Select } from "@/components/ui/primitives";
 
 interface InvoiceListRow {
   id: string;
@@ -289,7 +289,7 @@ export function BillingLedgerClient({
         onClose={() => setCancelTarget(null)}
         title={`Cancel ${cancelTarget?.invoice_number || "Draft"}`}
       >
-        <form
+        <Form
           onSubmit={async (e) => {
             e.preventDefault();
             if (!cancelTarget) return;
@@ -310,7 +310,7 @@ export function BillingLedgerClient({
             <Input value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} required />
           </div>
           <Button type="submit" variant="danger" className="w-full">Confirm Void &amp; Restock</Button>
-        </form>
+        </Form>
       </Dialog>
 
       <Dialog
@@ -322,7 +322,7 @@ export function BillingLedgerClient({
         {returnLoading ? (
           <InlineRowsSkeleton label="Loading invoice line items" />
         ) : (
-          <form
+          <Form
             onSubmit={async (e) => {
               e.preventDefault();
               if (!returnTarget || selectedReturnLines.length === 0) {
@@ -449,7 +449,7 @@ export function BillingLedgerClient({
             <Button type="submit" className="w-full" disabled={selectedReturnLines.length === 0}>
               {exchangeVariantId ? "Confirm 1-Click Size Exchange" : "Issue Credit Note & Restock"}
             </Button>
-          </form>
+          </Form>
         )}
       </Dialog>
     </div>

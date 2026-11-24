@@ -6,7 +6,7 @@ import { Check, Copy, ExternalLink, Mail, MessageCircle, Phone } from "lucide-re
 import { toast } from "sonner";
 import { setTenantEnquiryStatusAction, updateEnquirySettingsAction } from "@/actions/enquiries";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
-import { Badge, Button, Card, CardContent, CardHeader, Label, Select } from "@/components/ui/primitives";
+import { Form, Badge, Button, Card, CardContent, CardHeader, Label, Select } from "@/components/ui/primitives";
 import { Segmented, StatTray } from "@/components/ui/spark";
 import { WhatsAppPhoneInput } from "@/components/ui/whatsapp-phone-input";
 import type { EnquiryChannel, TenantEnquiryRow, TenantRow } from "@/types/database";
@@ -250,7 +250,7 @@ export function DashboardEnquiriesClient({
             <h3 className="text-sm font-semibold">Enquiry Delivery &amp; WhatsApp Routing</h3>
           </CardHeader>
           <CardContent>
-            <form onSubmit={saveSettings} className="grid grid-cols-1 items-end gap-3 sm:grid-cols-3">
+            <Form onSubmit={saveSettings} className="grid grid-cols-1 items-end gap-3 sm:grid-cols-3">
               <div>
                 <Label>Inquiry WhatsApp Number</Label>
                 <WhatsAppPhoneInput
@@ -275,7 +275,7 @@ export function DashboardEnquiriesClient({
                   {savingSettings ? "Saving..." : "Save Enquiry Settings"}
                 </Button>
               </div>
-            </form>
+            </Form>
           </CardContent>
         </Card>
       )}

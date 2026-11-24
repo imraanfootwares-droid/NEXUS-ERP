@@ -5,6 +5,7 @@ import { assertAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { buildVariantSku } from "@/lib/catalog/verticals";
 import { withTenantTx } from "@/lib/db";
+import { pgFriendlyMessage } from "@/lib/db/errors";
 import type { PaymentMode, ProductionStage } from "@/types/database";
 
 export async function createCustomerAction(input: {
@@ -128,6 +129,19 @@ export async function updateProductAction(input: {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "stock.manage", { isMutation: true });
 
+  const modelCode = input.modelCode?.trim().toUpperCase() ?? "";
+  const name = input.name?.trim() ?? "";
+  if (!modelCode) return { ok: false as const, error: "Model / Article Code is required." };
+  if (!name) return { ok: false as const, error: "Product name is required." };
+  const gst = Number(input.gstRate);
+  if (!Number.isFinite(gst) || gst < 0 || gst > 40) return { ok: false as const, error: "GST % must be between 0 and 40." };
+  for (const v of [input.mrp, input.sellingPrice, input.wholesalePrice, input.costPrice]) {
+    if (v !== undefined && (!Number.isFinite(Number(v)) || Number(v) < 0)) {
+      return { ok: false as const, error: "Prices must be valid numbers and cannot be negative." };
+    }
+  }
+
+  try {
   await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
@@ -136,13 +150,13 @@ export async function updateProductAction(input: {
          SET model_code = $1, name = $2, category = $3, brand = $4, uom = $5, hsn_code = $6, gst_rate = $7
          WHERE id = $8 AND tenant_id = $9`,
         [
-          input.modelCode.trim().toUpperCase(),
-          input.name.trim(),
+          modelCode,
+          name,
           input.category?.trim() || null,
           input.brand?.trim() || null,
           input.uom,
-          input.hsnCode || null,
-          input.gstRate,
+          input.hsnCode?.trim() || null,
+          gst,
           input.productId,
           ctx.tenant.id,
         ]
@@ -172,9 +186,15 @@ export async function updateProductAction(input: {
       }
     }
   );
+  } catch (err) {
+    const msg = pgFriendlyMessage(err);
+    if (msg) return { ok: false as const, error: msg };
+    throw err;
+  }
   revalidatePath("/dashboard/stock");
   revalidatePath("/dashboard/billing/new");
   revalidatePath("/dashboard/storefront");
+  return { ok: true as const };
 }
 
 export async function deleteProductAction(productId: string) {
@@ -315,30 +335,64 @@ export async function createProductWithVariantsAction(input: {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "stock.manage", { isMutation: true });
 
-  const productId = await withTenantTx(
+  const modelCode = input.modelCode?.trim().toUpperCase() ?? "";
+  if (!modelCode) return { ok: false as const, error: "Model / Article Code is required." };
+  if (!input.name?.trim()) return { ok: false as const, error: "Product name is required." };
+  const gst = Number(input.gstRate);
+  if (!Number.isFinite(gst) || gst < 0 || gst > 40) return { ok: false as const, error: "GST % must be between 0 and 40." };
+  for (const v of [input.costPrice, input.mrp, input.sellingPrice, input.wholesalePrice, input.lowStockThreshold]) {
+    if (!Number.isFinite(Number(v)) || Number(v) < 0) {
+      return { ok: false as const, error: "Prices must be valid numbers and cannot be negative." };
+    }
+  }
+  const openingQty = Number(input.openingStock?.quantity ?? 0);
+  if (input.openingStock && (!Number.isFinite(openingQty) || openingQty < 0)) {
+    return { ok: false as const, error: "Opening stock must be zero or more." };
+  }
+  if (input.openingStock?.branchId && openingQty > 0) {
+    assertAccess(ctx, "stock.manage", { branchId: input.openingStock.branchId, isMutation: true });
+  }
+
+  let productId: string;
+  try {
+  productId = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
+      const dup = await client.query(
+        "SELECT 1 FROM public.products WHERE tenant_id = $1 AND model_code = $2 LIMIT 1",
+        [ctx.tenant.id, modelCode]
+      );
+      if (dup.rowCount) {
+        throw Object.assign(new Error("duplicate model code"), { code: "23505", constraint: "products_tenant_id_model_code_key" });
+      }
       const pRes = await client.query<{ id: string }>(
         `INSERT INTO public.products (tenant_id, model_code, name, category, brand, uom, hsn_code, gst_rate, custom_fields)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
         [
           ctx.tenant.id,
-          input.modelCode.trim().toUpperCase(),
+          modelCode,
           input.name.trim(),
           input.category?.trim() || null,
           input.brand?.trim() || null,
           input.uom,
-          input.hsnCode || null,
-          input.gstRate,
-          JSON.stringify(input.customFields),
+          input.hsnCode?.trim() || null,
+          gst,
+          JSON.stringify(input.customFields ?? {}),
         ]
       );
       const pid = pRes.rows[0].id;
       const combos = input.combinations.length > 0 ? input.combinations : [{}];
 
+      const usedSkus = new Set<string>();
       for (let i = 0; i < combos.length; i++) {
         const attrs = combos[i];
-        const sku = buildVariantSku(input.modelCode, attrs) + (combos.length > 1 && Object.keys(attrs).length === 0 ? `-${i + 1}` : "");
+        let sku =
+          buildVariantSku(input.modelCode, attrs) +
+          (combos.length > 1 && Object.keys(attrs).length === 0 ? `-${i + 1}` : "");
+        if (usedSkus.has(sku)) {
+          sku = `${sku}-${i + 1}`;
+        }
+        usedSkus.add(sku);
         const vRes = await client.query<{ id: string }>(
           `INSERT INTO public.product_variants
            (tenant_id, product_id, sku, barcode, attributes, cost_price, avg_cost, mrp, selling_price, wholesale_price, low_stock_threshold)
@@ -367,7 +421,7 @@ export async function createProductWithVariantsAction(input: {
           await client.query(
             `INSERT INTO public.branch_stock (tenant_id, branch_id, variant_id, quantity)
              VALUES ($1, $2, $3, $4)
-             ON CONFLICT (tenant_id, branch_id, variant_id)
+             ON CONFLICT (branch_id, variant_id)
              DO UPDATE SET quantity = public.branch_stock.quantity + EXCLUDED.quantity, updated_at = now()`,
             [ctx.tenant.id, input.openingStock.branchId, variantId, qty]
           );
@@ -389,10 +443,15 @@ export async function createProductWithVariantsAction(input: {
       return pid;
     }
   );
+  } catch (err) {
+    const msg = pgFriendlyMessage(err);
+    if (msg) return { ok: false as const, error: msg };
+    throw err;
+  }
   revalidatePath("/dashboard/stock");
   revalidatePath("/dashboard/billing/new");
   revalidatePath("/dashboard/storefront");
-  return productId;
+  return { ok: true as const, productId };
 }
 
 export async function adjustStockAction(input: {

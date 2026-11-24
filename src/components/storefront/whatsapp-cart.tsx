@@ -14,7 +14,7 @@ import {
   ShoppingBag,
   Trash2,
 } from "lucide-react";
-import { Badge, Button, Dialog, Input, Label, Select } from "@/components/ui/primitives";
+import { Form, Badge, Button, Dialog, Input, Label, Select } from "@/components/ui/primitives";
 import type { EnquiryChannel } from "@/types/database";
 
 export interface StorefrontProductItem {
@@ -673,7 +673,7 @@ export function StorefrontClient({
         ) : cart.length === 0 ? (
           <p className="py-6 text-center text-xs text-slate-500">Your inquiry cart is empty.</p>
         ) : (
-          <form onSubmit={handleSubmitEnquiry} className="space-y-3">
+          <Form onSubmit={handleSubmitEnquiry} className="space-y-3">
             {cart.map((c, idx) => (
               <div
                 key={c.variantId}
@@ -770,7 +770,7 @@ export function StorefrontClient({
                 Store WhatsApp number and enquiry inbox are not configured yet.
               </p>
             )}
-          </form>
+          </Form>
         )}
       </Dialog>
     </div>
