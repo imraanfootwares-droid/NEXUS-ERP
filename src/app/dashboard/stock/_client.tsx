@@ -51,6 +51,8 @@ interface VariantRowData {
   product_name: string;
   category: string | null;
   brand: string | null;
+  supplier_id?: string | null;
+  supplier_name?: string | null;
   hsn_code: string | null;
   gst_rate: string;
   is_active: boolean;
@@ -75,6 +77,8 @@ interface ProductGroup {
   product_name: string;
   category: string | null;
   brand: string | null;
+  supplier_id: string | null;
+  supplier_name: string | null;
   hsn_code: string | null;
   gst_rate: number;
   is_active: boolean;
@@ -105,6 +109,7 @@ export function StockHubClient({
   canAdjust,
   canBulkImport = false,
   ledgerEnabled,
+  suppliers = [],
 }: {
   tenant: TenantRow;
   branches: BranchRow[];
@@ -131,6 +136,7 @@ export function StockHubClient({
   canBulkImport?: boolean;
   ledgerEnabled: boolean;
   initialBranch?: string;
+  suppliers?: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
   const [section, setSection] = useState<"catalog" | "alerts" | "labels" | "ledger">("catalog");
@@ -147,6 +153,7 @@ export function StockHubClient({
   const [prodName, setProdName] = useState("");
   const [category, setCategory] = useState("");
   const [brand, setBrand] = useState("");
+  const [supplierId, setSupplierId] = useState("");
   const [uom, setUom] = useState(uoms[0] || "Pair");
   const [hsnCode, setHsnCode] = useState("6403");
   const [gstRate, setGstRate] = useState(0);
@@ -202,6 +209,7 @@ export function StockHubClient({
   const [editName, setEditName] = useState("");
   const [editCat, setEditCat] = useState("");
   const [editBrand, setEditBrand] = useState("");
+  const [editSupplierId, setEditSupplierId] = useState("");
   const [editUom, setEditUom] = useState("Pair");
   const [editHsn, setEditHsn] = useState("");
   const [editGst, setEditGst] = useState(0);
@@ -229,6 +237,7 @@ export function StockHubClient({
     setEditName(g.product_name);
     setEditCat(g.category ?? "");
     setEditBrand(g.brand ?? "");
+    setEditSupplierId(g.supplier_id ?? "");
     setEditUom(g.uom);
     setEditHsn(g.hsn_code ?? "");
     setEditGst(g.gst_rate);
@@ -286,6 +295,8 @@ export function StockHubClient({
         product_name: first.product_name,
         category: first.category,
         brand: first.brand,
+        supplier_id: first.supplier_id ?? null,
+        supplier_name: first.supplier_name ?? null,
         hsn_code: first.hsn_code,
         gst_rate: Number(first.gst_rate ?? 0),
         is_active: first.is_active,
@@ -318,6 +329,7 @@ export function StockHubClient({
         g.product_name.toLowerCase().includes(q) ||
         g.model_code.toLowerCase().includes(q) ||
         (g.category ?? "").toLowerCase().includes(q) ||
+        (g.supplier_name ?? "").toLowerCase().includes(q) ||
         g.items.some((i) => i.sku.toLowerCase().includes(q))
       );
     });
@@ -723,6 +735,11 @@ export function StockHubClient({
                       {g.brand && (
                         <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
                           {g.brand}
+                        </span>
+                      )}
+                      {g.supplier_name && (
+                        <span className="rounded-md bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700" title="Bought from">
+                          From: {g.supplier_name}
                         </span>
                       )}
                     </div>
@@ -1288,6 +1305,7 @@ export function StockHubClient({
               wholesalePrice,
               lowStockThreshold: 5,
               combinations: combos,
+              supplierId: supplierId || null,
               openingStock:
                 finalOpeningPairs > 0 && openingBranchId
                   ? { branchId: openingBranchId, quantity: finalOpeningPairs, note: openingNote }
@@ -1307,7 +1325,7 @@ export function StockHubClient({
                 finalOpeningPairs > 0 ? ` with ${finalOpeningPairs.toLocaleString("en-IN")} ${uom} in stock` : ""
               }.`
             );
-            setModelCode(""); setProdName(""); setCategory(""); setBrand("");
+            setModelCode(""); setProdName(""); setCategory(""); setBrand(""); setSupplierId("");
             setOpeningQty(""); setSelectedAxisVals({}); setCfValues({});
             setCustomCategoryMode(false); setShowAdvancedProd(false);
             setAddOpen(false);
@@ -1398,6 +1416,24 @@ export function StockHubClient({
                 </Select>
               )}
             </div>
+          </div>
+          {/* Bought from (optional) */}
+          <div>
+            <Label>
+              Bought From (Supplier / Company){" "}
+              <span className="font-normal text-slate-500">— Optional</span>
+            </Label>
+            <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} aria-label="Supplier or company">
+              <option value="">Not set / Made by us</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </Select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              {suppliers.length === 0
+                ? "No suppliers yet. Add them in Customers → Suppliers, then pick here."
+                : "Pick the company you buy this product from. You can leave it empty."}
+            </p>
           </div>
 
           {/* 2. Stock Quantity (Front and Center — Pairs or Cartons!) */}
@@ -1807,6 +1843,7 @@ export function StockHubClient({
                 name: editName,
                 category: editCat,
                 brand: editBrand,
+                supplierId: editSupplierId || null,
                 uom: editUom,
                 hsnCode: editHsn,
                 gstRate: editGst,
@@ -1843,9 +1880,20 @@ export function StockHubClient({
             </div>
             <div><Label>GST %</Label><Input type="number" value={editGst} onChange={(e) => setEditGst(Number(e.target.value))} /></div>
           </div>
-          <div>
-            <Label>HSN Code</Label>
-            <Input value={editHsn} onChange={(e) => setEditHsn(e.target.value)} />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div>
+              <Label>HSN Code</Label>
+              <Input value={editHsn} onChange={(e) => setEditHsn(e.target.value)} />
+            </div>
+            <div>
+              <Label>Bought From <span className="font-normal text-slate-500">— Optional</span></Label>
+              <Select value={editSupplierId} onChange={(e) => setEditSupplierId(e.target.value)} aria-label="Supplier or company">
+                <option value="">Not set / Made by us</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </Select>
+            </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div><Label>Cost ₹</Label><Input type="number" value={editCost} onChange={(e) => setEditCost(Number(e.target.value))} /></div>

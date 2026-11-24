@@ -125,6 +125,8 @@ export async function updateProductAction(input: {
   sellingPrice?: number;
   wholesalePrice?: number;
   costPrice?: number;
+  /** undefined = leave unchanged, null/"" = no supplier */
+  supplierId?: string | null;
 }) {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "stock.manage", { isMutation: true });
@@ -161,6 +163,14 @@ export async function updateProductAction(input: {
           ctx.tenant.id,
         ]
       );
+      if (input.supplierId !== undefined) {
+        await client.query(
+          `UPDATE public.products
+           SET supplier_id = (SELECT s.id FROM public.suppliers s WHERE s.id = $1::uuid AND s.tenant_id = $3)
+           WHERE id = $2 AND tenant_id = $3`,
+          [input.supplierId || null, input.productId, ctx.tenant.id]
+        );
+      }
       if (
         input.sellingPrice !== undefined ||
         input.wholesalePrice !== undefined ||
@@ -326,6 +336,8 @@ export async function createProductWithVariantsAction(input: {
   wholesalePrice: number;
   lowStockThreshold: number;
   combinations: Array<Record<string, string>>;
+  /** Optional: supplier / company this product is bought from. */
+  supplierId?: string | null;
   openingStock?: {
     branchId: string;
     quantity: number;
@@ -366,8 +378,10 @@ export async function createProductWithVariantsAction(input: {
         throw Object.assign(new Error("duplicate model code"), { code: "23505", constraint: "products_tenant_id_model_code_key" });
       }
       const pRes = await client.query<{ id: string }>(
-        `INSERT INTO public.products (tenant_id, model_code, name, category, brand, uom, hsn_code, gst_rate, custom_fields)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+        `INSERT INTO public.products (tenant_id, model_code, name, category, brand, uom, hsn_code, gst_rate, custom_fields, supplier_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+                 (SELECT s.id FROM public.suppliers s WHERE s.id = $10::uuid AND s.tenant_id = $1))
+         RETURNING id`,
         [
           ctx.tenant.id,
           modelCode,
@@ -378,6 +392,7 @@ export async function createProductWithVariantsAction(input: {
           input.hsnCode?.trim() || null,
           gst,
           JSON.stringify(input.customFields ?? {}),
+          input.supplierId || null,
         ]
       );
       const pid = pRes.rows[0].id;

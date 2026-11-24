@@ -21,7 +21,7 @@ export default async function StockPage() {
   const data = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
-      const [axes, fields, hsn, uoms, variants, ledger] = await Promise.all([
+      const [axes, fields, hsn, uoms, variants, ledger, suppliers] = await Promise.all([
         client.query<VariantAxisRow>(
           "SELECT * FROM public.variant_axis_definitions WHERE tenant_id = $1 ORDER BY sort_order",
           [ctx.tenant!.id]
@@ -45,6 +45,8 @@ export default async function StockPage() {
           product_name: string;
           category: string | null;
           brand: string | null;
+          supplier_id: string | null;
+          supplier_name: string | null;
           hsn_code: string | null;
           gst_rate: string;
           is_active: boolean;
@@ -63,7 +65,7 @@ export default async function StockPage() {
           quantity: string | null;
         }>(
           `SELECT pv.id AS variant_id, p.id AS product_id, p.model_code, p.name AS product_name,
-                  p.category, p.brand, p.hsn_code, p.gst_rate::text, p.is_active,
+                  p.category, p.brand, p.supplier_id, sup.name AS supplier_name, p.hsn_code, p.gst_rate::text, p.is_active,
                   p.primary_image_key, p.uom,
                   pv.sku, pv.barcode, pv.attributes, pv.cost_price::text, pv.mrp::text,
                   pv.selling_price::text, pv.wholesale_price::text,
@@ -71,6 +73,7 @@ export default async function StockPage() {
                   COALESCE(bs.quantity, 0)::text AS quantity
            FROM public.product_variants pv
            JOIN public.products p ON p.id = pv.product_id
+           LEFT JOIN public.suppliers sup ON sup.id = p.supplier_id
            LEFT JOIN public.branch_stock bs ON bs.variant_id = pv.id AND bs.branch_id = ANY($2::uuid[])
            LEFT JOIN public.branches b ON b.id = bs.branch_id
            WHERE pv.tenant_id = $1
@@ -105,6 +108,10 @@ export default async function StockPage() {
               [ctx.tenant!.id, scope.ids]
             )
           : Promise.resolve({ rows: [] }),
+        client.query<{ id: string; name: string }>(
+          "SELECT id, name FROM public.suppliers WHERE tenant_id = $1 ORDER BY name LIMIT 500",
+          [ctx.tenant!.id]
+        ),
       ]);
       return {
         axes: axes.rows,
@@ -116,6 +123,7 @@ export default async function StockPage() {
           thumb_url: v.primary_image_key ? getPublicAssetUrl(deriveThumbKey(v.primary_image_key)) : null,
         })),
         ledger: ledger.rows,
+        suppliers: suppliers.rows,
       };
     }
   );
@@ -132,6 +140,7 @@ export default async function StockPage() {
       uoms={data.uoms}
       variants={data.variants}
       ledger={data.ledger}
+      suppliers={data.suppliers}
       canManage={canAccess(ctx, "stock.manage").allowed}
       canAdjust={canAccess(ctx, "stock.record_incoming").allowed}
       canBulkImport={canAccess(ctx, "stock.bulk_import").allowed}

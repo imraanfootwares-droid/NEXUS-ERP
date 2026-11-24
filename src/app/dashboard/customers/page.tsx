@@ -47,6 +47,9 @@ export default async function CustomersPage({
           ? client.query<SupplierLedgerRow>(
               `SELECT s.id, s.name, s.phone, s.gstin, s.state_code, s.address, s.material_type,
                       COALESCE(s.supplied_products, '{}'::text[]) AS supplied_products,
+                      COALESCE((SELECT array_agg(p.name || ' (' || p.model_code || ')' ORDER BY p.name)
+                                FROM public.products p
+                                WHERE p.supplier_id = s.id AND p.tenant_id = s.tenant_id AND p.is_active = true), '{}'::text[]) AS linked_products,
                       s.current_due::text,
                       COALESCE((SELECT SUM(po.total_amount) FROM public.purchase_orders po WHERE po.supplier_id = s.id AND po.tenant_id = s.tenant_id), 0)::text AS total_purchased,
                       COALESCE((SELECT COUNT(*)::int FROM public.purchase_orders po WHERE po.supplier_id = s.id AND po.tenant_id = s.tenant_id), 0) AS bill_count

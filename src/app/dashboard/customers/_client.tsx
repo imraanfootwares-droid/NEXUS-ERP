@@ -39,6 +39,8 @@ export interface SupplierLedgerRow {
   address?: string | null;
   material_type: string | null;
   supplied_products?: string[];
+  /** Products in Stock whose Supplier is set to this supplier. */
+  linked_products?: string[];
   current_due: string;
   total_purchased: string;
   bill_count: number;
@@ -371,7 +373,9 @@ export function CustomersClient({
       mobilePrimary: true,
       sortValue: (s) => s.name,
       render: (s) => {
-        const products = Array.isArray(s.supplied_products) ? s.supplied_products : [];
+        const linked = Array.isArray(s.linked_products) ? s.linked_products : [];
+        const typed = Array.isArray(s.supplied_products) ? s.supplied_products : [];
+        const products = Array.from(new Set([...linked, ...typed]));
         return (
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-1.5">
