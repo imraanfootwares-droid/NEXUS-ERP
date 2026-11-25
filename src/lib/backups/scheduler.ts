@@ -73,7 +73,14 @@ export async function runBackupCycle(options: { force?: boolean } = {}): Promise
     const cursor = (await readSetting<{ last_id?: string }>("backup_cursor"))?.last_id ?? ZERO_ID;
     const resuming = cursor !== ZERO_ID;
     const tenants = await withPlatformTx(async (client) => {
-      const res = await client.query<{ id: string }>("SELECT id FROM public.tenants WHERE id > $1 ORDER BY id ASC", [cursor]);
+      const res = await client.query<{ id: string }>(
+        `SELECT id FROM public.tenants
+         WHERE id > $1
+           AND status = 'active'
+           AND public.is_feature_enabled(id, 'daily_backups') = true
+         ORDER BY id ASC`,
+        [cursor]
+      );
       return res.rows;
     });
 

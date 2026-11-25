@@ -156,7 +156,7 @@ export async function GET(
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${tenant.slug}-catalogue.pdf"`,
-      "Cache-Control": "public, max-age=120",
+      "Cache-Control": "public, s-maxage=120, max-age=120, stale-while-revalidate=300",
     },
   });
 }

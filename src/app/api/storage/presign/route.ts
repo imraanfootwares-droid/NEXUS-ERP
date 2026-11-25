@@ -70,6 +70,35 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Enforce per-tenant R2 product photo cap (default 200, configurable by Platform Super Admin)
+  const maxPhotos = Math.max(10, Number(ctx.tenant.max_product_photos ?? 200));
+  if (purpose === "product_full") {
+    const currentPhotos = await withTenantTx(
+      { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
+      async (client) => {
+        const res = await client.query<{ cnt: string }>(
+          `SELECT COUNT(DISTINCT k)::text AS cnt
+           FROM (
+             SELECT primary_image_key AS k FROM public.products WHERE tenant_id = $1 AND primary_image_key IS NOT NULL
+             UNION ALL
+             SELECT unnest(gallery_keys) AS k FROM public.products WHERE tenant_id = $1
+           ) imgs
+           WHERE k IS NOT NULL AND k <> ''`,
+          [ctx.tenant!.id]
+        );
+        return Number(res.rows[0]?.cnt ?? 0);
+      }
+    );
+    if (currentPhotos >= maxPhotos) {
+      return NextResponse.json(
+        {
+          error: `Product photo limit reached (${currentPhotos}/${maxPhotos} photos). Delete old photos or ask your administrator to increase your photo limit.`,
+        },
+        { status: 403 }
+      );
+    }
+  }
+
   const key =
     purpose === "brand_logo"
       ? `public/${ctx.tenant.id}/branding/logo-${hash}.webp`

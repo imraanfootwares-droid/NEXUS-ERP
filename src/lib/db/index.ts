@@ -52,6 +52,29 @@ export interface DbContext {
 }
 
 /**
+ * Wraps a pg PoolClient so concurrent `Promise.all([client.query(...), ...])`
+ * calls execute one at a time on the single connection, avoiding pg's
+ * concurrent-query deprecation warning (and pg@9 error).
+ */
+function serializeClientQueries(client: PoolClient): PoolClient {
+  let tail: Promise<unknown> = Promise.resolve();
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      if (prop === "query") {
+        return (...args: Parameters<PoolClient["query"]>) => {
+          const run = () => (target.query as (...a: unknown[]) => Promise<unknown>)(...args);
+          const next = tail.then(run, run);
+          tail = next.catch(() => undefined);
+          return next;
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+/**
  * Execute a callback inside a PostgreSQL transaction with transaction-local
  * RLS GUC context (`set_config(..., true)` — safe with Neon PgBouncer pooling).
  */
@@ -63,7 +86,8 @@ export async function withTenantTx<T>(
   if (await shouldUseMockDb()) {
     return fn(createMockClient());
   }
-  const client = await getPool().connect();
+  const rawClient = await getPool().connect();
+  const client = serializeClientQueries(rawClient);
   // A snapshot gives exports one consistent view without blocking people who are billing.
   await client.query(options?.snapshot ? "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY" : "BEGIN");
   await client.query(
@@ -78,7 +102,7 @@ export async function withTenantTx<T>(
     await client.query("ROLLBACK");
     throw err;
   } finally {
-    client.release();
+    rawClient.release();
   }
 }
 

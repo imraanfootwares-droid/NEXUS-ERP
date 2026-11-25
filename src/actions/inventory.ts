@@ -374,9 +374,21 @@ export async function createProductWithVariantsAction(input: {
     assertAccess(ctx, "stock.manage", { branchId: input.openingStock.branchId, isMutation: true });
   }
 
-  let productId: string;
+  let created: {
+    productId: string;
+    variants: Array<{
+      variant_id: string;
+      product_id: string;
+      product_name: string;
+      model_code: string;
+      supplier_id: string | null;
+      attributes: Record<string, string>;
+      cost_price: number;
+      gst_rate: number;
+    }>;
+  };
   try {
-  productId = await withTenantTx(
+  created = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
       const dup = await client.query(
@@ -406,6 +418,16 @@ export async function createProductWithVariantsAction(input: {
       );
       const pid = pRes.rows[0].id;
       const combos = input.combinations.length > 0 ? input.combinations : [{}];
+      const createdVariants: Array<{
+        variant_id: string;
+        product_id: string;
+        product_name: string;
+        model_code: string;
+        supplier_id: string | null;
+        attributes: Record<string, string>;
+        cost_price: number;
+        gst_rate: number;
+      }> = [];
 
       const usedSkus = new Set<string>();
       for (let i = 0; i < combos.length; i++) {
@@ -435,6 +457,18 @@ export async function createProductWithVariantsAction(input: {
           ]
         );
         const variantId = vRes.rows[0]?.id;
+        if (variantId) {
+          createdVariants.push({
+            variant_id: variantId,
+            product_id: pid,
+            product_name: input.name.trim(),
+            model_code: modelCode,
+            supplier_id: input.supplierId || null,
+            attributes: attrs,
+            cost_price: Number(input.costPrice || 0),
+            gst_rate: gst,
+          });
+        }
         if (
           variantId &&
           input.openingStock &&
@@ -464,7 +498,7 @@ export async function createProductWithVariantsAction(input: {
           );
         }
       }
-      return pid;
+      return { productId: pid, variants: createdVariants };
     }
   );
   } catch (err) {
@@ -475,7 +509,8 @@ export async function createProductWithVariantsAction(input: {
   revalidatePath("/dashboard/stock");
   revalidatePath("/dashboard/billing/new");
   revalidatePath("/dashboard/storefront");
-  return { ok: true as const, productId };
+  revalidatePath("/dashboard/customers");
+  return { ok: true as const, productId: created.productId, variants: created.variants };
 }
 
 export async function adjustStockAction(input: {

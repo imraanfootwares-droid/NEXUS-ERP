@@ -7,7 +7,9 @@ import {
   AlertTriangle,
   Banknote,
   Camera,
+  Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   CreditCard,
   Eye,
@@ -21,11 +23,19 @@ import {
   Settings,
   ShoppingCart,
   Trash2,
+  User,
+  Users,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { createOrFinalizeInvoiceAction } from "@/actions/billing";
+import { createOrFinalizeInvoiceAction, searchCustomersForBillingAction } from "@/actions/billing";
+import { updateFinalizedInvoiceAction } from "@/actions/bill-revisions";
 import { InvoiceRenderer } from "@/components/billing/invoice-renderer";
+import {
+  buildDefaultConfigForCategory,
+  resolveSellerProfile,
+  selectTemplateForBill,
+} from "@/lib/billing/seller-profile";
 import { PosProductCard, QtyStepper, money } from "@/components/billing/pos-parts";
 import { normalizeGstin, normalizePhone } from "@/lib/billing/walk-in-identity";
 import { readCachedBlock } from "@/lib/offline/access-block";
@@ -101,9 +111,11 @@ export function PosTerminal({
   branchLocked = false,
   initialVariants,
   initialCustomers,
+  totalCustomerCount,
   initialHsn,
   ratioPresets = [],
   defaultTemplate = null,
+  billTemplates = [],
   logoUrl = null,
   stockEnabled,
   crmEnabled,
@@ -118,9 +130,11 @@ export function PosTerminal({
   branchLocked?: boolean;
   initialVariants: PosVariantItem[];
   initialCustomers: CustomerRow[];
+  totalCustomerCount?: number;
   initialHsn: HsnCodeRow[];
   ratioPresets?: RatioPreset[];
   defaultTemplate?: BillTemplateRow | null;
+  billTemplates?: BillTemplateRow[];
   logoUrl?: string | null;
   stockEnabled: boolean;
   crmEnabled: boolean;
@@ -128,11 +142,26 @@ export function PosTerminal({
   canEditDraft: boolean;
   draftToEdit?: {
     id: string;
+    invoice_number?: string | null;
+    is_finalized?: boolean;
     branch_id: string;
     customer_id: string | null;
-    customer_snapshot?: { name?: string | null; phone?: string | null; gstin?: string | null; state_code?: string | null; address?: string | null } | null;
+    customer_snapshot?: {
+      name?: string | null;
+      phone?: string | null;
+      gstin?: string | null;
+      state_code?: string | null;
+      address?: string | null;
+      ship_to_name?: string | null;
+      ship_to_address?: string | null;
+    } | null;
     invoice_type: InvoiceType;
     tax_mode: TaxMode;
+    discount_type?: "percent" | "flat" | null;
+    discount_value?: number;
+    credit_redeemed?: number;
+    eway_bill_no?: string;
+    payments?: Array<{ mode: string; amount: number }>;
     items: CartLine[];
   } | null;
 }) {
@@ -145,30 +174,41 @@ export function PosTerminal({
   const [hsnList, setHsnList] = useState<HsnCodeRow[]>(initialHsn);
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartLine[]>(draftToEdit?.items ?? []);
+  const isEditingFinalized = Boolean(draftToEdit?.is_finalized);
   const [customerId, setCustomerId] = useState<string>(draftToEdit?.customer_id ?? "");
-  const draftWalkIn = draftToEdit && !draftToEdit.customer_id ? draftToEdit.customer_snapshot : null;
-  const [walkInName, setWalkInName] = useState(draftWalkIn?.name || "Walk-In Customer");
-  const [walkInPhone, setWalkInPhone] = useState(draftWalkIn?.phone || "");
-  const [walkInGstin, setWalkInGstin] = useState(draftWalkIn?.gstin || "");
-  const [walkInState, setWalkInState] = useState(draftWalkIn?.state_code || branches[0]?.state_code || "33");
-  const [walkInAddress, setWalkInAddress] = useState(draftWalkIn?.address || "");
+  const draftSnap = draftToEdit?.customer_snapshot ?? null;
+  const [walkInName, setWalkInName] = useState(draftSnap?.name || "Walk-In Customer");
+  const [walkInPhone, setWalkInPhone] = useState(draftSnap?.phone || "");
+  const [walkInGstin, setWalkInGstin] = useState(draftSnap?.gstin || "");
+  const [walkInState, setWalkInState] = useState(draftSnap?.state_code || branches[0]?.state_code || "33");
+  const [walkInAddress, setWalkInAddress] = useState(draftSnap?.address || "");
+  const [shipToDiff, setShipToDiff] = useState(Boolean(draftSnap?.ship_to_address));
+  const [shipToName, setShipToName] = useState(draftSnap?.ship_to_name || "");
+  const [shipToAddress, setShipToAddress] = useState(draftSnap?.ship_to_address || "");
 
   const [invoiceType, setInvoiceType] = useState<InvoiceType>(draftToEdit?.invoice_type ?? "sale");
   const [taxMode, setTaxMode] = useState<TaxMode>(
     draftToEdit?.tax_mode ?? (tenant.tax_config.gst_enabled ? tenant.tax_config.default_tax_mode : "none")
   );
-  const [billDiscType, setBillDiscType] = useState<"percent" | "flat">("flat");
-  const [billDiscVal, setBillDiscVal] = useState(0);
-  const [creditRedeem, setCreditRedeem] = useState(0);
-  const [ewayBillNo, setEwayBillNo] = useState("");
+  const [billDiscType, setBillDiscType] = useState<"percent" | "flat">(draftToEdit?.discount_type ?? "flat");
+  const [billDiscVal, setBillDiscVal] = useState(draftToEdit?.discount_value ?? 0);
+  const [creditRedeem, setCreditRedeem] = useState(draftToEdit?.credit_redeemed ?? 0);
+  const [ewayBillNo, setEwayBillNo] = useState(draftToEdit?.eway_bill_no ?? "");
   // A full-payment method follows the bill total; manual entry switches to split payment.
-  const [fullMode, setFullMode] = useState<QuickPayMode | null>("cash");
-  const [splitPay, setSplitPay] = useState<Record<QuickPayMode, number>>({ cash: 0, upi: 0, card: 0 });
-  const [detailsOpen, setDetailsOpen] = useState(Boolean(draftWalkIn?.gstin));
+  const initPayMap = (draftToEdit?.payments ?? []).reduce(
+    (acc, p) => {
+      if (p.mode === "cash" || p.mode === "upi" || p.mode === "card") acc[p.mode] += Number(p.amount || 0);
+      return acc;
+    },
+    { cash: 0, upi: 0, card: 0 } as Record<QuickPayMode, number>
+  );
+  const hasSavedPayments = Boolean(draftToEdit?.is_finalized);
+  const [fullMode, setFullMode] = useState<QuickPayMode | null>(hasSavedPayments ? null : "cash");
+  const [splitPay, setSplitPay] = useState<Record<QuickPayMode, number>>(initPayMap);
+  const [detailsOpen, setDetailsOpen] = useState(Boolean(draftSnap?.gstin));
   const [lineDiscOpen, setLineDiscOpen] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [modelFilter, setModelFilter] = useState("all");
-  const [online, setOnline] = useState(true);
 
   const [freeOpen, setFreeOpen] = useState(false);
   const [freeName, setFreeName] = useState("");
@@ -181,6 +221,16 @@ export function PosTerminal({
   const [freeGst, setFreeGst] = useState(5);
 
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [customerSidebarOpen, setCustomerSidebarOpen] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerFilter, setCustomerFilter] = useState<"all" | "wholesale" | "retail" | "due">("all");
+  const [remoteCustomers, setRemoteCustomers] = useState<{
+    key: string;
+    rows: CustomerRow[];
+    total: number;
+  } | null>(null);
+  const [customerSearching, setCustomerSearching] = useState(false);
+  const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [sizeRunOpen, setSizeRunOpen] = useState(false);
   const [sizeRunModel, setSizeRunModel] = useState("");
@@ -198,7 +248,84 @@ export function PosTerminal({
     quick_pay_modes: ["cash", "upi", "card"],
   };
   const activeBranch = branches.find((b) => b.id === branchId) ?? branches[0];
-  const selectedCustomer = customers.find((c) => c.id === customerId) ?? null;
+  const customerSearchKey = `${customerSearch.trim().toLowerCase()}|${customerFilter}`;
+
+  const localFilteredCustomers = useMemo(() => {
+    const q = customerSearch.trim().toLowerCase();
+    return customers.filter((c) => {
+      if (customerFilter === "wholesale" && c.customer_type !== "wholesale") return false;
+      if (customerFilter === "retail" && c.customer_type !== "retail") return false;
+      if (customerFilter === "due" && !(Number(c.current_due) > 0)) return false;
+      if (!q) return true;
+      return (
+        c.name.toLowerCase().includes(q) ||
+        (c.phone && c.phone.toLowerCase().includes(q)) ||
+        (c.gstin && c.gstin.toLowerCase().includes(q))
+      );
+    });
+  }, [customers, customerSearch, customerFilter]);
+
+  const sidebarCustomers =
+    remoteCustomers && remoteCustomers.key === customerSearchKey
+      ? remoteCustomers.rows
+      : localFilteredCustomers;
+  const sidebarTotal =
+    remoteCustomers && remoteCustomers.key === customerSearchKey
+      ? remoteCustomers.total
+      : customerSearch.trim() || customerFilter !== "all"
+      ? localFilteredCustomers.length
+      : totalCustomerCount ?? customers.length;
+
+  const selectedCustomer =
+    customers.find((c) => c.id === customerId) ??
+    sidebarCustomers.find((c) => c.id === customerId) ??
+    null;
+
+  // Focus search bar & support Escape when Right Customer Sidebar opens
+  useEffect(() => {
+    if (!customerSidebarOpen) return;
+    const t = window.setTimeout(() => customerSearchInputRef.current?.focus(), 60);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCustomerSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [customerSidebarOpen]);
+
+  // Debounced server-side customer search (handles 1,000+ customers cleanly)
+  useEffect(() => {
+    if (!customerSidebarOpen || !crmEnabled) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (!cancelled) setCustomerSearching(true);
+      try {
+        const res = await searchCustomersForBillingAction(customerSearch, customerFilter);
+        if (!cancelled) {
+          setRemoteCustomers({ key: customerSearchKey, rows: res.customers, total: res.total });
+          // Merge found customers into local state so chooseCustomer can find them
+          setCustomers((prev) => {
+            const byId = new Map(prev.map((c) => [c.id, c]));
+            for (const c of res.customers) byId.set(c.id, c);
+            return Array.from(byId.values());
+          });
+        }
+      } catch {
+        // Keep local filtered results on network blip
+      } finally {
+        if (!cancelled) setCustomerSearching(false);
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [customerSidebarOpen, customerSearch, customerFilter, customerSearchKey, crmEnabled]);
 
   const productModels = useMemo(() => {
     const map = new Map<string, string>();
@@ -281,10 +408,13 @@ export function PosTerminal({
     }
   }, [cart, tenant.id, branchId, draftToEdit]);
 
-  // 120s visibility-gated delta stock poll (Neon compute-friendly)
+  // Zero-polling stock sync: only refresh when returning to the tab after 5+ mins idle
+  // so Neon Postgres scales to zero between customers instead of waking every 2 mins.
   useEffect(() => {
-    const timer = setInterval(() => {
+    const syncIfStale = () => {
       if (document.visibilityState !== "visible" || !navigator.onLine || !branchId) return;
+      const elapsedMs = Date.now() - new Date(lastSyncRef.current).getTime();
+      if (Number.isFinite(elapsedMs) && elapsedMs < 5 * 60_000) return;
       fetch(`/api/sync?branch_id=${branchId}&since=${encodeURIComponent(lastSyncRef.current)}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
@@ -300,20 +430,10 @@ export function PosTerminal({
           }
         })
         .catch(() => undefined);
-    }, 120_000);
-    return () => clearInterval(timer);
-  }, [branchId]);
-
-  useEffect(() => {
-    const sync = () => setOnline(navigator.onLine);
-    sync();
-    window.addEventListener("online", sync);
-    window.addEventListener("offline", sync);
-    return () => {
-      window.removeEventListener("online", sync);
-      window.removeEventListener("offline", sync);
     };
-  }, []);
+    document.addEventListener("visibilitychange", syncIfStale);
+    return () => document.removeEventListener("visibilitychange", syncIfStale);
+  }, [branchId]);
 
   const hsnMap = useMemo(() => {
     const m = new Map<string, HsnCodeRow>();
@@ -345,7 +465,11 @@ export function PosTerminal({
     });
   }, [cart, invoiceType, taxMode, activeBranch, effectivePlaceOfSupply, billDiscType, billDiscVal, discountsEnabled, hsnMap]);
 
-  const creditBalance = Number(selectedCustomer?.credit_balance ?? 0);
+  const originalCreditForCustomer =
+    isEditingFinalized && selectedCustomer && selectedCustomer.id === draftToEdit?.customer_id
+      ? Number(draftToEdit?.credit_redeemed ?? 0)
+      : 0;
+  const creditBalance = Number(selectedCustomer?.credit_balance ?? 0) + originalCreditForCustomer;
   const appliedCredit = Math.min(creditRedeem, creditBalance, gstCalc.grand_total);
   const payable = round2(Math.max(0, gstCalc.grand_total - appliedCredit));
   const payModes = (["cash", "upi", "card"] as const).filter(
@@ -385,9 +509,20 @@ export function PosTerminal({
   const priceFor = (v: PosVariantItem, customer: CustomerRow | null = selectedCustomer) =>
     customer?.customer_type === "wholesale" && v.wholesale_price > 0 ? Number(v.wholesale_price) : Number(v.selling_price);
 
+  const originalQtyByVariant = useMemo(() => {
+    const m = new Map<string, number>();
+    if (isEditingFinalized && draftToEdit?.items) {
+      for (const it of draftToEdit.items) {
+        if (it.variant_id) m.set(it.variant_id, (m.get(it.variant_id) ?? 0) + Number(it.qty || 0));
+      }
+    }
+    return m;
+  }, [isEditingFinalized, draftToEdit]);
+
   const setVariantQty = (v: PosVariantItem, requested: number) => {
     const qty = Math.max(0, requested);
-    const available = Math.max(0, Number(v.stock_qty));
+    const heldOnBill = originalQtyByVariant.get(v.variant_id) ?? 0;
+    const available = Math.max(0, Number(v.stock_qty) + heldOnBill);
     if (stockEnabled && qty > available) {
       toast.warning(
         available === 0
@@ -484,6 +619,9 @@ export function PosTerminal({
     setWalkInGstin("");
     setWalkInState(activeBranch?.state_code || "33");
     setWalkInAddress("");
+    setShipToDiff(false);
+    setShipToName("");
+    setShipToAddress("");
     setDetailsOpen(false);
   };
 
@@ -640,6 +778,8 @@ export function PosTerminal({
             gstin: walkInGstin.trim().toUpperCase() || selectedCustomer.gstin,
             state_code: effectivePlaceOfSupply,
             address: walkInAddress.trim() || selectedCustomer.address || null,
+            ship_to_name: shipToDiff ? shipToName.trim() || walkInName.trim() || selectedCustomer.name : null,
+            ship_to_address: shipToDiff ? shipToAddress.trim() || null : null,
           }
         : {
             name: walkInName.trim() || "Walk-In Customer",
@@ -647,6 +787,8 @@ export function PosTerminal({
             gstin: walkInGstin.trim().toUpperCase() || null,
             state_code: effectivePlaceOfSupply,
             address: walkInAddress.trim() || null,
+            ship_to_name: shipToDiff ? shipToName.trim() || walkInName.trim() || "Walk-In Customer" : null,
+            ship_to_address: shipToDiff ? shipToAddress.trim() || null : null,
           },
       tax_mode: invoiceType === "estimate_bill_of_supply" ? "none" : taxMode,
       supply_type: gstCalc.supply_type,
@@ -683,6 +825,13 @@ export function PosTerminal({
         });
         toast.success(`Saved offline as ${alloc.invoiceNumber}. Will auto-sync on reconnect.`);
         resetBill();
+        return;
+      }
+
+      if (isEditingFinalized && draftToEdit?.id) {
+        const updatedId = await updateFinalizedInvoiceAction(draftToEdit.id, payload);
+        toast.success(`Bill ${draftToEdit.invoice_number || ""} updated! Stock, balance & edit history saved.`);
+        router.push(`/dashboard/billing/${updatedId}/print`);
         return;
       }
 
@@ -746,7 +895,7 @@ export function PosTerminal({
         <div className="ui-page space-y-2.5 rounded-xl border border-[#ececee] bg-[#fafafa] p-3 sm:p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-1.5">
             <span className="text-[12px] font-semibold text-[#3f3f46]">
-              Receiving Party GST Details <span className="font-normal text-[#77777d]">(Optional · Recommended)</span>
+              Buyer GST &amp; Address <span className="font-normal text-[#77777d]">(Optional · Recommended)</span>
             </span>
             <span
               className={`max-w-full truncate rounded-full px-2.5 py-1 font-mono text-[10.5px] font-semibold ${
@@ -767,11 +916,36 @@ export function PosTerminal({
             </Select>
           </div>
           <Input
-            aria-label="Receiving party address"
-            placeholder="Company / Delivery Address (Recommended)"
+            aria-label="Buyer address"
+            placeholder="Billing Address (Optional)"
             value={walkInAddress}
             onChange={(e) => setWalkInAddress(e.target.value)}
           />
+          <label className="flex items-center gap-2 text-[11.5px] font-medium text-[#3f3f46] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={shipToDiff}
+              onChange={(e) => setShipToDiff(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-slate-300"
+            />
+            Delivery address is different from billing address
+          </label>
+          {shipToDiff && (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Input
+                aria-label="Delivery name"
+                placeholder="Delivery Name (e.g. Pothys Godown)"
+                value={shipToName}
+                onChange={(e) => setShipToName(e.target.value)}
+              />
+              <Input
+                aria-label="Delivery address"
+                placeholder="Delivery Full Address"
+                value={shipToAddress}
+                onChange={(e) => setShipToAddress(e.target.value)}
+              />
+            </div>
+          )}
         </div>
       ) : null}
       {crmEnabled ? (
@@ -803,14 +977,30 @@ export function PosTerminal({
           )}
         </div>
         {crmEnabled ? (
-          <Select aria-label="Customer" value={customerId} onChange={(e) => chooseCustomer(e.target.value)}>
-            <option value="">Walk-In Customer</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.customer_type}) {c.current_due > 0 ? `• Due ₹${c.current_due}` : ""}
-              </option>
-            ))}
-          </Select>
+          <button
+            type="button"
+            onClick={() => setCustomerSidebarOpen(true)}
+            className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-[#e4e4e7] bg-white px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,.04)] transition-colors hover:border-[#171717] hover:bg-[#fafafa]"
+          >
+            <span className="flex min-w-0 items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f4f4f5] text-[#171717]">
+                {selectedCustomer ? <Users className="h-4 w-4" /> : <User className="h-4 w-4" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] font-semibold text-[#171717]">
+                  {selectedCustomer ? selectedCustomer.name : "Walk-In Customer"}
+                </span>
+                <span className="block truncate text-[11px] text-[#77777d]">
+                  {selectedCustomer
+                    ? `${selectedCustomer.customer_type === "wholesale" ? "Wholesale" : "Retail"}${selectedCustomer.phone ? ` · ${selectedCustomer.phone}` : ""}${Number(selectedCustomer.current_due) > 0 ? ` · Due ${money(Number(selectedCustomer.current_due))}` : ""}`
+                    : `Tap to browse ${(totalCustomerCount ?? customers.length).toLocaleString("en-IN")} saved customers`}
+                </span>
+              </span>
+            </span>
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#f4f4f5] px-2.5 py-1 text-[11.5px] font-semibold text-[#171717]">
+              Change <ChevronRight className="h-3.5 w-3.5" />
+            </span>
+          </button>
         ) : null}
         {!customerId ? customerFields : null}
         {customerId && invoiceType === "sale" ? (
@@ -854,10 +1044,35 @@ export function PosTerminal({
             </div>
             <Input
               aria-label="Buyer address"
-              placeholder="Billing / Delivery Address (Recommended)"
+              placeholder="Billing Address (Optional)"
               value={walkInAddress}
               onChange={(e) => setWalkInAddress(e.target.value)}
             />
+            <label className="flex items-center gap-2 text-[11.5px] font-medium text-[#3f3f46] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={shipToDiff}
+                onChange={(e) => setShipToDiff(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300"
+              />
+              Delivery address is different from billing address
+            </label>
+            {shipToDiff && (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Input
+                  aria-label="Delivery name"
+                  placeholder="Delivery Name (e.g. Pothys Godown)"
+                  value={shipToName}
+                  onChange={(e) => setShipToName(e.target.value)}
+                />
+                <Input
+                  aria-label="Delivery address"
+                  placeholder="Delivery Full Address"
+                  value={shipToAddress}
+                  onChange={(e) => setShipToAddress(e.target.value)}
+                />
+              </div>
+            )}
           </div>
         ) : null}
         {selectedCustomer && creditBalance > 0 && (
@@ -887,63 +1102,12 @@ export function PosTerminal({
           )}
       </section>
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="ui-eyebrow">Bill Mode</p>
-          {invoiceType === "sale" && (
-            <div className="flex items-center gap-1.5">
-              {activeBranch?.gstin && (
-                <span className="truncate font-mono text-[11px] font-semibold text-[#55555b]">
-                  {activeBranch.gstin}
-                </span>
-              )}
-              <Link
-                href="/dashboard/settings?tab=tax"
-                className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[#f1f1f2] px-2 py-1 text-[11px] font-semibold text-[#171717] transition-colors hover:bg-[#e4e4e7]"
-                title="Set or change GST number & tax settings"
-              >
-                <Settings className="h-3 w-3" />
-                GST Settings
-              </Link>
-            </div>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-1 rounded-xl bg-[#f1f1f2] p-[3px]">
-          <button
-            type="button"
-            onClick={() => {
-              setInvoiceType("estimate_bill_of_supply");
-              setTaxMode("none");
-            }}
-            className={`min-h-[38px] cursor-pointer rounded-[9px] px-3 py-2 text-[13px] font-semibold transition-all ${
-              invoiceType === "estimate_bill_of_supply"
-                ? "bg-white text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,.08)]"
-                : "text-[#55555b] hover:text-[#171717]"
-            }`}
-          >
-            Normal Bill
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setInvoiceType("sale");
-              setTaxMode(tenant.tax_config.default_tax_mode === "exclusive" ? "exclusive" : "inclusive");
-            }}
-            className={`min-h-[38px] cursor-pointer rounded-[9px] px-3 py-2 text-[13px] font-semibold transition-all ${
-              invoiceType === "sale"
-                ? "bg-[#171717] text-white shadow-[0_1px_2px_rgba(0,0,0,.18)]"
-                : "text-[#55555b] hover:text-[#171717]"
-            }`}
-          >
-            GST Bill
-          </button>
-        </div>
-
-        {invoiceType === "sale" && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[12.5px] font-medium text-[#55555b]">Tax Calculation</span>
-              <div className="w-44 sm:w-48">
+      {invoiceType === "sale" && (
+        <section className="space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[12.5px] font-medium text-[#55555b]">Tax Calculation</span>
+            <div className="flex items-center gap-2">
+              <div className="w-40 sm:w-44">
                 <Select
                   aria-label="Tax mode"
                   value={taxMode}
@@ -955,34 +1119,37 @@ export function PosTerminal({
                   <option value="none">No Tax (0%)</option>
                 </Select>
               </div>
+              <Link
+                href="/dashboard/settings?tab=tax"
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#f1f1f2] px-2 py-2 text-[11px] font-semibold text-[#171717] transition-colors hover:bg-[#e4e4e7]"
+                title="GST & Tax Settings"
+              >
+                <Settings className="h-3.5 w-3.5" />
+              </Link>
             </div>
-
-            {(!tenant.tax_config.gst_enabled || !activeBranch?.gstin) && (
-              <div className="flex items-start justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-900">
-                <div className="flex items-start gap-1.5">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                  <div>
-                    <p className="font-semibold">GST Bill details not set</p>
-                    <p className="text-[10.5px] text-amber-800">
-                      {!tenant.tax_config.gst_enabled && !activeBranch?.gstin
-                        ? "Turn on GST Billing and add your Branch GSTIN in Settings."
-                        : !activeBranch?.gstin
-                        ? `Add GSTIN for "${activeBranch?.name || "this branch"}" in Settings.`
-                        : "Turn on GST Billing in System Settings."}
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  href={!activeBranch?.gstin && tenant.tax_config.gst_enabled ? "/dashboard/settings?tab=branches" : "/dashboard/settings?tab=tax"}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-900 px-2.5 py-1.5 text-[10.5px] font-semibold text-white hover:bg-amber-950"
-                >
-                  <Settings className="h-3 w-3" /> Setup
-                </Link>
-              </div>
-            )}
           </div>
-        )}
-      </section>
+
+          {(!tenant.tax_config.gst_enabled || !(tenant.brand_config?.business_profile?.gstin || activeBranch?.gstin)) && (
+            <div className="flex items-start justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-900">
+              <div className="flex items-start gap-1.5">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="font-semibold">GST details not set</p>
+                  <p className="text-[10.5px] text-amber-800">
+                    Add your GST Number in My Profile &amp; Bank to show it on GST bills.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/dashboard/settings?tab=profile"
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-900 px-2.5 py-1.5 text-[10.5px] font-semibold text-white hover:bg-amber-950"
+              >
+                <Settings className="h-3 w-3" /> Setup
+              </Link>
+            </div>
+          )}
+        </section>
+      )}
 
       <section>
         <div className="mb-2.5 flex items-center justify-between">
@@ -1299,7 +1466,7 @@ export function PosTerminal({
       </div>
       {finalizeBlock && cart.length > 0 ? <p className="px-1 text-[11px] font-medium text-rose-600">{finalizeBlock}</p> : null}
       <div className="flex gap-2">
-        {canEditDraft && (
+        {canEditDraft && !isEditingFinalized && (
           <Button variant="outline" size="lg" className="!min-h-[46px] flex-none !px-3.5" disabled={submitting || cart.length === 0} onClick={() => submitInvoice(true)}>
             <Save className="h-4 w-4" /> Hold
           </Button>
@@ -1316,31 +1483,82 @@ export function PosTerminal({
         </Button>
         <Button size="lg" className="!min-h-[46px] flex-1" disabled={submitting || cart.length === 0 || Boolean(finalizeBlock)} onClick={() => submitInvoice(false)}>
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-          {submitting ? "Saving..." : "Finalize & Print"}
+          {submitting ? "Saving..." : isEditingFinalized ? "Save Bill Changes" : "Finalize & Print"}
         </Button>
       </div>
     </div>
   );
 
+  const billModeToggle = (
+    <div className="inline-flex items-center gap-0.5 rounded-lg bg-[#f1f1f2] p-[2px]" role="group" aria-label="Bill type">
+      <button
+        type="button"
+        onClick={() => {
+          setInvoiceType("estimate_bill_of_supply");
+          setTaxMode("none");
+        }}
+        className={`cursor-pointer rounded-[6px] px-2.5 py-1 text-[11.5px] font-semibold transition-all ${
+          invoiceType === "estimate_bill_of_supply"
+            ? "bg-white text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,.08)]"
+            : "text-[#55555b] hover:text-[#171717]"
+        }`}
+      >
+        Normal Bill
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setInvoiceType("sale");
+          setTaxMode(tenant.tax_config.default_tax_mode === "exclusive" ? "exclusive" : "inclusive");
+        }}
+        className={`cursor-pointer rounded-[6px] px-2.5 py-1 text-[11.5px] font-semibold transition-all ${
+          invoiceType === "sale"
+            ? "bg-[#171717] text-white shadow-[0_1px_2px_rgba(0,0,0,.18)]"
+            : "text-[#55555b] hover:text-[#171717]"
+        }`}
+      >
+        GST Bill
+      </button>
+    </div>
+  );
+
   const billHeader = (
-    <header className="flex min-h-[44px] items-center justify-between gap-2 px-3.5 py-2">
-      <span className="ui-eyebrow flex min-w-0 items-center gap-2">
+    <header className="flex min-h-[46px] flex-wrap items-center justify-between gap-2 px-3.5 py-2">
+      <span className="ui-eyebrow flex min-w-0 items-center gap-1.5">
         Current Bill
         {itemCount > 0 ? <span key={itemCount} className="pos-header-count">{itemCount}</span> : null}
       </span>
-      {cart.length > 0 ? (
-        <button type="button" className="pos-link pos-link--danger" onClick={clearBill}>
-          <Trash2 className="h-3 w-3" /> Clear
-        </button>
-      ) : null}
+      <div className="flex items-center gap-2">
+        {billModeToggle}
+        {cart.length > 0 ? (
+          <button type="button" className="pos-link pos-link--danger" onClick={clearBill}>
+            <Trash2 className="h-3 w-3" /> Clear
+          </button>
+        ) : null}
+      </div>
     </header>
   );
 
   return (
     <div className="space-y-3.5">
+      {isEditingFinalized && draftToEdit && (
+        <Alert variant="info" title={`Editing Bill ${draftToEdit.invoice_number || ""}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              Modify items, prices, customer, or payments below. Saving automatically adjusts stock &amp; customer balance and logs the change in Edit History.
+            </span>
+            <Link
+              href="/dashboard/billing"
+              className="inline-flex shrink-0 items-center rounded-lg border border-sky-300 bg-white px-2.5 py-1 text-xs font-semibold text-sky-900 hover:bg-sky-50"
+            >
+              Cancel Edit
+            </Link>
+          </div>
+        </Alert>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1>POS Terminal</h1>
+          <h1>{isEditingFinalized ? `Edit Bill ${draftToEdit?.invoice_number || ""}` : "New Bill"}</h1>
           <p className="mt-0.5 text-[12.5px] text-[#77777d]">
             Billing from <span className="font-medium text-[#27272a]">{activeBranch?.name ?? "no branch"}</span>
           </p>
@@ -1465,6 +1683,10 @@ export function PosTerminal({
 
       <Dialog open={mobileCartOpen} onClose={() => setMobileCartOpen(false)} title="Current Bill">
         <div className="-m-4 sm:-m-5">
+          <div className="flex items-center justify-between border-b border-[#ececee] bg-[#fafafa] px-4 py-2.5">
+            <span className="text-xs font-semibold text-[#55555b]">Bill Type</span>
+            {billModeToggle}
+          </div>
           {billBody}
           <div className="sticky bottom-0 border-t border-[#ececee] bg-white p-2 pb-[max(8px,env(safe-area-inset-bottom))]">{billFooter}</div>
         </div>
@@ -1551,72 +1773,91 @@ export function PosTerminal({
       <Dialog
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
-        title="Bill Preview"
-        subtitle="Check all details below. Close to edit, or click Finalize & Print to confirm."
+        title={isEditingFinalized ? `Bill Preview — ${draftToEdit?.invoice_number || ""}` : "Bill Preview"}
+        subtitle={
+          isEditingFinalized
+            ? "Check your updated details below. Close to edit, or click Save Bill Changes to confirm."
+            : "Check all details below. Close to edit, or click Finalize & Print to confirm."
+        }
         maxWidth="max-w-3xl"
       >
         <div className="space-y-4">
           <div className="max-h-[62vh] overflow-y-auto rounded-xl bg-[#f4f7fb] p-3">
-            <InvoiceRenderer
-              format={defaultTemplate?.format ?? "a4"}
-              config={
-                ({
-                  header_title: tenant.name.toUpperCase(),
-                  header_subtitle: invoiceType === "sale" ? "GST Tax Invoice" : "Cash Memo / Bill",
-                  footer_note: "Thank you for your business!",
-                  terms: "",
-                  accent_color: tenant.brand_config?.primary_color ?? "#171717",
-                  design_style: invoiceType === "sale" ? "gst_full" : "classic",
-                  show_logo: true,
-                  show_hsn: invoiceType === "sale",
-                  show_discount: true,
-                  show_custom_fields: false,
-                  show_upi_qr: true,
-                  ...(defaultTemplate?.config ?? {}),
-                  show_gst_summary:
-                    invoiceType === "estimate_bill_of_supply"
-                      ? false
-                      : defaultTemplate?.config?.show_gst_summary ?? true,
-                }) as BillTemplateConfig
-              }
-              data={{
-                logoUrl,
-                invoiceNumber: "PREVIEW",
-                invoiceType,
-                dateStr: new Date().toLocaleString("en-IN", {
-                  timeZone: "Asia/Kolkata",
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                }),
-                branchName: activeBranch?.name ?? tenant.name,
-                branchAddress: activeBranch?.address ?? null,
-                branchGstin: activeBranch?.gstin ?? null,
-                customerName: walkInName.trim() || selectedCustomer?.name || "Walk-In Customer",
-                customerPhone: walkInPhone.trim() || selectedCustomer?.phone || null,
-                customerGstin: walkInGstin.trim().toUpperCase() || selectedCustomer?.gstin || null,
-                customerAddress: walkInAddress.trim() || selectedCustomer?.address || null,
-                placeOfSupply: INDIAN_STATES[effectivePlaceOfSupply]
-                  ? `${INDIAN_STATES[effectivePlaceOfSupply]} (${effectivePlaceOfSupply})`
-                  : effectivePlaceOfSupply,
-                taxableAmount: gstCalc.taxable_amount,
-                cgstAmount: gstCalc.cgst_amount,
-                sgstAmount: gstCalc.sgst_amount,
-                igstAmount: gstCalc.igst_amount,
-                roundOff: gstCalc.round_off,
-                grandTotal: gstCalc.grand_total,
-                paidAmount,
-                dueAmount: balanceDue,
-                items: gstCalc.items.map((it) => ({
-                  product_name: it.product_name,
-                  sku: it.sku,
-                  hsn_code: it.hsn_code,
-                  qty: it.qty,
-                  unit_price: it.unit_price,
-                  gst_rate: it.gst_rate,
-                  line_total: it.line_total,
-                })),
-              }}
-            />
+            {(() => {
+              const isGstPreview =
+                invoiceType !== "estimate_bill_of_supply" &&
+                (gstCalc.cgst_amount > 0 || gstCalc.sgst_amount > 0 || gstCalc.igst_amount > 0);
+              const seller = resolveSellerProfile(tenant, activeBranch);
+              const allTpls = billTemplates.length > 0 ? billTemplates : defaultTemplate ? [defaultTemplate] : [];
+              const pickedTpl = selectTemplateForBill(allTpls, isGstPreview);
+              const baseCfg = buildDefaultConfigForCategory(
+                isGstPreview ? "gst" : "normal",
+                seller,
+                tenant.brand_config?.primary_color
+              );
+              const previewCfg: BillTemplateConfig = {
+                ...baseCfg,
+                ...(pickedTpl?.config ?? {}),
+                bill_category: isGstPreview ? "gst" : "normal",
+                show_gst_summary: isGstPreview ? pickedTpl?.config?.show_gst_summary ?? true : false,
+              };
+              return (
+                <InvoiceRenderer
+                  format={pickedTpl?.format ?? "a4"}
+                  config={previewCfg}
+                  data={{
+                    logoUrl,
+                    invoiceNumber: isEditingFinalized ? draftToEdit?.invoice_number || "PREVIEW" : "PREVIEW",
+                    invoiceType,
+                    dateStr: new Date().toLocaleDateString("en-IN", {
+                      timeZone: "Asia/Kolkata",
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                    }).replace(/\//g, "-"),
+                    sellerName: seller.businessName,
+                    sellerAddress: seller.address,
+                    sellerPhone: seller.phone,
+                    sellerEmail: seller.email,
+                    sellerGstin: seller.gstin,
+                    signatoryName: seller.signatoryName,
+                    bankDetails: seller.bankDetails,
+                    branchName: activeBranch?.name ?? tenant.name,
+                    branchAddress: activeBranch?.address ?? null,
+                    branchGstin: activeBranch?.gstin ?? null,
+                    customerName: walkInName.trim() || selectedCustomer?.name || "Walk-In Customer",
+                    customerPhone: walkInPhone.trim() || selectedCustomer?.phone || null,
+                    customerGstin: walkInGstin.trim().toUpperCase() || selectedCustomer?.gstin || null,
+                    customerAddress: walkInAddress.trim() || selectedCustomer?.address || null,
+                    shipToName: shipToDiff ? shipToName.trim() || walkInName.trim() || selectedCustomer?.name || null : null,
+                    shipToAddress: shipToDiff ? shipToAddress.trim() || null : null,
+                    placeOfSupply: INDIAN_STATES[effectivePlaceOfSupply]
+                      ? `${INDIAN_STATES[effectivePlaceOfSupply]} (${effectivePlaceOfSupply})`
+                      : effectivePlaceOfSupply,
+                    subtotal: gstCalc.subtotal,
+                    discountAmount: gstCalc.discount_amount,
+                    taxableAmount: gstCalc.taxable_amount,
+                    cgstAmount: gstCalc.cgst_amount,
+                    sgstAmount: gstCalc.sgst_amount,
+                    igstAmount: gstCalc.igst_amount,
+                    roundOff: gstCalc.round_off,
+                    grandTotal: gstCalc.grand_total,
+                    paidAmount,
+                    dueAmount: balanceDue,
+                    items: gstCalc.items.map((it) => ({
+                      product_name: it.product_name,
+                      sku: it.sku,
+                      hsn_code: it.hsn_code,
+                      qty: it.qty,
+                      unit_price: it.unit_price,
+                      taxable_value: it.taxable_value,
+                      gst_rate: it.gst_rate,
+                      line_total: it.line_total,
+                    })),
+                  }}
+                />
+              );
+            })()}
           </div>
           {finalizeBlock && (
             <p className="text-xs font-medium text-rose-600">{finalizeBlock}</p>
@@ -1634,11 +1875,186 @@ export function PosTerminal({
               }}
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-              {submitting ? "Saving..." : "Finalize & Print"}
+              {submitting ? "Saving..." : isEditingFinalized ? "Save Bill Changes" : "Finalize & Print"}
             </Button>
           </div>
         </div>
       </Dialog>
+
+      {/* Searchable Right Sidebar for Customers (Scales to 1,000+ Customers) */}
+      {customerSidebarOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Select Customer">
+          <div
+            className="fixed inset-0 bg-black/30 backdrop-blur-[2px]"
+            onClick={() => setCustomerSidebarOpen(false)}
+          />
+          <aside className="relative z-10 flex h-[100dvh] w-full max-w-md flex-col border-l border-[#ececee] bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-2 border-b border-[#ececee] px-4 py-3.5">
+              <div>
+                <h2 className="text-sm font-bold text-[#171717]">
+                  Select Customer{" "}
+                  <span className="ml-1 rounded-full bg-[#f1f1f2] px-2 py-0.5 font-mono text-[11px] font-semibold text-[#55555b]">
+                    {sidebarTotal.toLocaleString("en-IN")}
+                  </span>
+                </h2>
+                <p className="text-[11px] text-[#77777d]">Search by name, phone number, or GST number</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close customer sidebar"
+                onClick={() => setCustomerSidebarOpen(false)}
+                className="cursor-pointer rounded-lg p-1.5 text-[#55555b] hover:bg-[#f4f4f5] hover:text-[#171717]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 border-b border-[#ececee] bg-[#fafafa] p-3.5">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a3a3a8]" />
+                <Input
+                  ref={customerSearchInputRef}
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  placeholder="Type customer name, phone, or GSTIN..."
+                  className="!pl-9 !pr-8 bg-white"
+                />
+                {customerSearch && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setCustomerSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer text-[#a3a3a8] hover:text-[#171717]"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(
+                  [
+                    { id: "all", label: "All" },
+                    { id: "wholesale", label: "Wholesale" },
+                    { id: "retail", label: "Retail" },
+                    { id: "due", label: "Has Due" },
+                  ] as const
+                ).map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setCustomerFilter(f.id)}
+                    className={`cursor-pointer rounded-full px-3 py-1 text-[11.5px] font-semibold transition-all ${
+                      customerFilter === f.id
+                        ? "bg-[#171717] text-white"
+                        : "bg-white text-[#55555b] shadow-[0_0_0_1px_rgba(0,0,0,.08)] hover:text-[#171717]"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+                {customerSearching && <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin text-[#77777d]" />}
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-2">
+              {/* Walk-In Customer Quick Option */}
+              <button
+                type="button"
+                onClick={() => {
+                  chooseCustomer("");
+                  setCustomerSidebarOpen(false);
+                }}
+                className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border p-3 text-left transition-all ${
+                  !customerId
+                    ? "border-[#171717] bg-[#fafafa] ring-1 ring-[#171717]/10"
+                    : "border-[#ececee] bg-white hover:border-slate-300 hover:bg-[#fafafa]"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f1f1f2] text-[#171717]">
+                    <User className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#171717]">Walk-In Customer</p>
+                    <p className="text-[11px] text-[#77777d]">One-time or new buyer</p>
+                  </div>
+                </div>
+                {!customerId && <Check className="h-4 w-4 text-[#171717]" />}
+              </button>
+
+              {sidebarCustomers.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-[#e4e4e7] p-8 text-center">
+                  <p className="text-xs font-semibold text-[#3f3f46]">No matching customers found</p>
+                  <p className="mt-1 text-[11px] text-[#77777d]">
+                    Try another name, phone, or choose Walk-In Customer above.
+                  </p>
+                </div>
+              ) : (
+                sidebarCustomers.map((c) => {
+                  const isActive = customerId === c.id;
+                  const due = Number(c.current_due || 0);
+                  const credit = Number(c.credit_balance || 0);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        chooseCustomer(c.id);
+                        setCustomerSidebarOpen(false);
+                      }}
+                      className={`flex w-full cursor-pointer items-start justify-between gap-2 rounded-xl border p-3 text-left transition-all ${
+                        isActive
+                          ? "border-[#171717] bg-[#fafafa] ring-1 ring-[#171717]/10"
+                          : "border-[#ececee] bg-white hover:border-slate-300 hover:bg-[#fafafa]"
+                      }`}
+                    >
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="truncate text-[13px] font-semibold text-[#171717]">{c.name}</span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              c.customer_type === "wholesale"
+                                ? "bg-sky-50 text-sky-700"
+                                : "bg-[#f4f4f5] text-[#55555b]"
+                            }`}
+                          >
+                            {c.customer_type === "wholesale" ? "Wholesale" : "Retail"}
+                          </span>
+                        </div>
+                        <p className="truncate text-[11px] text-[#77777d]">
+                          {[c.phone, c.gstin && `GSTIN: ${c.gstin}`].filter(Boolean).join(" · ") || "No phone or GSTIN saved"}
+                        </p>
+                        {(due > 0 || credit > 0) && (
+                          <div className="flex flex-wrap gap-1.5 pt-0.5 text-[10.5px] font-semibold">
+                            {due > 0 && (
+                              <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
+                                Due: {money(due)}
+                              </span>
+                            )}
+                            {credit > 0 && (
+                              <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">
+                                Credit: {money(credit)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {isActive && <Check className="mt-1 h-4 w-4 shrink-0 text-[#171717]" />}
+                    </button>
+                  );
+                })
+              )}
+
+              {sidebarTotal > sidebarCustomers.length && (
+                <p className="py-2 text-center text-[11px] text-[#77777d]">
+                  Showing {sidebarCustomers.length} of {sidebarTotal.toLocaleString("en-IN")} customers — type in the search box to find anyone instantly.
+                </p>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
 
       {scannerOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4">

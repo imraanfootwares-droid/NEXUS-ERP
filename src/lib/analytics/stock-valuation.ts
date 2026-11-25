@@ -1,10 +1,17 @@
 import type { PoolClient } from "pg";
+import { deriveThumbKey, getPublicAssetUrl } from "@/lib/storage/s3-client";
 
 export interface ProductValuationRow {
   product_id: string;
   model_code: string;
   product_name: string;
   category: string;
+  brand?: string | null;
+  hsn_code?: string | null;
+  thumb_url?: string | null;
+  variant_count?: number;
+  sizes?: string[];
+  colours?: string[];
   uom: string;
   stock_qty: number;
   unit_cost: number;
@@ -61,12 +68,13 @@ export async function loadPeriodProfitSummary(
   tenantId: string,
   branchIds: string[]
 ): Promise<PeriodProfitSummary> {
+  // Single-pass FILTER aggregation instead of 5 separate UNION ALL scans over the sales CTE
   const res = await client.query<{
-    bucket: string;
-    revenue: string;
-    cost: string;
-    bills: string;
-    units_sold: string;
+    today_rev: string; today_cogs: string; today_bills: string; today_qty: string;
+    week_rev: string; week_cogs: string; week_bills: string; week_qty: string;
+    month_rev: string; month_cogs: string; month_bills: string; month_qty: string;
+    year_rev: string; year_cogs: string; year_bills: string; year_qty: string;
+    all_rev: string; all_cogs: string; all_bills: string; all_qty: string;
   }>(
     `WITH sales AS (
        SELECT
@@ -87,76 +95,57 @@ export async function loadPeriodProfitSummary(
      now_ist AS (
        SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date AS today
      )
-     SELECT 'Today' AS bucket,
-            COALESCE(SUM(rev), 0)::text AS revenue,
-            COALESCE(SUM(cogs), 0)::text AS cost,
-            COUNT(*)::text AS bills,
-            COALESCE(SUM(qty), 0)::text AS units_sold
-     FROM sales, now_ist WHERE sale_date = today
-     UNION ALL
-     SELECT 'This Week',
-            COALESCE(SUM(rev), 0)::text,
-            COALESCE(SUM(cogs), 0)::text,
-            COUNT(*)::text,
-            COALESCE(SUM(qty), 0)::text
-     FROM sales, now_ist WHERE sale_date >= today - 6
-     UNION ALL
-     SELECT 'This Month',
-            COALESCE(SUM(rev), 0)::text,
-            COALESCE(SUM(cogs), 0)::text,
-            COUNT(*)::text,
-            COALESCE(SUM(qty), 0)::text
-     FROM sales, now_ist WHERE sale_date >= date_trunc('month', today)::date
-     UNION ALL
-     SELECT 'This Year',
-            COALESCE(SUM(rev), 0)::text,
-            COALESCE(SUM(cogs), 0)::text,
-            COUNT(*)::text,
-            COALESCE(SUM(qty), 0)::text
-     FROM sales, now_ist WHERE sale_date >= date_trunc('year', today)::date
-     UNION ALL
-     SELECT 'All Time',
-            COALESCE(SUM(rev), 0)::text,
-            COALESCE(SUM(cogs), 0)::text,
-            COUNT(*)::text,
-            COALESCE(SUM(qty), 0)::text
-     FROM sales`,
+     SELECT
+       COALESCE(SUM(rev) FILTER (WHERE sale_date = today), 0)::text AS today_rev,
+       COALESCE(SUM(cogs) FILTER (WHERE sale_date = today), 0)::text AS today_cogs,
+       COUNT(*) FILTER (WHERE sale_date = today)::text AS today_bills,
+       COALESCE(SUM(qty) FILTER (WHERE sale_date = today), 0)::text AS today_qty,
+
+       COALESCE(SUM(rev) FILTER (WHERE sale_date >= today - 6), 0)::text AS week_rev,
+       COALESCE(SUM(cogs) FILTER (WHERE sale_date >= today - 6), 0)::text AS week_cogs,
+       COUNT(*) FILTER (WHERE sale_date >= today - 6)::text AS week_bills,
+       COALESCE(SUM(qty) FILTER (WHERE sale_date >= today - 6), 0)::text AS week_qty,
+
+       COALESCE(SUM(rev) FILTER (WHERE sale_date >= date_trunc('month', today)::date), 0)::text AS month_rev,
+       COALESCE(SUM(cogs) FILTER (WHERE sale_date >= date_trunc('month', today)::date), 0)::text AS month_cogs,
+       COUNT(*) FILTER (WHERE sale_date >= date_trunc('month', today)::date)::text AS month_bills,
+       COALESCE(SUM(qty) FILTER (WHERE sale_date >= date_trunc('month', today)::date), 0)::text AS month_qty,
+
+       COALESCE(SUM(rev) FILTER (WHERE sale_date >= date_trunc('year', today)::date), 0)::text AS year_rev,
+       COALESCE(SUM(cogs) FILTER (WHERE sale_date >= date_trunc('year', today)::date), 0)::text AS year_cogs,
+       COUNT(*) FILTER (WHERE sale_date >= date_trunc('year', today)::date)::text AS year_bills,
+       COALESCE(SUM(qty) FILTER (WHERE sale_date >= date_trunc('year', today)::date), 0)::text AS year_qty,
+
+       COALESCE(SUM(rev), 0)::text AS all_rev,
+       COALESCE(SUM(cogs), 0)::text AS all_cogs,
+       COUNT(*)::text AS all_bills,
+       COALESCE(SUM(qty), 0)::text AS all_qty
+     FROM sales, now_ist`,
     [tenantId, branchIds]
   );
 
-  const empty = (): PeriodProfitMetric => ({
-    revenue: 0,
-    cost: 0,
-    profit: 0,
-    marginPct: 0,
-    bills: 0,
-    unitsSold: 0,
-  });
-
-  const out: PeriodProfitSummary = {
-    Today: empty(),
-    "This Week": empty(),
-    "This Month": empty(),
-    "This Year": empty(),
-    "All Time": empty(),
-  };
-
-  for (const row of res.rows) {
-    const key = row.bucket as ProfitPeriodKey;
-    if (!(key in out)) continue;
-    const revenue = Number(row.revenue || 0);
-    const cost = Number(row.cost || 0);
+  const row = res.rows[0];
+  const build = (revStr?: string, costStr?: string, billsStr?: string, qtyStr?: string): PeriodProfitMetric => {
+    const revenue = Number(revStr || 0);
+    const cost = Number(costStr || 0);
     const profit = revenue - cost;
-    out[key] = {
+    return {
       revenue,
       cost,
       profit,
       marginPct: revenue > 0 ? (profit / revenue) * 100 : 0,
-      bills: Number(row.bills || 0),
-      unitsSold: Number(row.units_sold || 0),
+      bills: Number(billsStr || 0),
+      unitsSold: Number(qtyStr || 0),
     };
-  }
-  return out;
+  };
+
+  return {
+    Today: build(row?.today_rev, row?.today_cogs, row?.today_bills, row?.today_qty),
+    "This Week": build(row?.week_rev, row?.week_cogs, row?.week_bills, row?.week_qty),
+    "This Month": build(row?.month_rev, row?.month_cogs, row?.month_bills, row?.month_qty),
+    "This Year": build(row?.year_rev, row?.year_cogs, row?.year_bills, row?.year_qty),
+    "All Time": build(row?.all_rev, row?.all_cogs, row?.all_bills, row?.all_qty),
+  };
 }
 
 export async function loadStockValuation(
@@ -169,6 +158,12 @@ export async function loadStockValuation(
     model_code: string;
     product_name: string;
     category: string | null;
+    brand: string | null;
+    hsn_code: string | null;
+    primary_image_key: string | null;
+    variant_count: string;
+    sizes: string[] | null;
+    colours: string[] | null;
     uom: string;
     stock_qty: string;
     unit_cost: string;
@@ -183,6 +178,20 @@ export async function loadStockValuation(
        p.model_code,
        p.name AS product_name,
        COALESCE(NULLIF(TRIM(p.category), ''), 'Uncategorized') AS category,
+       p.brand,
+       p.hsn_code,
+       p.primary_image_key,
+       COUNT(DISTINCT pv.id)::text AS variant_count,
+       COALESCE(
+         ARRAY_AGG(DISTINCT NULLIF(TRIM(COALESCE(pv.attributes->>'size', pv.attributes->>'Size', '')), ''))
+           FILTER (WHERE NULLIF(TRIM(COALESCE(pv.attributes->>'size', pv.attributes->>'Size', '')), '') IS NOT NULL),
+         '{}'::text[]
+       ) AS sizes,
+       COALESCE(
+         ARRAY_AGG(DISTINCT NULLIF(TRIM(COALESCE(pv.attributes->>'colour', pv.attributes->>'Colour', pv.attributes->>'color', pv.attributes->>'Color', '')), ''))
+           FILTER (WHERE NULLIF(TRIM(COALESCE(pv.attributes->>'colour', pv.attributes->>'Colour', pv.attributes->>'color', pv.attributes->>'Color', '')), '') IS NOT NULL),
+         '{}'::text[]
+       ) AS colours,
        p.uom,
        COALESCE(SUM(bs.quantity), 0)::text AS stock_qty,
        COALESCE(AVG(CASE WHEN pv.avg_cost > 0 THEN pv.avg_cost ELSE pv.cost_price END), 0)::text AS unit_cost,
@@ -198,7 +207,7 @@ export async function loadStockValuation(
       AND bs.tenant_id = p.tenant_id
       AND bs.branch_id = ANY($2::uuid[])
      WHERE p.tenant_id = $1 AND p.is_active = true
-     GROUP BY p.id, p.model_code, p.name, p.category, p.uom
+     GROUP BY p.id, p.model_code, p.name, p.category, p.brand, p.hsn_code, p.primary_image_key, p.uom
      ORDER BY COALESCE(SUM(COALESCE(bs.quantity, 0) * pv.selling_price), 0) DESC, p.name ASC`,
     [tenantId, branchIds]
   );
@@ -212,6 +221,12 @@ export async function loadStockValuation(
       model_code: r.model_code,
       product_name: r.product_name,
       category: r.category || "Uncategorized",
+      brand: r.brand || null,
+      hsn_code: r.hsn_code || null,
+      thumb_url: r.primary_image_key ? getPublicAssetUrl(deriveThumbKey(r.primary_image_key)) : null,
+      variant_count: Number(r.variant_count || 0),
+      sizes: Array.isArray(r.sizes) ? r.sizes : [],
+      colours: Array.isArray(r.colours) ? r.colours : [],
       uom: r.uom || "Pair",
       stock_qty: Number(r.stock_qty || 0),
       unit_cost: Number(r.unit_cost || 0),

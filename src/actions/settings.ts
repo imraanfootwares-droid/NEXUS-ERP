@@ -8,7 +8,7 @@ import { excelKeyFor, runTenantBackup } from "@/lib/backups/exporter";
 import { PERMISSION_PARENT_MAP, type TenantRole } from "@/lib/constants/saas";
 import { withTenantTx } from "@/lib/db";
 import { deleteObject, getPresignedDownloadUrl, headObject } from "@/lib/storage/s3-client";
-import type { BrandConfig, CategoryTemplate, LedgerConfig, RatioPreset, TaxConfig } from "@/types/database";
+import type { BrandConfig, BusinessBillingProfile, CategoryTemplate, LedgerConfig, RatioPreset, TaxConfig } from "@/types/database";
 
 export async function updateBrandConfigAction(
   brand: BrandConfig,
@@ -48,6 +48,58 @@ export async function updateBrandConfigAction(
   });
 
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard");
+}
+
+export async function updateBusinessBillingProfileAction(input: BusinessBillingProfile) {
+  const ctx = await getServerSessionContext();
+  if (!ctx || !ctx.tenant) throw new Error("Unauthorized");
+  if (ctx.impersonation?.mode === "read") throw new Error("Read-only support session.");
+  if (ctx.user.role !== "owner" && ctx.user.role !== "branch_admin") {
+    throw new Error("Only the Shop Owner or Branch Manager can update shop & bank details.");
+  }
+
+  const clean = (v?: string) => (v ? v.trim() : "");
+  const cleanGstin = clean(input.gstin).toUpperCase();
+  const cleanIfsc = clean(input.bank_details?.ifsc_code).toUpperCase();
+
+  const businessProfile: BusinessBillingProfile = {
+    business_name: clean(input.business_name) || ctx.tenant.name,
+    address: clean(input.address) || undefined,
+    phone: clean(input.phone) || undefined,
+    email: clean(input.email).toLowerCase() || undefined,
+    gstin: cleanGstin || undefined,
+    signatory_name: clean(input.signatory_name) || clean(input.business_name) || ctx.tenant.name,
+    bank_details: {
+      account_holder: clean(input.bank_details?.account_holder) || undefined,
+      bank_name: clean(input.bank_details?.bank_name) || undefined,
+      account_number: clean(input.bank_details?.account_number) || undefined,
+      ifsc_code: cleanIfsc || undefined,
+      branch_name: clean(input.bank_details?.branch_name) || undefined,
+      upi_id: clean(input.bank_details?.upi_id) || undefined,
+    },
+  };
+
+  const tenant = ctx.tenant;
+  const nextBrand: BrandConfig = {
+    ...tenant.brand_config,
+    address: businessProfile.address ?? tenant.brand_config?.address,
+    phone: businessProfile.phone ?? tenant.brand_config?.phone,
+    email: businessProfile.email ?? tenant.brand_config?.email,
+    business_profile: businessProfile,
+  };
+
+  await withTenantTx({ tenantId: tenant.id, isPlatformAdmin: ctx.user.is_platform_admin }, async (client) => {
+    await client.query("UPDATE public.tenants SET brand_config = $1 WHERE id = $2", [
+      JSON.stringify(nextBrand),
+      tenant.id,
+    ]);
+  });
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/bill-designer");
+  revalidatePath("/dashboard/billing");
+  revalidatePath("/dashboard/billing/new");
   revalidatePath("/dashboard");
 }
 

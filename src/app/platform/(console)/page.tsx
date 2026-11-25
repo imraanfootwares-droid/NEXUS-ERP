@@ -27,55 +27,53 @@ export default async function PlatformOverviewPage() {
   const ctx = await getServerSessionContext();
 
   const data = await withPlatformTx(async (client) => {
-    const [tenantsRes, usersRes, resetsRes, auditsRes, trendRes] = await Promise.all([
-      client.query<{
-        id: string;
-        name: string;
-        slug: string;
-        vertical_key: string;
-        tier: TierKey;
-        status: string;
-        max_users: number;
-        storage_used_bytes: string;
-        max_storage_mb: number;
-        created_at: string;
-        feature_overrides: Record<string, boolean>;
-      }>(
-        "SELECT id, name, slug, vertical_key, tier, status, max_users, storage_used_bytes, max_storage_mb, created_at, feature_overrides FROM public.tenants ORDER BY created_at DESC"
-      ),
-      client.query<{
-        tenant_id: string | null;
-        role: string;
-        is_active: boolean;
-        created_at: string;
-      }>("SELECT tenant_id, role, is_active, created_at FROM public.profiles WHERE is_platform_admin = false"),
-      client.query<{
-        id: string;
-        user_id: string;
-        identifier_submitted: string;
-        note: string | null;
-        created_at: string;
-        tenant_name: string | null;
-        full_name: string | null;
-        role: string | null;
-      }>(
-        `SELECT r.id, r.user_id, r.identifier_submitted, r.note, r.created_at,
-                t.name AS tenant_name, p.full_name, p.role
-         FROM public.password_reset_requests r
-         LEFT JOIN public.tenants t ON t.id = r.tenant_id
-         LEFT JOIN public.profiles p ON p.id = r.user_id
-         WHERE r.status = 'pending'
-         ORDER BY r.created_at DESC
-         LIMIT 20`
-      ),
-      client.query<{
-        id: string;
-        action: string;
-        entity_type: string | null;
-        created_at: string;
-      }>("SELECT id, action, entity_type, created_at FROM public.audit_logs ORDER BY created_at DESC LIMIT 20"),
-      client.query<TrendBucketRow>(trendBucketsSql(false)),
-    ]);
+    const tenantsRes = await client.query<{
+      id: string;
+      name: string;
+      slug: string;
+      vertical_key: string;
+      tier: TierKey;
+      status: string;
+      max_users: number;
+      storage_used_bytes: string;
+      max_storage_mb: number;
+      created_at: string;
+      feature_overrides: Record<string, boolean>;
+    }>(
+      "SELECT id, name, slug, vertical_key, tier, status, max_users, storage_used_bytes, max_storage_mb, created_at, feature_overrides FROM public.tenants ORDER BY created_at DESC"
+    );
+    const usersRes = await client.query<{
+      tenant_id: string | null;
+      role: string;
+      is_active: boolean;
+      created_at: string;
+    }>("SELECT tenant_id, role, is_active, created_at FROM public.profiles WHERE is_platform_admin = false");
+    const resetsRes = await client.query<{
+      id: string;
+      user_id: string;
+      identifier_submitted: string;
+      note: string | null;
+      created_at: string;
+      tenant_name: string | null;
+      full_name: string | null;
+      role: string | null;
+    }>(
+      `SELECT r.id, r.user_id, r.identifier_submitted, r.note, r.created_at,
+              t.name AS tenant_name, p.full_name, p.role
+       FROM public.password_reset_requests r
+       LEFT JOIN public.tenants t ON t.id = r.tenant_id
+       LEFT JOIN public.profiles p ON p.id = r.user_id
+       WHERE r.status = 'pending'
+       ORDER BY r.created_at DESC
+       LIMIT 20`
+    );
+    const auditsRes = await client.query<{
+      id: string;
+      action: string;
+      entity_type: string | null;
+      created_at: string;
+    }>("SELECT id, action, entity_type, created_at FROM public.audit_logs ORDER BY created_at DESC LIMIT 20");
+    const trendRes = await client.query<TrendBucketRow>(trendBucketsSql(false));
 
     return {
       tenants: tenantsRes.rows,

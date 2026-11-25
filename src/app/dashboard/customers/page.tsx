@@ -34,28 +34,56 @@ export default async function CustomersPage({
       const [customersRes, suppliersRes, catalogProductsRes] = await Promise.all([
         customersEnabled
           ? client.query<CustomerRow & { total_spent: string; oldest_due_days: number }>(
-              `SELECT c.*,
-                      COALESCE((SELECT SUM(i.grand_total) FROM public.invoices i WHERE i.customer_id = c.id AND i.status NOT IN ('draft','cancelled') AND i.invoice_type = 'sale'), 0)::text AS total_spent,
-                      COALESCE((SELECT EXTRACT(DAY FROM (now() - MIN(i.created_at)))::int FROM public.invoices i WHERE i.customer_id = c.id AND i.due_amount > 0 AND i.status NOT IN ('draft','cancelled')), 0) AS oldest_due_days
+              `WITH inv_stats AS (
+                 SELECT customer_id,
+                        COALESCE(SUM(grand_total) FILTER (WHERE invoice_type = 'sale'), 0) AS total_spent,
+                        MIN(created_at) FILTER (WHERE due_amount > 0) AS oldest_due_at
+                 FROM public.invoices
+                 WHERE tenant_id = $1 AND customer_id IS NOT NULL AND status NOT IN ('draft','cancelled')
+                 GROUP BY customer_id
+               )
+               SELECT c.id, c.tenant_id, c.name, c.phone, c.email, c.gstin, c.state_code, c.address,
+                      c.customer_type, c.default_discount_pct, c.credit_limit, c.credit_days,
+                      c.current_due, c.credit_balance, c.is_active, c.updated_at,
+                      COALESCE(s.total_spent, 0)::text AS total_spent,
+                      COALESCE(EXTRACT(DAY FROM (now() - s.oldest_due_at))::int, 0) AS oldest_due_days
                FROM public.customers c
+               LEFT JOIN inv_stats s ON s.customer_id = c.id
                WHERE c.tenant_id = $1 AND c.is_active = true
-               ORDER BY c.current_due DESC, c.name ASC`,
+               ORDER BY c.current_due DESC, c.name ASC
+               LIMIT 500`,
               [ctx.tenant!.id]
             )
           : Promise.resolve({ rows: [] as Array<CustomerRow & { total_spent: string; oldest_due_days: number }> }),
         suppliersEnabled
           ? client.query<SupplierLedgerRow>(
-              `SELECT s.id, s.name, s.phone, s.gstin, s.state_code, s.address, s.material_type,
+              `WITH po_stats AS (
+                 SELECT supplier_id,
+                        COALESCE(SUM(total_amount), 0) AS total_purchased,
+                        COUNT(*)::int AS bill_count
+                 FROM public.purchase_orders
+                 WHERE tenant_id = $1
+                 GROUP BY supplier_id
+               ),
+               prod_links AS (
+                 SELECT supplier_id,
+                        array_agg(name || ' (' || model_code || ')' ORDER BY name) AS linked_products
+                 FROM public.products
+                 WHERE tenant_id = $1 AND supplier_id IS NOT NULL AND is_active = true
+                 GROUP BY supplier_id
+               )
+               SELECT s.id, s.name, s.phone, s.gstin, s.state_code, s.address, s.material_type,
                       COALESCE(s.supplied_products, '{}'::text[]) AS supplied_products,
-                      COALESCE((SELECT array_agg(p.name || ' (' || p.model_code || ')' ORDER BY p.name)
-                                FROM public.products p
-                                WHERE p.supplier_id = s.id AND p.tenant_id = s.tenant_id AND p.is_active = true), '{}'::text[]) AS linked_products,
+                      COALESCE(pl.linked_products, '{}'::text[]) AS linked_products,
                       s.current_due::text,
-                      COALESCE((SELECT SUM(po.total_amount) FROM public.purchase_orders po WHERE po.supplier_id = s.id AND po.tenant_id = s.tenant_id), 0)::text AS total_purchased,
-                      COALESCE((SELECT COUNT(*)::int FROM public.purchase_orders po WHERE po.supplier_id = s.id AND po.tenant_id = s.tenant_id), 0) AS bill_count
+                      COALESCE(ps.total_purchased, 0)::text AS total_purchased,
+                      COALESCE(ps.bill_count, 0) AS bill_count
                FROM public.suppliers s
+               LEFT JOIN po_stats ps ON ps.supplier_id = s.id
+               LEFT JOIN prod_links pl ON pl.supplier_id = s.id
                WHERE s.tenant_id = $1
-               ORDER BY s.current_due DESC, s.name ASC`,
+               ORDER BY s.current_due DESC, s.name ASC
+               LIMIT 500`,
               [ctx.tenant!.id]
             )
           : Promise.resolve({ rows: [] as SupplierLedgerRow[] }),

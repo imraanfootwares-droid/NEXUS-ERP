@@ -39,6 +39,25 @@ export interface CategoryTemplate {
   extra_fields: string[];
 }
 
+export interface SellerBankDetails {
+  account_holder?: string;
+  bank_name?: string;
+  account_number?: string;
+  ifsc_code?: string;
+  branch_name?: string;
+  upi_id?: string;
+}
+
+export interface BusinessBillingProfile {
+  business_name?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  gstin?: string;
+  signatory_name?: string;
+  bank_details?: SellerBankDetails;
+}
+
 export interface BrandConfig {
   logo_key?: string | null;
   logo_thumb_key?: string | null;
@@ -51,6 +70,7 @@ export interface BrandConfig {
   email?: string;
   manufacturer_info?: string;
   customer_care?: string;
+  business_profile?: BusinessBillingProfile;
   pos_ui?: PosUiConfig;
   ledger_config?: LedgerConfig;
   category_templates?: CategoryTemplate[];
@@ -113,6 +133,9 @@ export interface TenantRow {
   max_users: number;
   max_branches: number;
   max_storage_mb: number;
+  max_product_photos?: number;
+  max_revisions_per_bill?: number;
+  revision_retention_days?: number;
   storage_used_bytes: number;
   amc_renewal_date: string | null;
   feature_overrides: Partial<Record<FeatureKey, boolean>>;
@@ -291,9 +314,29 @@ export interface CustomerRow {
 }
 
 export type BillFormat = "a4" | "a5" | "thermal_80mm" | "thermal_58mm";
-export type BillDesignStyle = "classic" | "modern" | "minimal" | "bordered" | "bold" | "gst_full";
+export type BillCategory = "normal" | "gst";
+export type BillDesignStyle =
+  | "classic"
+  | "modern"
+  | "minimal"
+  | "bordered"
+  | "bold"
+  | "gst_full"
+  // 5 Creative GST Bill Layouts
+  | "gst_classic_grid"
+  | "gst_executive_band"
+  | "gst_sidebar_accent"
+  | "gst_royal_frame"
+  | "gst_compact_split"
+  // 5 Creative Normal Bill Layouts
+  | "normal_clean"
+  | "normal_banner"
+  | "normal_boutique"
+  | "normal_cash_memo"
+  | "normal_counter";
 
 export interface BillTemplateConfig {
+  bill_category?: BillCategory;
   header_title: string;
   header_subtitle: string;
   footer_note: string;
@@ -306,6 +349,9 @@ export interface BillTemplateConfig {
   show_discount: boolean;
   show_custom_fields: boolean;
   show_upi_qr: boolean;
+  show_bank_details?: boolean;
+  show_ship_to?: boolean;
+  copy_label?: string;
   upi_id?: string;
   bank_details?: string;
 }

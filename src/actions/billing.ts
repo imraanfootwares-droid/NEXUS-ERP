@@ -6,7 +6,8 @@ import { linkWalkInCustomer } from "@/lib/billing/walk-in-customer";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import { loadInvoiceRenderProps } from "@/lib/billing/invoice-render-props";
-import type { BillTemplateConfig, PaymentMode } from "@/types/database";
+import { recordBillRevision } from "@/lib/billing/revisions";
+import type { BillTemplateConfig, CustomerRow, PaymentMode } from "@/types/database";
 
 export async function createOrFinalizeInvoiceAction(payload: Record<string, unknown>) {
   const ctx = await getServerSessionContext();
@@ -73,19 +74,43 @@ export async function cancelInvoiceAction(invoiceId: string, reason: string) {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "billing.cancel", { isMutation: true });
 
+  const cleanReason = reason.trim() || "Cancelled by admin";
   await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
+      const preRes = await client.query(
+        "SELECT id, invoice_number, status, grand_total, customer_snapshot FROM public.invoices WHERE id = $1 AND tenant_id = $2",
+        [invoiceId, ctx.tenant.id]
+      );
+      const pre = preRes.rows[0];
+
       await client.query("SELECT public.cancel_invoice_atomic($1, $2, $3, $4)", [
         ctx.tenant.id,
         invoiceId,
         ctx.user.id,
-        reason.trim() || "Cancelled by admin",
+        cleanReason,
       ]);
+
+      if (pre) {
+        await recordBillRevision(client, {
+          tenantId: ctx.tenant.id,
+          entityType: "invoice",
+          entityId: invoiceId,
+          entityLabel: pre.invoice_number || "DRAFT",
+          action: "cancelled",
+          summary: `Cancelled bill ${pre.invoice_number || "DRAFT"} — ${cleanReason}`,
+          changes: [{ field: "Status", before: String(pre.status || "active"), after: "cancelled" }],
+          beforeSnapshot: { status: pre.status, grand_total: Number(pre.grand_total || 0), customer_snapshot: pre.customer_snapshot },
+          afterSnapshot: { status: "cancelled", reason: cleanReason },
+          actorId: ctx.user.id,
+          actorName: ctx.user.full_name,
+        });
+      }
     }
   );
 
   revalidatePath("/dashboard/billing");
+  revalidatePath("/dashboard/customers", "layout");
   revalidatePath("/dashboard/stock");
   revalidatePath("/dashboard");
 }
@@ -275,9 +300,20 @@ export async function saveBillTemplateAction(input: {
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
       if (input.isDefault) {
-        await client.query("UPDATE public.bill_templates SET is_default = false WHERE tenant_id = $1", [
-          ctx.tenant.id,
-        ]);
+        const category = input.config.bill_category;
+        if (category === "gst" || category === "normal") {
+          await client.query(
+            `UPDATE public.bill_templates
+             SET is_default = false
+             WHERE tenant_id = $1
+               AND COALESCE(config->>'bill_category', CASE WHEN (config->>'show_gst_summary')::boolean IS FALSE THEN 'normal' ELSE 'gst' END) = $2`,
+            [ctx.tenant.id, category]
+          );
+        } else {
+          await client.query("UPDATE public.bill_templates SET is_default = false WHERE tenant_id = $1", [
+            ctx.tenant.id,
+          ]);
+        }
       }
       if (input.id) {
         await client.query(
@@ -293,6 +329,8 @@ export async function saveBillTemplateAction(input: {
     }
   );
   revalidatePath("/dashboard/bill-designer");
+  revalidatePath("/dashboard/billing");
+  revalidatePath("/dashboard/billing/new");
 }
 
 export async function savePosScreenLayoutAction(posUi: {
@@ -412,4 +450,51 @@ export async function getInvoicePreviewAction(invoiceId: string) {
   );
   if (!props) return { ok: false as const, error: "This bill was not found. It may have been deleted." };
   return { ok: true as const, ...props };
+}
+
+/** Fast server-side customer search for the Right Customer Sidebar (scales to 1,000+ customers). */
+export async function searchCustomersForBillingAction(
+  queryText: string,
+  filterType?: "all" | "wholesale" | "retail" | "due"
+): Promise<{ customers: CustomerRow[]; total: number }> {
+  const ctx = await getServerSessionContext();
+  assertAccess(ctx, "billing.create");
+  const tenant = ctx.tenant;
+  const q = queryText.trim();
+
+  return withTenantTx(
+    { tenantId: tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
+    async (client) => {
+      const params: unknown[] = [tenant.id];
+      const where: string[] = ["tenant_id = $1", "is_active = true"];
+
+      if (q.length > 0) {
+        params.push(`%${q}%`);
+        const idx = params.length;
+        where.push(`(name ILIKE $${idx} OR COALESCE(phone, '') ILIKE $${idx} OR COALESCE(gstin, '') ILIKE $${idx})`);
+      }
+      if (filterType === "wholesale" || filterType === "retail") {
+        params.push(filterType);
+        where.push(`customer_type = $${params.length}`);
+      } else if (filterType === "due") {
+        where.push("current_due > 0");
+      }
+
+      const whereSql = where.join(" AND ");
+      const countRes = await client.query<{ cnt: string }>(
+        `SELECT COUNT(*)::text AS cnt FROM public.customers WHERE ${whereSql}`,
+        params
+      );
+      const rowsRes = await client.query<CustomerRow>(
+        `SELECT id, tenant_id, name, phone, email, gstin, state_code, address, customer_type,
+                default_discount_pct, credit_limit, credit_days, current_due, credit_balance, is_active, updated_at
+         FROM public.customers WHERE ${whereSql} ORDER BY name ASC LIMIT 60`,
+        params
+      );
+      return {
+        customers: rowsRes.rows,
+        total: Number(countRes.rows[0]?.cnt ?? 0),
+      };
+    }
+  );
 }

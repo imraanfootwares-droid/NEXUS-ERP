@@ -2,9 +2,9 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, BarChart3, Download, Plus } from "lucide-react";
+import { AlertTriangle, ArrowRight, BarChart3, Download, Package, Plus } from "lucide-react";
 import { formatCompactInr, percentChange, type TrendPoint, type TrendSeries } from "@/lib/analytics/trend";
-import type { PeriodProfitSummary, StockValuationReport } from "@/lib/analytics/stock-valuation";
+import type { StockValuationReport } from "@/lib/analytics/stock-valuation";
 import { Alert } from "@/components/ui/primitives";
 import {
   NeedleChart,
@@ -64,8 +64,6 @@ export function DashboardAnalyticsClient({
   recentInvoices,
   stock,
   stockValuation,
-  periodProfit,
-  showCostAndProfit = true,
   inTransitCount,
   oversoldCount,
 }: {
@@ -82,12 +80,10 @@ export function DashboardAnalyticsClient({
   recentInvoices: RecentInvoiceRow[];
   stock: { total_qty: string; stock_val: string };
   stockValuation?: StockValuationReport | null;
-  periodProfit?: PeriodProfitSummary | null;
-  showCostAndProfit?: boolean;
   inTransitCount: number;
   oversoldCount: number;
 }) {
-  const [stockAlertFilter, setStockAlertFilter] = useState<"All" | "Red" | "Yellow" | "Green">("All");
+  const [stockAlertFilter, setStockAlertFilter] = useState<"All" | "Out of Stock" | "Low Stock" | "In Stock">("All");
   const days = trend.Weekly;
   const months = trend.Yearly;
   const today = days[days.length - 1];
@@ -284,126 +280,224 @@ export function DashboardAnalyticsClient({
         const yellowItems = ranked.filter((p) => p.stock_qty > 0 && p.stock_qty <= LOW_LIMIT);
         const greenItems = ranked.filter((p) => p.stock_qty > LOW_LIMIT);
         const shown =
-          stockAlertFilter === "Red"
+          stockAlertFilter === "Out of Stock"
             ? redItems
-            : stockAlertFilter === "Yellow"
+            : stockAlertFilter === "Low Stock"
             ? yellowItems
-            : stockAlertFilter === "Green"
+            : stockAlertFilter === "In Stock"
             ? greenItems
             : ranked;
 
         return (
           <TrayCard
-            title="Stock Health & Replenish Alerts"
+            title="Stock Status & Reorder Alerts"
             action={
               <div className="flex flex-wrap items-center gap-2">
                 <Segmented
                   label="Filter stock status"
-                  options={["All", "Red", "Yellow", "Green"] as const}
+                  options={["All", "Out of Stock", "Low Stock", "In Stock"] as const}
                   value={stockAlertFilter}
                   onChange={setStockAlertFilter}
                 />
                 <Link
                   href="/dashboard/valuation"
-                  className="inline-flex items-center gap-1 rounded-lg bg-[#171717] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#2a2a2a]"
+                  className="inline-flex h-[30px] items-center gap-1.5 rounded-lg bg-[#171717] px-2.5 text-xs font-medium text-white transition-colors hover:bg-[#2a2a2a]"
                 >
-                  <BarChart3 className="h-3.5 w-3.5" /> Valuation &amp; Graph →
+                  <BarChart3 className="h-3.5 w-3.5" /> Stock Value &amp; Graph →
                 </Link>
               </div>
             }
           >
-            <div className="space-y-3 p-3 sm:p-4">
-              {/* Red / Yellow / Green summary banner */}
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="space-y-4 p-3.5 sm:p-4">
+              {/* Clean 3-Card Status Summary */}
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                 <button
                   type="button"
-                  onClick={() => setStockAlertFilter("Red")}
-                  className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-left transition-colors hover:bg-rose-100/80 cursor-pointer"
+                  onClick={() => setStockAlertFilter(stockAlertFilter === "Out of Stock" ? "All" : "Out of Stock")}
+                  className={`flex cursor-pointer items-center justify-between rounded-xl border bg-white p-3.5 text-left transition-all ${
+                    stockAlertFilter === "Out of Stock"
+                      ? "border-rose-500 ring-2 ring-rose-500/15"
+                      : "border-[#ececee] hover:border-rose-300"
+                  }`}
                 >
-                  <span className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full bg-rose-600" />
-                    <span className="text-xs font-bold text-rose-900">Out of Stock (Order Now)</span>
-                  </span>
-                  <span className="font-mono text-sm font-bold text-rose-700">{redItems.length}</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="h-9 w-1.5 rounded-full bg-rose-500" />
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-700">Out of Stock</p>
+                      <p className="text-[11px] text-[#77777d]">Order or add stock now</p>
+                    </div>
+                  </div>
+                  <span className="font-mono text-xl font-bold text-rose-600">{redItems.length}</span>
                 </button>
+
                 <button
                   type="button"
-                  onClick={() => setStockAlertFilter("Yellow")}
-                  className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-left transition-colors hover:bg-amber-100/80 cursor-pointer"
+                  onClick={() => setStockAlertFilter(stockAlertFilter === "Low Stock" ? "All" : "Low Stock")}
+                  className={`flex cursor-pointer items-center justify-between rounded-xl border bg-white p-3.5 text-left transition-all ${
+                    stockAlertFilter === "Low Stock"
+                      ? "border-amber-500 ring-2 ring-amber-500/15"
+                      : "border-[#ececee] hover:border-amber-300"
+                  }`}
                 >
-                  <span className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full bg-amber-500" />
-                    <span className="text-xs font-bold text-amber-900">Running Low (≤ {LOW_LIMIT})</span>
-                  </span>
-                  <span className="font-mono text-sm font-bold text-amber-700">{yellowItems.length}</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="h-9 w-1.5 rounded-full bg-amber-500" />
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Running Low</p>
+                      <p className="text-[11px] text-[#77777d]">1 to {LOW_LIMIT} units left</p>
+                    </div>
+                  </div>
+                  <span className="font-mono text-xl font-bold text-amber-600">{yellowItems.length}</span>
                 </button>
+
                 <button
                   type="button"
-                  onClick={() => setStockAlertFilter("Green")}
-                  className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-left transition-colors hover:bg-emerald-100/80 cursor-pointer"
+                  onClick={() => setStockAlertFilter(stockAlertFilter === "In Stock" ? "All" : "In Stock")}
+                  className={`flex cursor-pointer items-center justify-between rounded-xl border bg-white p-3.5 text-left transition-all ${
+                    stockAlertFilter === "In Stock"
+                      ? "border-emerald-500 ring-2 ring-emerald-500/15"
+                      : "border-[#ececee] hover:border-emerald-300"
+                  }`}
                 >
-                  <span className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full bg-emerald-600" />
-                    <span className="text-xs font-bold text-emerald-900">Good Stock</span>
-                  </span>
-                  <span className="font-mono text-sm font-bold text-emerald-700">{greenItems.length}</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="h-9 w-1.5 rounded-full bg-emerald-500" />
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Good Stock</p>
+                      <p className="text-[11px] text-[#77777d]">Ready for billing</p>
+                    </div>
+                  </div>
+                  <span className="font-mono text-xl font-bold text-emerald-600">{greenItems.length}</span>
                 </button>
               </div>
 
-              {/* Product stock status list */}
+              {/* Product Cards with Photo & Details */}
               {shown.length === 0 ? (
-                <p className="py-6 text-center text-xs text-[#77777d]">No products in this stock status.</p>
+                <div className="rounded-xl border border-dashed border-[#e4e4e7] bg-[#fafafa] py-8 text-center text-xs text-[#77777d]">
+                  No products in this stock status.
+                </div>
               ) : (
-                <div className="divide-y divide-[#f1f1f2] rounded-xl border border-[#ececee] bg-white">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   {shown.slice(0, 12).map((p) => {
                     const status = p.stock_qty <= 0 ? "red" : p.stock_qty <= LOW_LIMIT ? "yellow" : "green";
+                    const metaLine = [p.model_code, p.category, p.brand, p.hsn_code ? `HSN ${p.hsn_code}` : null]
+                      .filter(Boolean)
+                      .join(" · ");
+                    const sizesText = p.sizes && p.sizes.length > 0 ? p.sizes.slice(0, 6).join(", ") : null;
+                    const coloursText = p.colours && p.colours.length > 0 ? p.colours.slice(0, 4).join(", ") : null;
+
                     return (
                       <div
                         key={p.product_id}
-                        className={`flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 text-xs ${
+                        className={`flex flex-col justify-between gap-3 rounded-xl border bg-white p-3.5 transition-all hover:shadow-xs ${
                           status === "red"
-                            ? "bg-rose-50/40"
+                            ? "border-rose-200/90 bg-rose-50/20"
                             : status === "yellow"
-                            ? "bg-amber-50/40"
-                            : ""
+                            ? "border-amber-200/90 bg-amber-50/20"
+                            : "border-[#ececee]"
                         }`}
                       >
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <span
-                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                              status === "red"
-                                ? "bg-rose-600"
-                                : status === "yellow"
-                                ? "bg-amber-500"
-                                : "bg-emerald-600"
-                            }`}
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold text-[#171717]">{p.product_name}</p>
-                            <p className="text-[11px] text-[#77777d]">
-                              {p.model_code} · {p.category}
-                            </p>
+                        <div className="flex items-start gap-3">
+                          {/* Product Photo */}
+                          <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-[#ececee] bg-[#fafafa] flex items-center justify-center">
+                            {p.thumb_url ? (
+                              <img
+                                src={p.thumb_url}
+                                alt={p.product_name}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <Package className="h-6 w-6 text-[#a3a3a8]" />
+                            )}
+                          </div>
+
+                          {/* Product Name & Details */}
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="truncate text-[13.5px] font-semibold text-[#171717]" title={p.product_name}>
+                                {p.product_name}
+                              </p>
+                              <span
+                                className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                                  status === "red"
+                                    ? "bg-rose-100 text-rose-800"
+                                    : status === "yellow"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-emerald-100 text-emerald-800"
+                                }`}
+                              >
+                                {status === "red"
+                                  ? "Out of Stock"
+                                  : status === "yellow"
+                                  ? "Low Stock"
+                                  : "In Stock"}
+                              </span>
+                            </div>
+
+                            <p className="truncate text-[11px] text-[#77777d]">{metaLine}</p>
+
+                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[10.5px]">
+                              {sizesText && (
+                                <span className="rounded-md bg-[#f4f4f5] px-1.5 py-0.5 text-[#3f3f46]">
+                                  Sizes: {sizesText}
+                                </span>
+                              )}
+                              {coloursText && (
+                                <span className="rounded-md bg-[#f4f4f5] px-1.5 py-0.5 text-[#3f3f46]">
+                                  {coloursText}
+                                </span>
+                              )}
+                              {!sizesText && !coloursText && p.variant_count ? (
+                                <span className="rounded-md bg-[#f4f4f5] px-1.5 py-0.5 text-[#3f3f46]">
+                                  {p.variant_count} {p.variant_count === 1 ? "option" : "options"}
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 font-mono text-[11px] font-bold ${
-                              status === "red"
-                                ? "bg-rose-100 text-rose-800"
-                                : status === "yellow"
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-emerald-100 text-emerald-800"
-                            }`}
-                          >
-                            {p.stock_qty <= 0
-                              ? "0 — Out of Stock"
-                              : `${p.stock_qty.toLocaleString("en-IN")} ${p.uom} left`}
-                          </span>
+
+                        {/* Price, Stock Count & Action Footer */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#f1f1f2] pt-2.5 text-xs">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <div>
+                              <span className="block text-[10px] text-[#77777d]">Stock Left</span>
+                              <span
+                                className={`font-mono text-[12.5px] font-bold ${
+                                  status === "red"
+                                    ? "text-rose-700"
+                                    : status === "yellow"
+                                    ? "text-amber-700"
+                                    : "text-[#171717]"
+                                }`}
+                              >
+                                {p.stock_qty <= 0 ? `0 ${p.uom}` : `${p.stock_qty.toLocaleString("en-IN")} ${p.uom}`}
+                              </span>
+                            </div>
+                            {p.unit_retail > 0 && (
+                              <div className="border-l border-[#ececee] pl-3">
+                                <span className="block text-[10px] text-[#77777d]">Retail Price</span>
+                                <span className="font-mono text-[12.5px] font-semibold text-[#171717]">
+                                  {inr(p.unit_retail)}
+                                </span>
+                              </div>
+                            )}
+                            {p.unit_wholesale > 0 && (
+                              <div className="border-l border-[#ececee] pl-3">
+                                <span className="block text-[10px] text-[#77777d]">Wholesale</span>
+                                <span className="font-mono text-[12.5px] font-semibold text-[#55555b]">
+                                  {inr(p.unit_wholesale)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
                           <Link
                             href="/dashboard/stock"
-                            className="text-[11px] font-semibold text-sky-700 hover:underline"
+                            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                              status === "red"
+                                ? "bg-rose-600 text-white hover:bg-rose-700"
+                                : "bg-[#f4f4f5] text-[#171717] hover:bg-[#e4e4e7]"
+                            }`}
                           >
-                            Add Stock →
+                            {status === "red" ? "Order / Add Stock →" : "Add Stock →"}
                           </Link>
                         </div>
                       </div>

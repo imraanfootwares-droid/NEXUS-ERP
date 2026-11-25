@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { assertAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { INDIAN_STATES } from "@/lib/constants/saas";
+import { resolveSellerProfile, selectTemplateForBill } from "@/lib/billing/seller-profile";
 import { withTenantTx } from "@/lib/db";
+import type { BillTemplateRow } from "@/types/database";
 import { renderCataloguePdfBuffer, renderChallanPdfBuffer, renderInvoicePdfBuffer } from "@/lib/pdf/documents";
 import { fetchImageForPdf } from "@/lib/pdf/image-helper";
 import { deriveThumbKey, getPublicAssetUrl } from "@/lib/storage/s3-client";
@@ -31,7 +33,7 @@ export async function GET(
       async (client) => {
         const [invRes, itemsRes, tplRes] = await Promise.all([
           client.query(
-            `SELECT i.*, b.name AS branch_name, b.address AS branch_address, b.gstin AS branch_gstin,
+            `SELECT i.*, b.name AS branch_name, b.address AS branch_address, b.phone AS branch_phone, b.gstin AS branch_gstin,
                     p.full_name AS creator_name, COALESCE(p.username, p.email) AS creator_login
              FROM public.invoices i
              JOIN public.branches b ON b.id = i.branch_id
@@ -43,27 +45,32 @@ export async function GET(
             "SELECT * FROM public.invoice_items WHERE invoice_id = $1 AND tenant_id = $2",
             [id, ctx.tenant!.id]
           ),
-          client.query<{
-            config: {
-              show_logo?: boolean;
-              show_hsn?: boolean;
-              show_gst_summary?: boolean;
-              accent_color?: string;
-              terms?: string;
-            };
-          }>(
-            "SELECT config FROM public.bill_templates WHERE tenant_id = $1 ORDER BY is_default DESC LIMIT 1",
+          client.query<BillTemplateRow>(
+            "SELECT * FROM public.bill_templates WHERE tenant_id = $1 ORDER BY is_default DESC, created_at ASC",
             [ctx.tenant!.id]
           ),
         ]);
         if (invRes.rows.length === 0) return null;
-        return { inv: invRes.rows[0], items: itemsRes.rows, tpl: tplRes.rows[0]?.config ?? null };
+        return { inv: invRes.rows[0], items: itemsRes.rows, templates: tplRes.rows };
       }
     );
 
     if (!invData) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
-    const { inv, items, tpl } = invData;
+    const { inv, items, templates } = invData;
+    const isGstBill =
+      inv.invoice_type !== "estimate_bill_of_supply" &&
+      (Number(inv.cgst_amount) > 0 ||
+        Number(inv.sgst_amount) > 0 ||
+        Number(inv.igst_amount) > 0 ||
+        items.some((it) => Number(it.gst_rate || 0) > 0));
+    const tpl = selectTemplateForBill(templates, isGstBill)?.config ?? null;
+    const seller = resolveSellerProfile(ctx.tenant, {
+      name: inv.branch_name,
+      address: inv.branch_address,
+      phone: inv.branch_phone,
+      gstin: inv.branch_gstin,
+    });
     const showLogo = tpl?.show_logo ?? true;
     const rawLogoKey = ctx.tenant.brand_config?.logo_key ?? null;
     const logoSource =
@@ -75,12 +82,16 @@ export async function GET(
       : null;
 
     const pdf = await renderInvoicePdfBuffer({
-      tenantName: ctx.tenant.name,
+      tenantName: seller.businessName,
       logoUrl: showLogo ? pdfSafeLogo : null,
       accentColor: tpl?.accent_color || ctx.tenant.brand_config?.primary_color || null,
       branchName: inv.branch_name,
-      branchAddress: inv.branch_address,
-      branchGstin: inv.branch_gstin,
+      branchAddress: seller.address,
+      branchPhone: seller.phone,
+      branchEmail: seller.email,
+      branchGstin: seller.gstin,
+      signatoryName: seller.signatoryName,
+      bankDetails: (tpl?.show_bank_details ?? true) && seller.hasBankDetails ? seller.bankDetails : null,
       invoiceNumber: inv.invoice_number || "DRAFT",
       invoiceType: inv.invoice_type,
       createdAt: inv.created_at,
@@ -89,6 +100,8 @@ export async function GET(
       customerPhone: inv.customer_snapshot?.phone,
       customerGstin: inv.customer_snapshot?.gstin,
       customerAddress: inv.customer_snapshot?.address || null,
+      shipToName: inv.customer_snapshot?.ship_to_name || null,
+      shipToAddress: inv.customer_snapshot?.ship_to_address || null,
       placeOfSupply: inv.customer_snapshot?.state_code
         ? INDIAN_STATES[inv.customer_snapshot.state_code]
           ? `${INDIAN_STATES[inv.customer_snapshot.state_code]} (${inv.customer_snapshot.state_code})`
@@ -106,8 +119,9 @@ export async function GET(
       paidAmount: Number(inv.paid_amount),
       dueAmount: Number(inv.due_amount),
       terms: tpl?.terms || undefined,
-      showHsn: tpl?.show_hsn ?? true,
-      showGst: tpl?.show_gst_summary ?? true,
+      footerNote: tpl?.footer_note || "THANKS FOR YOUR BUSINESS",
+      showHsn: tpl?.show_hsn ?? isGstBill,
+      showGst: isGstBill ? tpl?.show_gst_summary ?? true : false,
       items: items.map((it) => ({
         product_name: it.product_name,
         sku: it.sku,

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import {
+  FEATURE_DEPENDENCIES,
   FEATURE_KEYS,
   FEATURE_META,
   TIER_DEFAULT_FEATURES,
   TIER_META,
+  type FeatureKey,
   type TierKey,
 } from "@/lib/constants/saas";
 
@@ -12,7 +14,16 @@ export const dynamic = "force-dynamic";
 
 const TIERS = Object.keys(TIER_META) as TierKey[];
 
-/** Public data for the landing page: plans, what each includes, and where "Sign In" goes. */
+const NEW_FEATURE_KEYS = new Set<FeatureKey>([
+  "bill_designer",
+  "customer_crm",
+  "bill_edit_history",
+  "supplier_and_production",
+  "public_website_cms",
+  "customer_enquiries",
+]);
+
+/** Public data for the landing page: plans, all 20 modules, premium admin add-ons, and auth link. */
 export async function GET() {
   const plans = TIERS.map((key) => ({
     key,
@@ -24,16 +35,27 @@ export async function GET() {
     maxBranches: TIER_META[key].maxBranches,
   }));
 
-  const features = FEATURE_KEYS.map((key) => ({
-    key,
-    label: FEATURE_META[key].label,
-    category: FEATURE_META[key].category,
-    description: FEATURE_META[key].description,
-    tiers: Object.fromEntries(TIERS.map((tier) => [tier, TIER_DEFAULT_FEATURES[tier].includes(key)])),
-  }));
+  const features = FEATURE_KEYS.map((key) => {
+    const meta = FEATURE_META[key];
+    const isPremiumAddon = meta.minTier === "tier_3" || meta.minTier === "tier_4";
+    return {
+      key,
+      label: meta.label,
+      category: meta.category,
+      minTier: meta.minTier,
+      description: meta.description,
+      isNew: NEW_FEATURE_KEYS.has(key),
+      premiumAddon: isPremiumAddon,
+      requires: FEATURE_DEPENDENCIES[key] ?? [],
+      tiers: Object.fromEntries(TIERS.map((tier) => [tier, TIER_DEFAULT_FEATURES[tier].includes(key)])),
+    };
+  });
 
   // Keep the landing page decoupled from active sessions in other tabs so users always see Login.
   const account = { signedIn: false, href: "/login" };
 
-  return NextResponse.json({ plans, features, account }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json(
+    { plans, features, account },
+    { headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300" } }
+  );
 }

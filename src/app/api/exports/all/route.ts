@@ -12,7 +12,11 @@ export const maxDuration = 60;
 export async function GET(request: NextRequest) {
   const ctx = await getServerSessionContext();
   if (!ctx?.tenant) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canAccess(ctx, "backups.manage").allowed) {
+  // Tier 1 & 2 owners keep 1-click manual download; Tier 3+ also get automated daily R2 backups.
+  const canManualExport =
+    canAccess(ctx, "backups.manage").allowed ||
+    (ctx.user.role === "owner" && canAccess(ctx, "reports.export_gst").allowed);
+  if (!canManualExport) {
     return NextResponse.json({ error: "You do not have permission to export data." }, { status: 403 });
   }
   const format = request.nextUrl.searchParams.get("format") ?? "xlsx";

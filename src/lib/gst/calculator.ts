@@ -278,8 +278,12 @@ function threeDigits(n: number): string {
 }
 
 export function amountInWordsIndian(amount: number): string {
-  const whole = Math.floor(Math.abs(amount));
-  if (whole === 0) return "Rupees Zero Only";
+  const abs = Math.abs(Number(amount) || 0);
+  const totalPaise = Math.round(abs * 100);
+  const whole = Math.floor(totalPaise / 100);
+  const paise = totalPaise % 100;
+
+  if (whole === 0 && paise === 0) return "Rupees Zero Only";
 
   const crore = Math.floor(whole / 10000000);
   const lakh = Math.floor((whole % 10000000) / 100000);
@@ -292,5 +296,9 @@ export function amountInWordsIndian(amount: number): string {
   if (thousand) parts.push(`${twoDigits(thousand)} Thousand`);
   if (rest) parts.push(threeDigits(rest));
 
-  return `Rupees ${parts.join(" ")} Only`;
+  const rupeeText = parts.length > 0 ? parts.join(" ") : "Zero";
+  if (paise > 0) {
+    return `Rupees ${rupeeText} and ${twoDigits(paise)} Paise Only`;
+  }
+  return `Rupees ${rupeeText} Only`;
 }

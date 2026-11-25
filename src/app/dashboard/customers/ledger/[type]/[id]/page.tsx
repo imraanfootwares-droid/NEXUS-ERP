@@ -100,6 +100,7 @@ export default async function PartyLedgerPage({
     partyType === "customer"
       ? canAccess(ctx, "customers.manage", { isMutation: true }).allowed
       : canAccess(ctx, "suppliers.manage", { isMutation: true }).allowed;
+  const canUseHistory = canAccess(ctx, "billing.history").allowed;
 
   return (
     <PartyLedgerClient
@@ -107,6 +108,7 @@ export default async function PartyLedgerPage({
       statement={statement}
       ledgerConfig={ledgerConfig}
       canEdit={canEdit}
+      canUseHistory={canUseHistory}
       actions={
         details ? (
           <PartyActionsBar

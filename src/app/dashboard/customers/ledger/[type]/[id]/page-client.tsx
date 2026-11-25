@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Download,
+  FileEdit,
   FileSpreadsheet,
   FileText,
+  History,
   Pencil,
   Plus,
   Settings,
@@ -18,7 +20,14 @@ import {
   deleteManualPartyLedgerEntryAction,
   savePartyLedgerEntryAction,
 } from "@/actions/party-ledger";
-import { Form, Badge, Button, Card, CardContent, Dialog, Input, Label } from "@/components/ui/primitives";
+import {
+  deleteInvoiceAction,
+  deletePurchaseOrderAction,
+} from "@/actions/bill-revisions";
+import { RevisionHistoryDialog } from "@/components/billing/revision-history-dialog";
+import { PurchaseEditDialog } from "@/components/ledger/purchase-edit-dialog";
+import type { RevisionEntityType } from "@/lib/billing/revisions";
+import { Form, Badge, Button, Dialog, Input, Label } from "@/components/ui/primitives";
 import { StatTray } from "@/components/ui/spark";
 import type {
   LedgerItemLine,
@@ -39,12 +48,14 @@ export function PartyLedgerClient({
   statement,
   ledgerConfig,
   canEdit,
+  canUseHistory = false,
   actions,
 }: {
   tenantName: string;
   statement: PartyLedgerStatement;
   ledgerConfig: LedgerConfig;
   canEdit: boolean;
+  canUseHistory?: boolean;
   /** Add / Deduct, Remind, Edit, Delete — rendered under the party name. */
   actions?: React.ReactNode;
 }) {
@@ -56,6 +67,14 @@ export function PartyLedgerClient({
   // Edit / Add dialog state
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editPurchaseId, setEditPurchaseId] = useState<string | null>(null);
+  const [historyModal, setHistoryModal] = useState<{
+    mode: "entity" | "activity";
+    entityType: RevisionEntityType;
+    entityId?: string | null;
+    title: string;
+    canRevert: boolean;
+  } | null>(null);
   const [editRow, setEditRow] = useState<{
     entryId: string | null;
     sourceType: "invoice" | "purchase" | "payment" | "manual";
@@ -209,6 +228,26 @@ export function PartyLedgerClient({
           >
             <Download className="h-3.5 w-3.5" /> CSV
           </a>
+          {canUseHistory && (
+            <button
+              type="button"
+              onClick={() =>
+                setHistoryModal({
+                  mode: "activity",
+                  entityType: party.type === "supplier" ? "purchase" : "invoice",
+                  title:
+                    party.type === "supplier"
+                      ? "Purchase Bills — Change & Delete History"
+                      : "Customer Bills — Change & Delete History",
+                  canRevert: false,
+                })
+              }
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              title="View recent edits, reverts & deleted bills"
+            >
+              <History className="h-3.5 w-3.5" /> Change History
+            </button>
+          )}
           <Link
             href="/dashboard/settings"
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
@@ -259,13 +298,13 @@ export function PartyLedgerClient({
                 <th className="px-4 py-2.5 text-right">Credit (₹)</th>
                 <th className="px-4 py-2.5 text-right">Balance (₹)</th>
                 <th className="px-4 py-2.5">Built By</th>
-                {canEdit && <th className="px-4 py-2.5 text-right">Actions</th>}
+                <th className="px-4 py-2.5 text-right">Actions</th>
               </tr>
             </thead>
             {rows.length === 0 ? (
               <tbody>
                 <tr>
-                  <td colSpan={canEdit ? 8 : 7} className="px-4 py-10 text-center text-[#77777d]">
+                  <td colSpan={8} className="px-4 py-10 text-center text-[#77777d]">
                     No ledger entries yet. Record a bill, payment, or click &ldquo;+ Add Entry&rdquo; above.
                   </td>
                 </tr>
@@ -351,50 +390,194 @@ export function PartyLedgerClient({
                           <span className="text-[#a3a3a8]">—</span>
                         )}
                       </td>
-                      {canEdit && (
-                        <td className="whitespace-nowrap px-4 py-3 text-right">
-                          <div className="inline-flex items-center gap-1">
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          {canUseHistory && r.sourceType === "invoice" && r.sourceId && (
+                            <>
+                              {canEdit && (
+                                <Link
+                                  href={`/dashboard/billing/new?edit=${r.sourceId}`}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-800 hover:bg-sky-100"
+                                  title="Edit full bill (items, prices, payment & stock)"
+                                >
+                                  <FileEdit className="h-3.5 w-3.5" /> Edit Bill
+                                </Link>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setHistoryModal({
+                                    mode: "entity",
+                                    entityType: "invoice",
+                                    entityId: r.sourceId,
+                                    title: `Bill Edit History — ${r.voucherNo || r.particulars}`,
+                                    canRevert: canEdit,
+                                  })
+                                }
+                                className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-700 hover:bg-slate-50"
+                                title="View bill edit history & revert"
+                              >
+                                <History className="h-3.5 w-3.5" />
+                              </button>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    const btn = e.currentTarget;
+                                    if (btn.disabled) return;
+                                    if (
+                                      !confirm(
+                                        `Delete bill ${r.voucherNo || ""} permanently?\n\nStock & customer balance will be reversed and logged in Change History.`
+                                      )
+                                    ) {
+                                      return;
+                                    }
+                                    btn.disabled = true;
+                                    try {
+                                      await deleteInvoiceAction(r.sourceId!);
+                                      toast.success("Bill deleted & stock restored.");
+                                      router.refresh();
+                                    } catch (err) {
+                                      toast.error(err instanceof Error ? err.message : "Could not delete bill.");
+                                    } finally {
+                                      btn.disabled = false;
+                                    }
+                                  }}
+                                  className="cursor-pointer rounded-lg border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"
+                                  title="Delete bill permanently"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+
+                          {canUseHistory && r.sourceType === "purchase" && r.sourceId && (
+                            <>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditPurchaseId(r.sourceId)}
+                                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-800 hover:bg-sky-100"
+                                  title="Edit purchase bill (items, qty, rate, paid & stock)"
+                                >
+                                  <FileEdit className="h-3.5 w-3.5" /> Edit Bill
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setHistoryModal({
+                                    mode: "entity",
+                                    entityType: "purchase",
+                                    entityId: r.sourceId,
+                                    title: `Purchase History — ${r.voucherNo || r.particulars}`,
+                                    canRevert: canEdit,
+                                  })
+                                }
+                                className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-700 hover:bg-slate-50"
+                                title="View purchase edit history & revert"
+                              >
+                                <History className="h-3.5 w-3.5" />
+                              </button>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    const btn = e.currentTarget;
+                                    if (btn.disabled) return;
+                                    if (
+                                      !confirm(
+                                        `Delete purchase bill ${r.voucherNo || ""} permanently?\n\nStock & supplier balance will be reversed and logged in Change History.`
+                                      )
+                                    ) {
+                                      return;
+                                    }
+                                    btn.disabled = true;
+                                    try {
+                                      await deletePurchaseOrderAction(r.sourceId!);
+                                      toast.success("Purchase bill deleted & stock reversed.");
+                                      router.refresh();
+                                    } catch (err) {
+                                      toast.error(err instanceof Error ? err.message : "Could not delete purchase bill.");
+                                    } finally {
+                                      btn.disabled = false;
+                                    }
+                                  }}
+                                  className="cursor-pointer rounded-lg border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"
+                                  title="Delete purchase bill permanently"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+
+                          {canEdit && (
                             <button
                               type="button"
                               onClick={() => openEdit(r)}
                               className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50"
-                              title="Edit entry & item details"
+                              title={r.sourceType === "manual" ? "Edit ledger entry" : "Edit ledger notes & transport fields"}
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
-                            {r.sourceType === "manual" && r.entryId && (
-                              <button
-                                type="button"
-                                onClick={async (e) => {
-                                  const btn = e.currentTarget;
-                                  if (btn.disabled) return;
-                                  if (!confirm("Delete this manual ledger entry?")) return;
-                                  btn.disabled = true;
-                                  try {
-                                    await deleteManualPartyLedgerEntryAction(party.type, party.id, r.entryId!);
-                                    toast.success("Manual entry deleted.");
-                                    router.refresh();
-                                  } catch {
-                                    toast.error("Could not delete this entry. Please try again.");
-                                  } finally {
-                                    btn.disabled = false;
+                          )}
+
+                          {r.sourceType === "manual" && r.entryId && (
+                            <>
+                              {canUseHistory && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setHistoryModal({
+                                      mode: "entity",
+                                      entityType: "ledger_entry",
+                                      entityId: r.entryId,
+                                      title: `Entry History — ${r.voucherNo || r.particulars}`,
+                                      canRevert: canEdit,
+                                    })
                                   }
-                                }}
-                                className="cursor-pointer rounded-lg border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"
-                                title="Delete manual entry"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      )}
+                                  className="cursor-pointer rounded-lg border border-slate-200 bg-white p-1.5 text-slate-700 hover:bg-slate-50"
+                                  title="View edit history & revert"
+                                >
+                                  <History className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    const btn = e.currentTarget;
+                                    if (btn.disabled) return;
+                                    if (!confirm("Delete this manual ledger entry?")) return;
+                                    btn.disabled = true;
+                                    try {
+                                      await deleteManualPartyLedgerEntryAction(party.type, party.id, r.entryId!);
+                                      toast.success("Manual entry deleted.");
+                                      router.refresh();
+                                    } catch {
+                                      toast.error("Could not delete this entry. Please try again.");
+                                    } finally {
+                                      btn.disabled = false;
+                                    }
+                                  }}
+                                  className="cursor-pointer rounded-lg border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"
+                                  title="Delete manual entry"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
 
                     {hasItems && (
                       <tr className="bg-white">
                         <td
-                          colSpan={canEdit ? 8 : 7}
+                          colSpan={8}
                           className="border-l-[3px] border-l-[#171717] px-4 pb-3.5 pt-0"
                         >
                           <div className="rounded-[12px] bg-[#f1f1f2] p-[3px]">
@@ -462,13 +645,29 @@ export function PartyLedgerClient({
                       {closingBalance >= 0 ? "Dr" : "Cr"}
                     </span>
                   </td>
-                  <td colSpan={canEdit ? 2 : 1} />
+                  <td colSpan={2} />
                 </tr>
               </tfoot>
             )}
           </table>
         </div>
       </div>
+
+      <PurchaseEditDialog
+        purchaseId={editPurchaseId}
+        supplierName={party.name}
+        onClose={() => setEditPurchaseId(null)}
+      />
+
+      <RevisionHistoryDialog
+        open={Boolean(historyModal)}
+        onClose={() => setHistoryModal(null)}
+        entityType={historyModal?.entityType ?? "invoice"}
+        entityId={historyModal?.entityId ?? null}
+        title={historyModal?.title ?? "Edit History"}
+        canRevert={Boolean(historyModal?.canRevert)}
+        mode={historyModal?.mode ?? "entity"}
+      />
 
       <Dialog
         open={editOpen && Boolean(editRow)}

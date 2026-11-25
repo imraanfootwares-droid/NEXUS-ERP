@@ -25,7 +25,18 @@ export interface InvoicePdfData {
   accentColor?: string | null;
   branchName: string;
   branchAddress?: string | null;
+  branchPhone?: string | null;
+  branchEmail?: string | null;
   branchGstin?: string | null;
+  signatoryName?: string | null;
+  bankDetails?: {
+    account_holder?: string;
+    bank_name?: string;
+    account_number?: string;
+    ifsc_code?: string;
+    branch_name?: string;
+    upi_id?: string;
+  } | null;
   invoiceNumber: string;
   invoiceType: string;
   createdAt: string;
@@ -34,6 +45,8 @@ export interface InvoicePdfData {
   customerPhone?: string | null;
   customerGstin?: string | null;
   customerAddress?: string | null;
+  shipToName?: string | null;
+  shipToAddress?: string | null;
   placeOfSupply?: string | null;
   supplyType: string;
   subtotal: number;
@@ -56,6 +69,7 @@ export interface InvoicePdfData {
     line_total: number;
   }>;
   terms?: string;
+  footerNote?: string;
   showHsn?: boolean;
   showGst?: boolean;
 }
@@ -95,8 +109,9 @@ export async function renderInvoicePdfBuffer(data: InvoicePdfData): Promise<Buff
               <Text style={[styles.title, data.accentColor ? { color: data.accentColor } : {}]}>
                 {data.tenantName}
               </Text>
-              <Text style={styles.subtitle}>{data.branchName}</Text>
               {data.branchAddress && <Text style={styles.subtitle}>{data.branchAddress}</Text>}
+              {data.branchPhone && <Text style={styles.subtitle}>Phone: {data.branchPhone}</Text>}
+              {data.branchEmail && <Text style={styles.subtitle}>Email: {data.branchEmail}</Text>}
               {allowGst && data.branchGstin && <Text style={styles.subtitle}>GSTIN: {data.branchGstin}</Text>}
             </View>
           </View>
@@ -117,12 +132,20 @@ export async function renderInvoicePdfBuffer(data: InvoicePdfData): Promise<Buff
           </View>
         </View>
 
-        <View style={{ marginBottom: 10 }}>
-          <Text style={{ fontWeight: "bold" }}>Billed To: {data.customerName}</Text>
-          {data.customerPhone && <Text style={styles.subtitle}>Phone: {data.customerPhone}</Text>}
-          {data.customerAddress && <Text style={styles.subtitle}>Address: {data.customerAddress}</Text>}
-          {allowGst && data.customerGstin && <Text style={styles.subtitle}>Customer GSTIN: {data.customerGstin}</Text>}
-          {allowGst && data.placeOfSupply && <Text style={styles.subtitle}>Place of Supply: {data.placeOfSupply}</Text>}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontWeight: "bold" }}>BUYER (BILL TO): {data.customerName}</Text>
+            {data.customerAddress && <Text style={styles.subtitle}>{data.customerAddress}</Text>}
+            {data.customerPhone && <Text style={styles.subtitle}>Phone: {data.customerPhone}</Text>}
+            {allowGst && data.customerGstin && <Text style={styles.subtitle}>GSTIN: {data.customerGstin}</Text>}
+            {allowGst && data.placeOfSupply && <Text style={styles.subtitle}>Place of Supply: {data.placeOfSupply}</Text>}
+          </View>
+          {allowGst && (
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontWeight: "bold" }}>CONSIGNEE (SHIP TO): {data.shipToName || data.customerName}</Text>
+              <Text style={styles.subtitle}>{data.shipToAddress || data.customerAddress || "Same as Buyer Address"}</Text>
+            </View>
+          )}
         </View>
 
         <View style={[styles.row, styles.th]}>
@@ -188,12 +211,30 @@ export async function renderInvoicePdfBuffer(data: InvoicePdfData): Promise<Buff
           </View>
         </View>
 
-        <Text style={{ marginTop: 12, fontSize: 8, color: "#334155" }}>
+        <Text style={{ marginTop: 12, fontSize: 8.5, fontWeight: "bold", color: "#0f172a" }}>
           Amount in Words: {amountInWordsIndian(data.grandTotal)}
         </Text>
-        {data.terms && (
-          <Text style={{ marginTop: 10, fontSize: 8, color: "#64748b" }}>Terms: {data.terms}</Text>
-        )}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 14, borderTopWidth: 0.75, borderTopColor: "#cbd5e1", paddingTop: 8 }}>
+          <View style={{ maxWidth: "55%" }}>
+            {data.bankDetails && (data.bankDetails.bank_name || data.bankDetails.account_number) && (
+              <View style={{ borderWidth: 0.75, borderColor: "#0f172a", padding: 6, marginBottom: 4 }}>
+                <Text style={{ fontSize: 8, fontWeight: "bold", marginBottom: 2 }}>BANK DETAILS</Text>
+                {data.bankDetails.account_holder && <Text style={{ fontSize: 8, fontWeight: "bold" }}>{data.bankDetails.account_holder}</Text>}
+                {data.bankDetails.bank_name && <Text style={{ fontSize: 8 }}>{data.bankDetails.bank_name}{data.bankDetails.branch_name ? ` - ${data.bankDetails.branch_name}` : ""}</Text>}
+                {data.bankDetails.account_number && <Text style={{ fontSize: 8 }}>ACC NO: {data.bankDetails.account_number}</Text>}
+                {data.bankDetails.ifsc_code && <Text style={{ fontSize: 8 }}>IFSC CODE: {data.bankDetails.ifsc_code}</Text>}
+              </View>
+            )}
+            {data.terms && <Text style={{ fontSize: 7.5, color: "#64748b" }}>Terms: {data.terms}</Text>}
+            {data.footerNote && <Text style={{ fontSize: 8, fontWeight: "bold", color: "#334155", marginTop: 3 }}>{data.footerNote}</Text>}
+          </View>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={{ fontSize: 8.5, fontWeight: "bold" }}>For {data.signatoryName || data.tenantName}</Text>
+            <Text style={{ fontSize: 8, color: "#475569", marginTop: 26, borderTopWidth: 0.5, borderTopColor: "#64748b", paddingTop: 2 }}>
+              Authorised Signature
+            </Text>
+          </View>
+        </View>
       </Page>
     </Document>
   );
@@ -679,108 +720,221 @@ export async function renderPartyLedgerPdfBuffer(data: PartyLedgerPdfData): Prom
 
   const doc = (
     <Document>
-      <Page size="A4" style={{ padding: 20, fontSize: 8, fontFamily: "Helvetica", color: "#0f172a" }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 1.5, borderBottomColor: "#0f172a", paddingBottom: 8, marginBottom: 10 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, maxWidth: "65%" }}>
+      <Page size="A4" style={{ padding: 20, fontSize: 8, fontFamily: "Helvetica", color: "#171717", backgroundColor: "#ffffff" }}>
+        {/* Header */}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 1.5, borderBottomColor: "#171717", paddingBottom: 8, marginBottom: 10 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, maxWidth: "60%" }}>
             {/* eslint-disable-next-line jsx-a11y/alt-text */}
             {data.logoUrl ? (
-              <Image src={data.logoUrl} style={{ width: 42, height: 42, objectFit: "contain" }} />
+              <Image src={data.logoUrl} style={{ width: 38, height: 38, objectFit: "contain" }} />
             ) : null}
             <View>
-              <Text style={{ fontSize: 14, fontWeight: "bold" }}>{data.tenantName}</Text>
-              <Text style={{ fontSize: 8.5, color: "#475569", marginTop: 1 }}>
-                {data.partyType === "supplier" ? "SUPPLIER LEDGER STATEMENT" : "CUSTOMER LEDGER STATEMENT"}
+              <Text style={{ fontSize: 13.5, fontWeight: "bold", color: "#171717" }}>{data.partyName}</Text>
+              <Text style={{ fontSize: 8, color: "#52525b", marginTop: 1.5 }}>
+                {data.tenantName}
+                {data.partyPhone ? `  |  ${data.partyPhone}` : ""}
+                {data.partyGstin ? `  |  GSTIN: ${data.partyGstin}` : ""}
               </Text>
+              {data.partyAddress ? <Text style={{ fontSize: 7.5, color: "#71717a", marginTop: 1 }}>{data.partyAddress}</Text> : null}
             </View>
           </View>
           <View style={{ alignItems: "flex-end" }}>
-            <Text style={{ fontSize: 11, fontWeight: "bold" }}>{data.partyName}</Text>
-            {data.partyPhone ? <Text style={{ fontSize: 8, color: "#475569" }}>Ph: {data.partyPhone}</Text> : null}
-            {data.partyGstin ? <Text style={{ fontSize: 8, color: "#475569" }}>GSTIN: {data.partyGstin}</Text> : null}
-            {data.partyAddress ? <Text style={{ fontSize: 7.5, color: "#64748b" }}>{data.partyAddress}</Text> : null}
+            <View style={{ backgroundColor: "#fef3c7", borderRadius: 99, paddingHorizontal: 8, paddingVertical: 2.5 }}>
+              <Text style={{ fontSize: 7, fontWeight: "bold", color: "#92400e" }}>
+                {data.partyType === "supplier" ? "Supplier Statement" : "Customer Statement"}
+              </Text>
+            </View>
+            <Text style={{ fontSize: 7, color: "#71717a", marginTop: 3 }}>
+              Generated {new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" })}
+            </Text>
           </View>
         </View>
 
-        <View style={{ flexDirection: "row", backgroundColor: "#0f172a", color: "#ffffff", paddingVertical: 5, paddingHorizontal: 4, fontWeight: "bold", fontSize: 7.5 }}>
-          <Text style={{ width: "15%" }}>Date &amp; Time</Text>
-          <Text style={{ width: "9%" }}>Ch./Voc</Text>
-          <Text style={{ width: "30%" }}>Particulars</Text>
-          <Text style={{ width: "12%", textAlign: "right" }}>Debit</Text>
-          <Text style={{ width: "12%", textAlign: "right" }}>Credit</Text>
-          <Text style={{ width: "13%", textAlign: "right" }}>Balance</Text>
-          <Text style={{ width: "9%", textAlign: "right" }}>Built By</Text>
+        {/* 4 Summary KPI Cards matching Web UI */}
+        <View style={{ flexDirection: "row", gap: 7, marginBottom: 10 }}>
+          <View style={{ flex: 1, borderWidth: 0.75, borderColor: "#e4e4e7", borderRadius: 6, padding: 7, backgroundColor: "#fafafa" }}>
+            <Text style={{ fontSize: 6.5, fontWeight: "bold", color: "#71717a" }}>ENTRIES</Text>
+            <Text style={{ fontSize: 11, fontWeight: "bold", color: "#171717", marginTop: 2 }}>
+              {data.rows.length} Records
+            </Text>
+          </View>
+          <View style={{ flex: 1, borderWidth: 0.75, borderColor: "#e4e4e7", borderRadius: 6, padding: 7, backgroundColor: "#fafafa" }}>
+            <Text style={{ fontSize: 6.5, fontWeight: "bold", color: "#71717a" }}>TOTAL DEBIT</Text>
+            <Text style={{ fontSize: 10.5, fontWeight: "bold", color: "#171717", marginTop: 2 }}>
+              Rs.{fmtMoney(data.totalDebit)} Dr
+            </Text>
+          </View>
+          <View style={{ flex: 1, borderWidth: 0.75, borderColor: "#e4e4e7", borderRadius: 6, padding: 7, backgroundColor: "#fafafa" }}>
+            <Text style={{ fontSize: 6.5, fontWeight: "bold", color: "#71717a" }}>TOTAL CREDIT</Text>
+            <Text style={{ fontSize: 10.5, fontWeight: "bold", color: "#047857", marginTop: 2 }}>
+              Rs.{fmtMoney(data.totalCredit)} Cr
+            </Text>
+          </View>
+          <View style={{ flex: 1, borderWidth: 0.75, borderColor: "#d4d4d8", borderRadius: 6, padding: 7, backgroundColor: "#f4f4f5" }}>
+            <Text style={{ fontSize: 6.5, fontWeight: "bold", color: "#52525b" }}>CLOSING BALANCE</Text>
+            <Text style={{ fontSize: 10.5, fontWeight: "bold", color: "#171717", marginTop: 2 }}>
+              Rs.{fmtMoney(Math.abs(data.closingBalance))} {data.closingBalance >= 0 ? "Dr" : "Cr"}
+            </Text>
+          </View>
         </View>
 
-        {data.rows.map((r, idx) => {
-          const extras = data.headerFields
-            .map((f) => (r.extraFields[f.key] ? `${f.label}: ${r.extraFields[f.key]}` : null))
-            .filter(Boolean)
-            .join("  |  ");
-          return (
-            <View key={idx} style={{ borderBottomWidth: 0.5, borderBottomColor: "#cbd5e1", paddingVertical: 4 }} wrap={false}>
-              <View style={{ flexDirection: "row", paddingHorizontal: 4 }}>
-                <Text style={{ width: "15%", fontSize: 7 }}>
-                  {new Date(r.entryDate).toLocaleString("en-IN", {
-                    timeZone: "Asia/Kolkata",
-                    day: "2-digit",
-                    month: "short",
-                    year: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Text>
-                <Text style={{ width: "9%", fontWeight: "bold" }}>{r.voucherNo}</Text>
-                <View style={{ width: "30%", paddingRight: 4 }}>
-                  <Text>{r.particulars}</Text>
-                  {extras ? <Text style={{ fontSize: 7, color: "#475569", marginTop: 1 }}>{extras}</Text> : null}
-                </View>
-                <Text style={{ width: "12%", textAlign: "right" }}>{r.debit > 0 ? fmtMoney(r.debit) : ""}</Text>
-                <Text style={{ width: "12%", textAlign: "right" }}>{r.credit > 0 ? fmtMoney(r.credit) : ""}</Text>
-                <Text style={{ width: "13%", textAlign: "right", fontWeight: "bold" }}>
-                  {fmtMoney(Math.abs(r.balance))} {r.balance >= 0 ? "Dr" : "Cr"}
-                </Text>
-                <Text style={{ width: "9%", textAlign: "right", fontSize: 6.5, color: "#475569" }}>
-                  {r.builtBy || "-"}
-                </Text>
-              </View>
+        {/* Main Ledger Table Container */}
+        <View style={{ borderWidth: 0.75, borderColor: "#d4d4d8", borderRadius: 6, overflow: "hidden" }}>
+          {/* Table Column Headers */}
+          <View style={{ flexDirection: "row", backgroundColor: "#f4f4f5", borderBottomWidth: 0.75, borderBottomColor: "#d4d4d8", paddingVertical: 6, paddingHorizontal: 6, fontWeight: "bold", fontSize: 6.8, color: "#52525b" }}>
+            <Text style={{ width: "16%" }}>DATE &amp; TIME</Text>
+            <Text style={{ width: "10%" }}>CH./VOC</Text>
+            <Text style={{ width: "28%" }}>PARTICULARS</Text>
+            <Text style={{ width: "12%", textAlign: "right" }}>DEBIT (Rs.)</Text>
+            <Text style={{ width: "11%", textAlign: "right" }}>CREDIT (Rs.)</Text>
+            <Text style={{ width: "13%", textAlign: "right" }}>BALANCE (Rs.)</Text>
+            <Text style={{ width: "10%", textAlign: "right" }}>BUILT BY</Text>
+          </View>
 
-              {r.items.length > 0 && (
-                <View style={{ marginTop: 4, marginLeft: 18, marginRight: 10, borderWidth: 0.75, borderColor: "#94a3b8", borderRadius: 2 }}>
-                  <View style={{ flexDirection: "row", backgroundColor: "#f1f5f9", borderBottomWidth: 0.75, borderBottomColor: "#94a3b8", paddingVertical: 3, paddingHorizontal: 4, fontWeight: "bold", fontSize: 7 }}>
-                    <Text style={{ flex: 2.2 }}>Item</Text>
-                    {data.itemColumns.map((c) => (
-                      <Text key={c.key} style={{ flex: 1, textAlign: "right" }}>
-                        {c.label}
-                      </Text>
-                    ))}
-                    <Text style={{ flex: 1.3, textAlign: "right" }}>Amount</Text>
+          {data.rows.map((r, idx) => {
+            const hasItems = r.items.length > 0;
+            const isPayment = r.credit > 0 && r.debit === 0;
+            const extras = data.headerFields
+              .map((f) => (r.extraFields[f.key] ? `${f.label}: ${r.extraFields[f.key]}` : null))
+              .filter(Boolean)
+              .join("  |  ");
+
+            return (
+              <View
+                key={idx}
+                wrap={false}
+                style={{
+                  borderBottomWidth: 0.75,
+                  borderBottomColor: "#e4e4e7",
+                  borderLeftWidth: hasItems ? 3 : 0,
+                  borderLeftColor: "#171717",
+                  backgroundColor: hasItems ? "#fafafa" : "#ffffff",
+                  paddingTop: 6,
+                  paddingBottom: hasItems ? 8 : 6,
+                }}
+              >
+                {/* Parent Ledger Entry Row */}
+                <View style={{ flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 6 }}>
+                  <Text style={{ width: "16%", fontSize: 7, color: "#52525b" }}>
+                    {new Date(r.entryDate).toLocaleString("en-IN", {
+                      timeZone: "Asia/Kolkata",
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                  <Text style={{ width: "10%", fontWeight: "bold", fontSize: 7.5, color: "#171717" }}>
+                    {r.voucherNo}
+                  </Text>
+                  <View style={{ width: "28%", paddingRight: 4 }}>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
+                      <Text style={{ fontWeight: "bold", fontSize: 7.5, color: "#171717" }}>{r.particulars}</Text>
+                      {hasItems && (
+                        <View style={{ backgroundColor: "#e4e4e7", borderRadius: 99, paddingHorizontal: 5, paddingVertical: 1 }}>
+                          <Text style={{ fontSize: 6.2, fontWeight: "bold", color: "#3f3f46" }}>
+                            {r.items.length} {r.items.length === 1 ? "item" : "items"}
+                          </Text>
+                        </View>
+                      )}
+                      {isPayment && (
+                        <View style={{ backgroundColor: "#d1fae5", borderRadius: 99, paddingHorizontal: 5, paddingVertical: 1 }}>
+                          <Text style={{ fontSize: 6.2, fontWeight: "bold", color: "#047857" }}>Payment</Text>
+                        </View>
+                      )}
+                    </View>
+                    {extras ? <Text style={{ fontSize: 6.8, color: "#52525b", marginTop: 1.5 }}>{extras}</Text> : null}
                   </View>
-                  {r.items.map((it, iIdx) => (
-                    <View key={iIdx} style={{ flexDirection: "row", borderBottomWidth: iIdx < r.items.length - 1 ? 0.5 : 0, borderBottomColor: "#e2e8f0", paddingVertical: 2.5, paddingHorizontal: 4, fontSize: 7 }}>
-                      <Text style={{ flex: 2.2 }}>{String(it.item ?? "")}</Text>
-                      {data.itemColumns.map((c) => (
-                        <Text key={c.key} style={{ flex: 1, textAlign: "right" }}>
-                          {it[c.key] != null && String(it[c.key]).length > 0 ? String(it[c.key]) : "-"}
-                        </Text>
-                      ))}
-                      <Text style={{ flex: 1.3, textAlign: "right", fontWeight: "bold" }}>
-                        {fmtMoney(Number(it.amount || 0))}
+                  <Text style={{ width: "12%", textAlign: "right", fontWeight: r.debit > 0 ? "bold" : "normal", fontSize: 7.5, color: r.debit > 0 ? "#171717" : "#a1a1aa" }}>
+                    {r.debit > 0 ? fmtMoney(r.debit) : "-"}
+                  </Text>
+                  <Text style={{ width: "11%", textAlign: "right", fontWeight: r.credit > 0 ? "bold" : "normal", fontSize: 7.5, color: r.credit > 0 ? "#047857" : "#a1a1aa" }}>
+                    {r.credit > 0 ? fmtMoney(r.credit) : "-"}
+                  </Text>
+                  <Text style={{ width: "13%", textAlign: "right", fontWeight: "bold", fontSize: 7.5, color: "#171717" }}>
+                    {fmtMoney(Math.abs(r.balance))} {r.balance >= 0 ? "Dr" : "Cr"}
+                  </Text>
+                  <Text style={{ width: "10%", textAlign: "right", fontSize: 6.5, color: "#52525b" }}>
+                    {r.builtBy || "-"}
+                  </Text>
+                </View>
+
+                {/* Nested Items Box — Clearly Tied to Voucher/Bill Number */}
+                {hasItems && (
+                  <View style={{ marginTop: 6, marginLeft: 10, marginRight: 8, borderWidth: 0.75, borderColor: "#d4d4d8", borderRadius: 5, backgroundColor: "#ffffff", overflow: "hidden" }}>
+                    {/* Sub-table Title Bar: "ITEMS IN PO" | "2 line items" */}
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#f4f4f5", borderBottomWidth: 0.75, borderBottomColor: "#e4e4e7", paddingVertical: 3.5, paddingHorizontal: 6 }}>
+                      <Text style={{ fontSize: 6.6, fontWeight: "bold", color: "#3f3f46" }}>
+                        ITEMS IN {String(r.voucherNo || "ENTRY").toUpperCase()}
+                      </Text>
+                      <Text style={{ fontSize: 6.5, color: "#71717a" }}>
+                        {r.items.length} line {r.items.length === 1 ? "item" : "items"}
                       </Text>
                     </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          );
-        })}
 
-        <View style={{ flexDirection: "row", borderTopWidth: 1.5, borderTopColor: "#0f172a", backgroundColor: "#f8fafc", paddingVertical: 6, paddingHorizontal: 4, marginTop: 6, fontWeight: "bold", fontSize: 8.5 }}>
-          <Text style={{ width: "54%", textAlign: "right", paddingRight: 8 }}>TOTAL / CLOSING BALANCE:</Text>
-          <Text style={{ width: "12%", textAlign: "right" }}>{fmtMoney(data.totalDebit)}</Text>
-          <Text style={{ width: "12%", textAlign: "right" }}>{fmtMoney(data.totalCredit)}</Text>
-          <Text style={{ width: "22%", textAlign: "right" }}>
-            Rs.{fmtMoney(Math.abs(data.closingBalance))} {data.closingBalance >= 0 ? "Dr" : "Cr"}
-          </Text>
+                    {/* Sub-table Column Header */}
+                    <View style={{ flexDirection: "row", backgroundColor: "#fafafa", borderBottomWidth: 0.75, borderBottomColor: "#e4e4e7", paddingVertical: 3.5, paddingHorizontal: 6, fontWeight: "bold", fontSize: 6.5, color: "#71717a" }}>
+                      <Text style={{ flex: 2.5 }}>ITEM</Text>
+                      {data.itemColumns.map((c) => (
+                        <Text key={c.key} style={{ flex: 1, textAlign: "right" }}>
+                          {c.label.toUpperCase()}
+                        </Text>
+                      ))}
+                      <Text style={{ flex: 1.4, textAlign: "right" }}>AMOUNT (Rs.)</Text>
+                    </View>
+
+                    {/* Sub-table Rows */}
+                    {r.items.map((it, iIdx) => (
+                      <View
+                        key={iIdx}
+                        style={{
+                          flexDirection: "row",
+                          borderBottomWidth: iIdx < r.items.length - 1 ? 0.5 : 0,
+                          borderBottomColor: "#f1f1f2",
+                          paddingVertical: 3.5,
+                          paddingHorizontal: 6,
+                          fontSize: 7,
+                        }}
+                      >
+                        <Text style={{ flex: 2.5, fontWeight: "bold", color: "#171717" }}>
+                          {String(it.item ?? "")}
+                        </Text>
+                        {data.itemColumns.map((c) => {
+                          const raw = it[c.key];
+                          const text = raw != null && String(raw).trim().length > 0 ? String(raw) : "";
+                          return (
+                            <Text key={c.key} style={{ flex: 1, textAlign: "right", color: "#52525b" }}>
+                              {text}
+                            </Text>
+                          );
+                        })}
+                        <Text style={{ flex: 1.4, textAlign: "right", fontWeight: "bold", color: "#171717" }}>
+                          {fmtMoney(Number(it.amount || 0))}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+
+          {/* Closing Total Row */}
+          <View style={{ flexDirection: "row", backgroundColor: "#f4f4f5", paddingVertical: 7, paddingHorizontal: 6, fontWeight: "bold", fontSize: 8 }}>
+            <Text style={{ width: "54%", textAlign: "right", paddingRight: 8, color: "#3f3f46" }}>
+              TOTAL / CLOSING BALANCE
+            </Text>
+            <Text style={{ width: "12%", textAlign: "right", color: "#171717" }}>
+              Rs.{fmtMoney(data.totalDebit)}
+            </Text>
+            <Text style={{ width: "11%", textAlign: "right", color: "#047857" }}>
+              Rs.{fmtMoney(data.totalCredit)}
+            </Text>
+            <Text style={{ width: "23%", textAlign: "right", color: "#171717" }}>
+              Rs.{fmtMoney(Math.abs(data.closingBalance))} {data.closingBalance >= 0 ? "Dr" : "Cr"}
+            </Text>
+          </View>
         </View>
       </Page>
     </Document>

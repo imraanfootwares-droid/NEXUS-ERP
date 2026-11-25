@@ -23,15 +23,19 @@ export default async function StockPage() {
     async (client) => {
       const [axes, fields, hsn, uoms, variants, ledger, suppliers] = await Promise.all([
         client.query<VariantAxisRow>(
-          "SELECT * FROM public.variant_axis_definitions WHERE tenant_id = $1 ORDER BY sort_order",
+          "SELECT id, tenant_id, name, preset_values, ratio_presets, sort_order FROM public.variant_axis_definitions WHERE tenant_id = $1 ORDER BY sort_order",
           [ctx.tenant!.id]
         ),
         client.query<CustomFieldRow>(
-          "SELECT * FROM public.custom_field_definitions WHERE tenant_id = $1 ORDER BY sort_order",
+          `SELECT id, tenant_id, field_key, label, field_type, options, is_required,
+                  show_on_bill, show_on_website, show_in_catalogue, sort_order
+           FROM public.custom_field_definitions WHERE tenant_id = $1 ORDER BY sort_order`,
           [ctx.tenant!.id]
         ),
         client.query<HsnCodeRow>(
-          "SELECT * FROM public.hsn_codes WHERE tenant_id IS NULL OR tenant_id = $1 ORDER BY code",
+          `SELECT id, tenant_id, code, description, category, rate_rule_type, threshold_amount,
+                  rate_below_threshold, rate_above_threshold, default_gst_rate
+           FROM public.hsn_codes WHERE tenant_id IS NULL OR tenant_id = $1 ORDER BY code`,
           [ctx.tenant!.id]
         ),
         client.query<{ code: string }>(

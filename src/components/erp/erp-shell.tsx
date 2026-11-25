@@ -288,35 +288,35 @@ export function ErpShell({
 
   const navGroups: Array<{ title: string; items: NavItem[] }> = [
     {
-      title: "Main Menu",
+      title: "Daily Work",
       items: [
-        { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
-        { href: "/dashboard/billing/new", label: "POS Terminal", icon: <Plus className="h-4 w-4" />, permission: "billing.create" },
-        { href: "/dashboard/billing", label: "Billing & Ledger", icon: <Receipt className="h-4 w-4" />, permission: "billing.view" },
-        { href: "/dashboard/stock", label: "Stock & Matrix", icon: <Boxes className="h-4 w-4" />, permission: "stock.view" },
+        { href: "/dashboard", label: "Home", icon: <LayoutDashboard className="h-4 w-4" /> },
+        { href: "/dashboard/billing/new", label: "New Bill", icon: <Plus className="h-4 w-4" />, permission: "billing.create" },
+        { href: "/dashboard/billing", label: "All Bills", icon: <Receipt className="h-4 w-4" />, permission: "billing.view" },
+        { href: "/dashboard/stock", label: "Stock & Products", icon: <Boxes className="h-4 w-4" />, permission: "stock.view" },
         { href: "/dashboard/operations", label: "Send Stock", icon: <PackageCheck className="h-4 w-4" />, permission: "transfers.receive" },
       ],
     },
     {
       title: "Customers",
       items: [
-        { href: "/dashboard/customers", label: "Customer & Supplier", icon: <Users className="h-4 w-4" />, permission: "customers.view" },
+        { href: "/dashboard/customers", label: "Customers & Suppliers", icon: <Users className="h-4 w-4" />, permission: "customers.view" },
         { href: "/dashboard/enquiries", label: "Enquiries", icon: <Inbox className="h-4 w-4" />, permission: "enquiries.view" },
-        { href: "/dashboard/storefront", label: "Website & PDF", icon: <Globe className="h-4 w-4" />, permission: "catalogue.export" },
+        { href: "/dashboard/storefront", label: "Website & Catalogue", icon: <Globe className="h-4 w-4" />, permission: "catalogue.export" },
       ],
     },
     {
-      title: "Management",
+      title: "Business",
       items: [
-        { href: "/dashboard/valuation", label: "Stock Valuation", icon: <BarChart3 className="h-4 w-4" />, roles: ["owner", "branch_admin"] },
-        { href: "/dashboard/organisation", label: "Organisation", icon: <Network className="h-4 w-4" />, roles: ["owner", "branch_admin"] },
+        { href: "/dashboard/valuation", label: "Stock Value", icon: <BarChart3 className="h-4 w-4" />, roles: ["owner", "branch_admin"] },
+        { href: "/dashboard/organisation", label: "Shops & Team", icon: <Network className="h-4 w-4" />, roles: ["owner", "branch_admin"] },
         { href: "/dashboard/reports", label: "GST & Reports", icon: <FileSpreadsheet className="h-4 w-4" />, permission: "reports.export_gst" },
-        { href: "/dashboard/bill-designer", label: "Bill Designer", icon: <Printer className="h-4 w-4" />, permission: "bill_designer.manage" },
+        { href: "/dashboard/bill-designer", label: "Bill Designs", icon: <Printer className="h-4 w-4" />, permission: "bill_designer.manage" },
       ],
     },
     {
       title: "Settings",
-      items: [{ href: "/dashboard/settings", label: "System Settings", icon: <Settings className="h-4 w-4" /> }],
+      items: [{ href: "/dashboard/settings", label: "Profile & Settings", icon: <Settings className="h-4 w-4" /> }],
     },
   ];
 
@@ -431,6 +431,16 @@ export function ErpShell({
             </div>
           </div>
           <div className="my-1 h-px bg-[#f1f1f2]" />
+          <Link
+            href="/dashboard/settings?tab=profile"
+            onClick={() => {
+              setProfileOpen(false);
+              setMobileOpen(false);
+            }}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs hover:bg-[#f4f4f5]"
+          >
+            <Settings className="h-3.5 w-3.5" /> My Profile &amp; Bank Details
+          </Link>
           <button
             type="button"
             onClick={() => {

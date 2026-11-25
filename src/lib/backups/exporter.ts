@@ -248,10 +248,15 @@ export async function runPlatformBackup(): Promise<{ skipped: boolean }> {
   return { skipped: false };
 }
 
-/** Sweeps unconfirmed pending_uploads older than 24h and archives audit_logs > 180 days. */
-export async function runHousekeeping(): Promise<{ sweptUploads: number; archivedAudits: number }> {
+/** Sweeps unconfirmed pending_uploads older than 24h, prunes expired bill_revisions per tenant cap, and archives audit_logs > 180 days. */
+export async function runHousekeeping(): Promise<{
+  sweptUploads: number;
+  archivedAudits: number;
+  prunedRevisions: number;
+}> {
   let sweptUploads = 0;
   let archivedAudits = 0;
+  let prunedRevisions = 0;
 
   await withPlatformTx(async (client) => {
     const stale = await client.query<{ id: string; bucket: "public" | "private"; key: string }>(
@@ -262,6 +267,15 @@ export async function runHousekeeping(): Promise<{ sweptUploads: number; archive
       await client.query("DELETE FROM public.pending_uploads WHERE id = $1", [row.id]);
       sweptUploads++;
     }
+
+    // Prune bill_revisions past each tenant's configurable retention window (default 180 days)
+    const revDel = await client.query(
+      `DELETE FROM public.bill_revisions br
+       USING public.tenants t
+       WHERE br.tenant_id = t.id
+         AND br.created_at < now() - make_interval(days => GREATEST(7, COALESCE(t.revision_retention_days, 180)))`
+    );
+    prunedRevisions = revDel.rowCount ?? 0;
 
     const oldAudits = await client.query(
       "SELECT * FROM public.audit_logs WHERE created_at < now() - interval '180 days' ORDER BY created_at ASC LIMIT 2000"
@@ -280,5 +294,5 @@ export async function runHousekeeping(): Promise<{ sweptUploads: number; archive
     }
   });
 
-  return { sweptUploads, archivedAudits };
+  return { sweptUploads, archivedAudits, prunedRevisions };
 }

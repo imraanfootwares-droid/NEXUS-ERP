@@ -3,7 +3,7 @@ export type TenantRole = "owner" | "branch_admin" | "worker";
 export type TenantStatus = "active" | "suspended";
 
 export const FEATURE_KEYS = [
-  // Tier 1 (8)
+  // Tier 1 (7)
   "mobile_pc_access",
   "rbac_logins",
   "bill_designer",
@@ -11,13 +11,14 @@ export const FEATURE_KEYS = [
   "discounts_returns_payments",
   "analytics_basic",
   "data_exports_gst",
-  "daily_backups",
   // Tier 2 (4)
   "customer_crm",
   "dynamic_stock_matrix",
   "bulk_excel_import",
   "auto_stock_and_alerts",
-  // Tier 3 (4)
+  // Tier 3 (6)
+  "daily_backups",
+  "bill_edit_history",
   "multi_branch_ledgers",
   "supplier_and_production",
   "stock_transfers",
@@ -39,7 +40,6 @@ export const TIER_DEFAULT_FEATURES: Record<TierKey, FeatureKey[]> = {
     "discounts_returns_payments",
     "analytics_basic",
     "data_exports_gst",
-    "daily_backups",
   ],
   tier_2: [
     "mobile_pc_access",
@@ -49,7 +49,6 @@ export const TIER_DEFAULT_FEATURES: Record<TierKey, FeatureKey[]> = {
     "discounts_returns_payments",
     "analytics_basic",
     "data_exports_gst",
-    "daily_backups",
     "customer_crm",
     "dynamic_stock_matrix",
     "bulk_excel_import",
@@ -63,11 +62,12 @@ export const TIER_DEFAULT_FEATURES: Record<TierKey, FeatureKey[]> = {
     "discounts_returns_payments",
     "analytics_basic",
     "data_exports_gst",
-    "daily_backups",
     "customer_crm",
     "dynamic_stock_matrix",
     "bulk_excel_import",
     "auto_stock_and_alerts",
+    "daily_backups",
+    "bill_edit_history",
     "multi_branch_ledgers",
     "supplier_and_production",
     "stock_transfers",
@@ -80,6 +80,7 @@ export const FEATURE_DEPENDENCIES: Partial<Record<FeatureKey, FeatureKey[]>> = {
   bill_designer: ["gst_billing_pdf"],
   discounts_returns_payments: ["gst_billing_pdf"],
   data_exports_gst: ["gst_billing_pdf"],
+  bill_edit_history: ["gst_billing_pdf"],
   bulk_excel_import: ["dynamic_stock_matrix"],
   auto_stock_and_alerts: ["dynamic_stock_matrix"],
   multi_branch_ledgers: ["dynamic_stock_matrix"],
@@ -133,10 +134,16 @@ export const FEATURE_META: Record<
     description: "Sales & Purchase registers, GSTR-1, HSN & e-Way/IRP JSON",
   },
   daily_backups: {
-    label: "Daily Backups + 1-Click Download",
-    minTier: "tier_1",
+    label: "Automated Daily Cloud Backups",
+    minTier: "tier_3",
     category: "Core",
-    description: "Automated daily compressed snapshots to private R2",
+    description: "Automated daily compressed snapshots to R2 (Tier 1 & 2 include 1-click manual export)",
+  },
+  bill_edit_history: {
+    label: "Edit Bills, History & 1-Click Revert",
+    minTier: "tier_3",
+    category: "Billing",
+    description: "Edit finalized bills & purchases, inspect Before→After diffs & revert to any version",
   },
   customer_crm: {
     label: "Customer & Wholesale CRM",
@@ -210,6 +217,7 @@ export const PERMISSION_DEFINITIONS = [
   { key: "billing.view", feature: "gst_billing_pdf", module: "Billing", label: "View Invoices", owner: true, branch_admin: true, worker: true },
   { key: "billing.create", feature: "gst_billing_pdf", module: "Billing", label: "Create Bills & POS", owner: true, branch_admin: true, worker: true },
   { key: "billing.edit", feature: "gst_billing_pdf", module: "Billing", label: "Edit Drafts & Estimates", owner: true, branch_admin: true, worker: false },
+  { key: "billing.history", feature: "bill_edit_history", module: "Billing", label: "Edit Finalized Bills, History & Revert", owner: true, branch_admin: true, worker: false },
   { key: "billing.apply_discount", feature: "discounts_returns_payments", module: "Billing", label: "Apply Discounts", owner: true, branch_admin: true, worker: false },
   { key: "billing.cancel", feature: "discounts_returns_payments", module: "Billing", label: "Cancel / Void Bills & Day-End Close", owner: true, branch_admin: true, worker: false },
   { key: "billing.process_return", feature: "discounts_returns_payments", module: "Billing", label: "Returns & Size Exchanges", owner: true, branch_admin: true, worker: false },
@@ -265,7 +273,7 @@ export const TIER_META: Record<
     priceInr: 50000,
     maxUsers: 5,
     maxBranches: 1,
-    summary: "Mobile/PC billing, custom bill design, GST bills, sales charts, exports & daily backups.",
+    summary: "Mobile/PC billing, 10 bill designs, GST bills, sales charts, GST exports & 1-click manual data download.",
   },
   tier_2: {
     name: "Tier 2 — Billing + Stock",
@@ -273,7 +281,7 @@ export const TIER_META: Record<
     priceInr: 100000,
     maxUsers: 5,
     maxBranches: 1,
-    summary: "Everything in Tier 1 plus customer CRM, size/colour stock matrix, Excel import & alerts.",
+    summary: "Everything in Tier 1 plus customer CRM & ledger, size/colour stock matrix, Excel import & reorder alerts.",
   },
   tier_3: {
     name: "Tier 3 — Multi-Branch System",
@@ -281,7 +289,7 @@ export const TIER_META: Record<
     priceInr: 150000,
     maxUsers: 10,
     maxBranches: 5,
-    summary: "Everything in Tier 2 plus separate branch ledgers, suppliers, production, transfers & profit analytics.",
+    summary: "Everything in Tier 2 plus Edit Old Bills & 1-Click Revert, automated daily cloud backups, suppliers, transfers & profit analytics.",
   },
   tier_4: {
     name: "Tier 4 — Complete + Website & PDF",
@@ -289,7 +297,7 @@ export const TIER_META: Record<
     priceInr: 190000,
     maxUsers: 15,
     maxBranches: 10,
-    summary: "Everything in Tier 3 plus live R2 photo showcase storefront & 1-click WhatsApp PDF catalogue.",
+    summary: "Everything in Tier 3 plus live R2 photo showcase storefront, bulk WhatsApp inquiry cart & 1-click PDF catalogue.",
   },
 };
 

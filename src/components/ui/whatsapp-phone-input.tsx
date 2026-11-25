@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Input, Select } from "./primitives";
 
 export const COUNTRY_CODES = [
@@ -28,7 +28,7 @@ export const COUNTRY_CODES = [
 // Sort longest-first when matching prefixes so "971" matches before "91"/"1"
 const MATCH_ORDER = [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length);
 
-function splitPhoneValue(raw: string): { code: string; local: string } {
+export function splitPhoneValue(raw: string): { code: string; local: string } {
   const digits = (raw || "").replace(/\D/g, "");
   if (!digits) return { code: "91", local: "" };
   for (const item of MATCH_ORDER) {
@@ -50,21 +50,51 @@ export function WhatsAppPhoneInput({
   placeholder?: string;
   disabled?: boolean;
 }) {
-  const parsed = useMemo(() => splitPhoneValue(value), [value]);
-  const [preferredCode, setPreferredCode] = React.useState(parsed.code);
-  const code = parsed.local ? parsed.code : preferredCode;
-  const local = parsed.local;
+  const initial = splitPhoneValue(value);
+  const [code, setCode] = useState(initial.code);
+  const [local, setLocal] = useState(initial.local);
+  // Tracks the last combined string we emitted so typing/backspacing never re-parses
+  // and dumps the country code back into the local input field.
+  const lastEmittedRef = useRef<string>(value);
+
+  useEffect(() => {
+    if (value === lastEmittedRef.current) return;
+    lastEmittedRef.current = value;
+    const parsed = splitPhoneValue(value);
+    setCode(parsed.code);
+    setLocal(parsed.local);
+  }, [value]);
+
+  const emit = (nextCode: string, nextLocal: string) => {
+    const combined = nextLocal ? `${nextCode}${nextLocal}` : "";
+    lastEmittedRef.current = combined;
+    onChange(combined);
+  };
 
   const handleCodeChange = (nextCode: string) => {
-    setPreferredCode(nextCode);
-    if (local) {
-      onChange(`${nextCode}${local}`);
-    }
+    setCode(nextCode);
+    emit(nextCode, local);
   };
 
   const handleLocalChange = (nextLocalRaw: string) => {
     const cleanLocal = nextLocalRaw.replace(/\D/g, "").slice(0, 15);
-    onChange(cleanLocal ? `${code}${cleanLocal}` : "");
+    setLocal(cleanLocal);
+    emit(code, cleanLocal);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData("text");
+    const digits = pasted.replace(/\D/g, "");
+    if (!digits) return;
+    // Only intercept if user pasted a full international number (e.g. +91 9876543210)
+    if (pasted.trim().startsWith("+") || digits.length > 10) {
+      e.preventDefault();
+      const parsed = splitPhoneValue(digits);
+      const cleanLocal = parsed.local.slice(0, 15);
+      setCode(parsed.code);
+      setLocal(cleanLocal);
+      emit(parsed.code, cleanLocal);
+    }
   };
 
   return (
@@ -89,6 +119,7 @@ export function WhatsAppPhoneInput({
         value={local}
         disabled={disabled}
         onChange={(e) => handleLocalChange(e.target.value)}
+        onPaste={handlePaste}
         placeholder={placeholder}
         className="flex-1"
       />

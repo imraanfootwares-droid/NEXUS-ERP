@@ -14,7 +14,7 @@ export default async function SettingsPage({
   if (!ctx || !ctx.tenant) return null;
   const sp = await searchParams;
   const validTabs = new Set(["profile", "brand", "schema", "tax", "branches", "staff", "permissions", "devices", "backups"]);
-  const initialTab = sp.tab && validTabs.has(sp.tab) ? sp.tab : "brand";
+  const initialTab = sp.tab && validTabs.has(sp.tab) ? sp.tab : "profile";
 
   const data = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
@@ -112,9 +112,9 @@ export default async function SettingsPage({
   return (
     <div className="space-y-4">
       <div>
-        <h1>Workspace Settings</h1>
+        <h1>Settings &amp; Profile</h1>
         <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-          Manage your profile, shop look, product fields, GST &amp; tax setup, branches, staff, permissions &amp; backups.
+          Set up your shop address, GST number, bank details, staff, and backups.
         </p>
       </div>
       <SettingsHubClient

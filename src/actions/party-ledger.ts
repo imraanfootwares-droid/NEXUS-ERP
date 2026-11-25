@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { assertAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
+import {
+  diffLedgerEntrySnapshots,
+  recordBillRevision,
+  type LedgerEntrySnapshot,
+} from "@/lib/billing/revisions";
 import { withTenantTx } from "@/lib/db";
 import type { LedgerItemLine, PartyType } from "@/lib/ledger/party-ledger";
 
@@ -37,7 +42,13 @@ export async function savePartyLedgerEntryAction(input: {
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
       if (input.sourceType !== "manual" && input.sourceId) {
-        await client.query(
+        const existingRes = await client.query(
+          `SELECT * FROM public.party_ledger_entries
+           WHERE tenant_id = $1 AND party_type = $2 AND party_id = $3 AND source_type = $4 AND source_id = $5`,
+          [ctx.tenant.id, input.partyType, input.partyId, input.sourceType, input.sourceId]
+        );
+        const prev = existingRes.rows[0];
+        const upRes = await client.query<{ id: string }>(
           `INSERT INTO public.party_ledger_entries
              (tenant_id, party_type, party_id, source_type, source_id, entry_date, voucher_no, particulars, debit, credit, extra_fields, items_json, created_by, updated_by, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13, $13, now())
@@ -49,7 +60,8 @@ export async function savePartyLedgerEntryAction(input: {
              extra_fields = EXCLUDED.extra_fields,
              items_json = EXCLUDED.items_json,
              updated_by = EXCLUDED.updated_by,
-             updated_at = now()`,
+             updated_at = now()
+           RETURNING id`,
           [
             ctx.tenant.id,
             input.partyType,
@@ -66,14 +78,73 @@ export async function savePartyLedgerEntryAction(input: {
             ctx.user.id,
           ]
         );
+        const savedId = upRes.rows[0]?.id;
+        if (savedId) {
+          const beforeSnap: LedgerEntrySnapshot = prev
+            ? {
+                id: prev.id,
+                party_type: prev.party_type,
+                party_id: prev.party_id,
+                source_type: prev.source_type,
+                source_id: prev.source_id,
+                entry_date: prev.entry_date,
+                voucher_no: prev.voucher_no || "",
+                particulars: prev.particulars || "",
+                debit: Number(prev.debit || 0),
+                credit: Number(prev.credit || 0),
+                extra_fields: prev.extra_fields ?? {},
+                items: Array.isArray(prev.items_json) ? prev.items_json : [],
+              }
+            : {
+                id: savedId,
+                party_type: input.partyType,
+                party_id: input.partyId,
+                source_type: input.sourceType,
+                source_id: input.sourceId,
+                entry_date: safeDate,
+                voucher_no: "",
+                particulars: "",
+                debit: newDebit,
+                credit: newCredit,
+                extra_fields: {},
+                items: [],
+              };
+          const afterSnap: LedgerEntrySnapshot = {
+            id: savedId,
+            party_type: input.partyType,
+            party_id: input.partyId,
+            source_type: input.sourceType,
+            source_id: input.sourceId,
+            entry_date: safeDate,
+            voucher_no: input.voucherNo.trim(),
+            particulars: input.particulars.trim(),
+            debit: newDebit,
+            credit: newCredit,
+            extra_fields: input.extraFields ?? {},
+            items: input.items ?? [],
+          };
+          const diff = diffLedgerEntrySnapshots(beforeSnap, afterSnap);
+          await recordBillRevision(client, {
+            tenantId: ctx.tenant.id,
+            entityType: "ledger_entry",
+            entityId: savedId,
+            entityLabel: afterSnap.voucher_no || "ENTRY",
+            action: prev ? "edited" : "created",
+            summary: diff.summary,
+            changes: diff.changes,
+            beforeSnapshot: beforeSnap,
+            afterSnapshot: afterSnap,
+            actorId: ctx.user.id,
+            actorName: ctx.user.full_name,
+          });
+        }
       } else if (input.entryId) {
-        const prevRes = await client.query<{ debit: string; credit: string }>(
-          "SELECT debit::text, credit::text FROM public.party_ledger_entries WHERE id = $1 AND tenant_id = $2 AND source_type = 'manual'",
+        const prevRes = await client.query(
+          "SELECT * FROM public.party_ledger_entries WHERE id = $1 AND tenant_id = $2 AND source_type = 'manual'",
           [input.entryId, ctx.tenant.id]
         );
-        const oldNet = prevRes.rows[0]
-          ? Number(prevRes.rows[0].debit || 0) - Number(prevRes.rows[0].credit || 0)
-          : 0;
+        const prev = prevRes.rows[0];
+        const oldNet = prev ? Number(prev.debit || 0) - Number(prev.credit || 0) : 0;
         const delta = newDebit - newCredit - oldNet;
 
         await client.query(
@@ -94,6 +165,51 @@ export async function savePartyLedgerEntryAction(input: {
             ctx.tenant.id,
           ]
         );
+
+        if (prev) {
+          const beforeSnap: LedgerEntrySnapshot = {
+            id: prev.id,
+            party_type: prev.party_type,
+            party_id: prev.party_id,
+            source_type: prev.source_type,
+            source_id: prev.source_id,
+            entry_date: prev.entry_date,
+            voucher_no: prev.voucher_no || "",
+            particulars: prev.particulars || "",
+            debit: Number(prev.debit || 0),
+            credit: Number(prev.credit || 0),
+            extra_fields: prev.extra_fields ?? {},
+            items: Array.isArray(prev.items_json) ? prev.items_json : [],
+          };
+          const afterSnap: LedgerEntrySnapshot = {
+            id: input.entryId,
+            party_type: input.partyType,
+            party_id: input.partyId,
+            source_type: "manual",
+            source_id: null,
+            entry_date: safeDate,
+            voucher_no: input.voucherNo.trim(),
+            particulars: input.particulars.trim(),
+            debit: newDebit,
+            credit: newCredit,
+            extra_fields: input.extraFields ?? {},
+            items: input.items ?? [],
+          };
+          const diff = diffLedgerEntrySnapshots(beforeSnap, afterSnap);
+          await recordBillRevision(client, {
+            tenantId: ctx.tenant.id,
+            entityType: "ledger_entry",
+            entityId: input.entryId,
+            entityLabel: afterSnap.voucher_no || "ENTRY",
+            action: "edited",
+            summary: diff.summary,
+            changes: diff.changes,
+            beforeSnapshot: beforeSnap,
+            afterSnapshot: afterSnap,
+            actorId: ctx.user.id,
+            actorName: ctx.user.full_name,
+          });
+        }
 
         if (delta !== 0) {
           const tbl = input.partyType === "customer" ? "public.customers" : "public.suppliers";
@@ -153,14 +269,44 @@ export async function deleteManualPartyLedgerEntryAction(
   await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
-      const deleted = await client.query<{ debit: string; credit: string }>(
+      const deleted = await client.query(
         `DELETE FROM public.party_ledger_entries
          WHERE id = $1 AND tenant_id = $2 AND source_type = 'manual'
-         RETURNING debit::text, credit::text`,
+         RETURNING *`,
         [entryId, ctx.tenant.id]
       );
-      if (deleted.rows[0]) {
-        const delta = -(Number(deleted.rows[0].debit || 0) - Number(deleted.rows[0].credit || 0));
+      const row = deleted.rows[0];
+      if (row) {
+        await recordBillRevision(client, {
+          tenantId: ctx.tenant.id,
+          entityType: "ledger_entry",
+          entityId: entryId,
+          entityLabel: row.voucher_no || "ENTRY",
+          action: "deleted",
+          summary: `Deleted ledger entry ${row.voucher_no || ""} (${row.particulars || "Manual Entry"})`,
+          changes: [
+            { field: "Debit", before: `₹${Number(row.debit || 0).toFixed(2)}`, after: "Deleted" },
+            { field: "Credit", before: `₹${Number(row.credit || 0).toFixed(2)}`, after: "Deleted" },
+          ],
+          beforeSnapshot: {
+            id: row.id,
+            party_type: row.party_type,
+            party_id: row.party_id,
+            source_type: row.source_type,
+            source_id: row.source_id,
+            entry_date: row.entry_date,
+            voucher_no: row.voucher_no || "",
+            particulars: row.particulars || "",
+            debit: Number(row.debit || 0),
+            credit: Number(row.credit || 0),
+            extra_fields: row.extra_fields ?? {},
+            items: Array.isArray(row.items_json) ? row.items_json : [],
+          },
+          afterSnapshot: null,
+          actorId: ctx.user.id,
+          actorName: ctx.user.full_name,
+        });
+        const delta = -(Number(row.debit || 0) - Number(row.credit || 0));
         if (delta !== 0) {
           const tbl = partyType === "customer" ? "public.customers" : "public.suppliers";
           await client.query(

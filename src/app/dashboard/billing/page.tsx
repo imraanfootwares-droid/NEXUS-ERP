@@ -59,9 +59,9 @@ export default async function BillingLedgerPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1>Invoices &amp; Billing Ledger</h1>
+          <h1>All Bills</h1>
           <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-            Manage GST invoices, drafts, credit note returns, size exchanges &amp; oversold flags.
+            View, edit, print, return, or check edit history &amp; revert any bill.
           </p>
         </div>
         {canAccess(ctx, "billing.create").allowed && (
@@ -69,7 +69,7 @@ export default async function BillingLedgerPage() {
             href="/dashboard/billing/new"
             className="rounded-lg bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700"
           >
-            + Open POS Terminal
+            + New Bill
           </Link>
         )}
       </div>
@@ -79,6 +79,7 @@ export default async function BillingLedgerPage() {
         canEdit={canAccess(ctx, "billing.edit").allowed}
         canCancel={canAccess(ctx, "billing.cancel").allowed}
         canReturn={canAccess(ctx, "billing.process_return").allowed}
+        canUseHistory={canAccess(ctx, "billing.history").allowed}
       />
     </div>
   );

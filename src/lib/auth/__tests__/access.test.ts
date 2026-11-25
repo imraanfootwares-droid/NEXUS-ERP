@@ -179,10 +179,30 @@ describe("Access Control & Cross-Tier Overrides", () => {
     );
   });
 
-  it("has all 32 canonical permission definitions including customer enquiries", () => {
-    expect(PERMISSION_DEFINITIONS.length).toBe(32);
+  it("has all 33 canonical permission definitions including customer enquiries & bill history", () => {
+    expect(PERMISSION_DEFINITIONS.length).toBe(33);
     const tier1 = makeTenant({ tier: "tier_1" });
     expect(isFeatureEnabled(tier1, "customer_enquiries")).toBe(false);
+    expect(isFeatureEnabled(tier1, "bill_edit_history")).toBe(false);
+    expect(isFeatureEnabled(tier1, "daily_backups")).toBe(false);
+
+    const tier2 = makeTenant({ tier: "tier_2" });
+    expect(isFeatureEnabled(tier2, "bill_edit_history")).toBe(false);
+    expect(isFeatureEnabled(tier2, "daily_backups")).toBe(false);
+
+    const tier3 = makeTenant({ tier: "tier_3" });
+    expect(isFeatureEnabled(tier3, "bill_edit_history")).toBe(true);
+    expect(isFeatureEnabled(tier3, "daily_backups")).toBe(true);
+
+    // Super Admin can unlock Tier 3+ features on Tier 1/2 via feature_overrides
+    const tier1WithHistory = makeTenant({
+      tier: "tier_1",
+      feature_overrides: { bill_edit_history: true, daily_backups: true },
+    });
+    expect(isFeatureEnabled(tier1WithHistory, "bill_edit_history")).toBe(true);
+    expect(isFeatureEnabled(tier1WithHistory, "daily_backups")).toBe(true);
+    expect(canAccess(makeCtx({ tenant: tier1WithHistory }), "billing.history").allowed).toBe(true);
+
     const tier1WithEnq = makeTenant({ tier: "tier_1", feature_overrides: { customer_enquiries: true } });
     expect(isFeatureEnabled(tier1WithEnq, "customer_enquiries")).toBe(true);
     const workerCtx = makeCtx({

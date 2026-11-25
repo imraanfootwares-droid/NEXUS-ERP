@@ -341,18 +341,38 @@ export async function updateTenantQuotasAndStatusAction(
     maxUsers: number;
     maxBranches: number;
     maxStorageMb: number;
+    maxProductPhotos?: number;
+    maxRevisionsPerBill?: number;
+    revisionRetentionDays?: number;
     amcRenewalDate: string | null;
     customDomain: string | null;
   }
 ) {
   const ctx = await requirePlatformAdmin();
+  const safeMaxPhotos = Math.max(10, Math.min(10000, Math.round(Number(input.maxProductPhotos ?? 200) || 200)));
+  const safeMaxRevs = Math.max(5, Math.min(500, Math.round(Number(input.maxRevisionsPerBill ?? 50) || 50)));
+  const safeRetentionDays = Math.max(7, Math.min(3650, Math.round(Number(input.revisionRetentionDays ?? 180) || 180)));
+
   await withPlatformTx(async (client) => {
     const cleanDomain = input.customDomain?.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0] || null;
     await client.query(
       `UPDATE public.tenants
-       SET status = $1, max_users = $2, max_branches = $3, max_storage_mb = $4, amc_renewal_date = $5, custom_domain = $6
-       WHERE id = $7`,
-      [input.status, input.maxUsers, input.maxBranches, input.maxStorageMb, input.amcRenewalDate || null, cleanDomain, tenantId]
+       SET status = $1, max_users = $2, max_branches = $3, max_storage_mb = $4,
+           max_product_photos = $5, max_revisions_per_bill = $6, revision_retention_days = $7,
+           amc_renewal_date = $8, custom_domain = $9
+       WHERE id = $10`,
+      [
+        input.status,
+        input.maxUsers,
+        input.maxBranches,
+        input.maxStorageMb,
+        safeMaxPhotos,
+        safeMaxRevs,
+        safeRetentionDays,
+        input.amcRenewalDate || null,
+        cleanDomain,
+        tenantId,
+      ]
     );
 
     // Bump session_version on suspension so active JWTs are immediately revoked

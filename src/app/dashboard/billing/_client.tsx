@@ -3,8 +3,9 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, Download, Edit, Eye, Loader2, Printer, RotateCcw, Trash2 } from "lucide-react";
+import { Ban, Download, Edit, Eye, History, Loader2, Printer, RotateCcw, Trash2 } from "lucide-react";
 import { InvoiceRenderer } from "@/components/billing/invoice-renderer";
+import { RevisionHistoryDialog } from "@/components/billing/revision-history-dialog";
 import { toast } from "sonner";
 import { InlineRowsSkeleton } from "@/components/ui/page-skeletons";
 import {
@@ -14,6 +15,7 @@ import {
   getInvoicePreviewAction,
   processReturnOrExchangeAction,
 } from "@/actions/billing";
+import { deleteInvoiceAction } from "@/actions/bill-revisions";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 import { Form, Badge, Button, Dialog, Input, Label, Select } from "@/components/ui/primitives";
 
@@ -56,15 +58,23 @@ export function BillingLedgerClient({
   canEdit,
   canCancel,
   canReturn,
+  canUseHistory = false,
 }: {
   invoices: InvoiceListRow[];
   canEdit: boolean;
   canCancel: boolean;
   canReturn: boolean;
+  canUseHistory?: boolean;
 }) {
   const router = useRouter();
   const [onlyOversold, setOnlyOversold] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<InvoiceListRow | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<{
+    id: string;
+    label: string;
+    canRevert: boolean;
+  } | null>(null);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [previewRow, setPreviewRow] = useState<InvoiceListRow | null>(null);
   const [previewData, setPreviewData] = useState<Awaited<ReturnType<typeof getInvoicePreviewAction>> | null>(null);
   const previewReqRef = React.useRef(0);
@@ -270,6 +280,15 @@ export function BillingLedgerClient({
               </button>
             </>
           )}
+          {r.status !== "draft" && r.status !== "cancelled" && r.invoice_type !== "return_credit_note" && canEdit && canUseHistory && (
+            <Link
+              href={`/dashboard/billing/new?edit=${r.id}`}
+              className="inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100"
+              title="Edit this bill (auto-updates stock, balance & history)"
+            >
+              <Edit className="h-3.5 w-3.5" /> Edit
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => void openPreview(r)}
@@ -284,15 +303,61 @@ export function BillingLedgerClient({
           >
             <Printer className="h-3.5 w-3.5" /> Print
           </Link>
+          {r.status !== "draft" && canUseHistory && (
+            <button
+              type="button"
+              onClick={() =>
+                setHistoryTarget({
+                  id: r.id,
+                  label: r.invoice_number || "Bill",
+                  canRevert: canEdit && r.status !== "cancelled" && r.invoice_type !== "return_credit_note",
+                })
+              }
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              title="View edit history & revert to previous versions"
+            >
+              <History className="h-3.5 w-3.5" /> History
+            </button>
+          )}
           {r.status !== "draft" && r.status !== "cancelled" && r.invoice_type === "sale" && canReturn && (
             <Button size="sm" variant="outline" onClick={() => openReturnModal(r)}>
               <RotateCcw className="h-3.5 w-3.5" /> Return / Exchange
             </Button>
           )}
           {r.status !== "cancelled" && canCancel && (
-            <Button size="sm" variant="ghost" onClick={() => setCancelTarget(r)}>
-              <Ban className="h-3.5 w-3.5 text-rose-600" />
+            <Button size="sm" variant="ghost" title="Cancel / Void Bill" onClick={() => setCancelTarget(r)}>
+              <Ban className="h-3.5 w-3.5 text-amber-600" />
             </Button>
+          )}
+          {r.status !== "draft" && canCancel && canUseHistory && (
+            <button
+              type="button"
+              title="Delete bill permanently (restores stock & balance)"
+              onClick={async (e) => {
+                const btn = e.currentTarget;
+                if (btn.disabled) return;
+                if (
+                  !confirm(
+                    `Delete bill ${r.invoice_number || ""} permanently?\n\nStock & customer balance will be reversed and a record will stay in Change History.`
+                  )
+                ) {
+                  return;
+                }
+                btn.disabled = true;
+                try {
+                  await deleteInvoiceAction(r.id);
+                  toast.success(`Bill ${r.invoice_number || ""} deleted & stock restored.`);
+                  router.refresh();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Could not delete this bill.");
+                } finally {
+                  btn.disabled = false;
+                }
+              }}
+              className="inline-flex cursor-pointer items-center rounded-md border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           )}
         </div>
       ),
@@ -305,20 +370,29 @@ export function BillingLedgerClient({
         data={filtered}
         columns={columns}
         rowKey={(r) => r.id}
-        searchPlaceholder="Search invoice number or customer..."
+        searchPlaceholder="Search bill number or customer..."
         searchFilter={(r, q) =>
           (r.invoice_number ?? "draft").toLowerCase().includes(q) ||
           r.customer_name.toLowerCase().includes(q)
         }
         actions={
-          oversoldCount > 0 ? (
-            <Button
-              size="sm"
-              variant={onlyOversold ? "danger" : "outline"}
-              onClick={() => setOnlyOversold(!onlyOversold)}
-            >
-              Oversold Offline Bills ({oversoldCount})
-            </Button>
+          canUseHistory || oversoldCount > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {canUseHistory && (
+                <Button size="sm" variant="outline" onClick={() => setActivityOpen(true)}>
+                  <History className="h-3.5 w-3.5" /> Change &amp; Delete History
+                </Button>
+              )}
+              {oversoldCount > 0 && (
+                <Button
+                  size="sm"
+                  variant={onlyOversold ? "danger" : "outline"}
+                  onClick={() => setOnlyOversold(!onlyOversold)}
+                >
+                  Oversold Offline Bills ({oversoldCount})
+                </Button>
+              )}
+            </div>
           ) : undefined
         }
       />
@@ -533,6 +607,25 @@ export function BillingLedgerClient({
           </Form>
         )}
       </Dialog>
+
+      <RevisionHistoryDialog
+        open={Boolean(historyTarget)}
+        onClose={() => setHistoryTarget(null)}
+        entityType="invoice"
+        entityId={historyTarget?.id ?? null}
+        title={`Edit History — ${historyTarget?.label ?? "Bill"}`}
+        canRevert={Boolean(historyTarget?.canRevert)}
+        mode="entity"
+      />
+
+      <RevisionHistoryDialog
+        open={activityOpen}
+        onClose={() => setActivityOpen(false)}
+        entityType="invoice"
+        title="All Bills — Change & Delete History"
+        canRevert={false}
+        mode="activity"
+      />
     </div>
   );
 }

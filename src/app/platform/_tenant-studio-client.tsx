@@ -232,6 +232,9 @@ export function TenantStudioClient({
   const [maxUsers, setMaxUsers] = useState(tenant.max_users);
   const [maxBranches, setMaxBranches] = useState(tenant.max_branches);
   const [maxStorageMb, setMaxStorageMb] = useState(tenant.max_storage_mb);
+  const [maxProductPhotos, setMaxProductPhotos] = useState(tenant.max_product_photos ?? 200);
+  const [maxRevisionsPerBill, setMaxRevisionsPerBill] = useState(tenant.max_revisions_per_bill ?? 50);
+  const [revisionRetentionDays, setRevisionRetentionDays] = useState(tenant.revision_retention_days ?? 180);
   const [amcDate, setAmcDate] = useState(
     tenant.amc_renewal_date ? tenant.amc_renewal_date.slice(0, 10) : ""
   );
@@ -388,6 +391,9 @@ export function TenantStudioClient({
         maxUsers,
         maxBranches,
         maxStorageMb,
+        maxProductPhotos,
+        maxRevisionsPerBill,
+        revisionRetentionDays,
         amcRenewalDate: amcDate || null,
         customDomain: customDomain || null,
       });
@@ -620,7 +626,7 @@ export function TenantStudioClient({
                 type="text"
                 value={featureSearch}
                 onChange={(e) => setFeatureSearch(e.target.value)}
-                placeholder="Filter 18 ERP modules..."
+                placeholder={`Filter ${FEATURE_KEYS.length} ERP modules...`}
                 className="w-full rounded-[10px] border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#171717] focus:outline-none"
               />
             </div>
@@ -934,6 +940,36 @@ export function TenantStudioClient({
                     min={50}
                     value={maxStorageMb}
                     onChange={(e) => setMaxStorageMb(Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <Label>Max Product Photos (R2 Cap)</Label>
+                  <Input
+                    type="number"
+                    min={10}
+                    max={10000}
+                    value={maxProductPhotos}
+                    onChange={(e) => setMaxProductPhotos(Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <Label>Max Edits Kept Per Bill</Label>
+                  <Input
+                    type="number"
+                    min={5}
+                    max={500}
+                    value={maxRevisionsPerBill}
+                    onChange={(e) => setMaxRevisionsPerBill(Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <Label>Bill History Retention (Days)</Label>
+                  <Input
+                    type="number"
+                    min={7}
+                    max={3650}
+                    value={revisionRetentionDays}
+                    onChange={(e) => setRevisionRetentionDays(Number(e.target.value))}
                   />
                 </div>
                 <div>

@@ -4,7 +4,8 @@ import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PackagePlus, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { recordPurchaseAction } from "@/actions/inventory";
+import { createProductWithVariantsAction, recordPurchaseAction } from "@/actions/inventory";
+import { generateVariantCombinations } from "@/lib/catalog/verticals";
 import { Button, Dialog, Form, Input, Label, Select, friendlyErrorMessage } from "@/components/ui/primitives";
 
 export interface PurchaseCatalogVariant {
@@ -111,15 +112,35 @@ export function PurchaseBillDialog({
   const [payMode, setPayMode] = useState<PayMode>("cash");
   const [picker, setPicker] = useState("");
 
+  // Quick Create New Product inline inside Purchase Bill (eliminates double-entry!)
+  const [extraCatalog, setExtraCatalog] = useState<PurchaseCatalogVariant[]>([]);
+  const [newProdOpen, setNewProdOpen] = useState(false);
+  const [npName, setNpName] = useState("");
+  const [npCode, setNpCode] = useState("");
+  const [npSizes, setNpSizes] = useState("UK 6, UK 7, UK 8, UK 9");
+  const [npColours, setNpColours] = useState("Black, Tan");
+  const [npCost, setNpCost] = useState("");
+  const [npSell, setNpSell] = useState("");
+  const [npHsn, setNpHsn] = useState("6403");
+  const [npGst, setNpGst] = useState("5");
+  const [npSaving, setNpSaving] = useState(false);
+
+  const mergedCatalog = useMemo(() => {
+    const byVariant = new Map<string, PurchaseCatalogVariant>();
+    for (const v of catalog) byVariant.set(v.variant_id, v);
+    for (const v of extraCatalog) byVariant.set(v.variant_id, v);
+    return Array.from(byVariant.values());
+  }, [catalog, extraCatalog]);
+
   const products = useMemo(() => {
     const map = new Map<string, { id: string; name: string; code: string; mine: boolean; variants: PurchaseCatalogVariant[] }>();
-    for (const v of catalog) {
+    for (const v of mergedCatalog) {
       const p = map.get(v.product_id) ?? { id: v.product_id, name: v.product_name, code: v.model_code, mine: v.supplier_id === supplierId, variants: [] };
       p.variants.push(v);
       map.set(v.product_id, p);
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [catalog, supplierId]);
+  }, [mergedCatalog, supplierId]);
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
   /** Pairs per variant for a product, whatever way they were entered. */
@@ -256,7 +277,17 @@ export function PurchaseBillDialog({
 
         <div className="space-y-3">
           <div>
-            <Label>Add a product</Label>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <Label className="!mb-0">Add a product</Label>
+              <button
+                type="button"
+                onClick={() => setNewProdOpen((v) => !v)}
+                className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-[11.5px] font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {newProdOpen ? "Close New Product" : "Create New Product"}
+              </button>
+            </div>
             <Select
               value={picker}
               onChange={(e) => {
@@ -265,7 +296,7 @@ export function PurchaseBillDialog({
               }}
               aria-label="Add a product to this bill"
             >
-              <option value="">+ Choose a product…</option>
+              <option value="">+ Choose an existing product…</option>
               {products.some((p) => p.mine) && (
                 <optgroup label={`From ${supplierName}`}>
                   {products.filter((p) => p.mine).map((p) => (
@@ -279,10 +310,134 @@ export function PurchaseBillDialog({
                 ))}
               </optgroup>
             </Select>
-            {products.length === 0 && (
-              <p className="mt-1 text-[11.5px] text-slate-500">No products yet. Add products in Stock first, or use “Other item” below.</p>
+            {products.length === 0 && !newProdOpen && (
+              <p className="mt-1 text-[11.5px] text-slate-500">
+                No products yet. Click <strong>+ Create New Product</strong> above to create and add it in one step.
+              </p>
             )}
           </div>
+
+          {newProdOpen && (
+            <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5">
+              <div>
+                <p className="text-xs font-bold text-emerald-950">Create New Product &amp; Add to This Bill</p>
+                <p className="text-[11px] text-emerald-800">
+                  Creates the product in your catalog and adds it straight to this purchase bill — no need to type it twice.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <div>
+                  <Label>Product Name *</Label>
+                  <Input value={npName} onChange={(e) => setNpName(e.target.value)} placeholder="e.g. Ladies Ortho Art 305" />
+                </div>
+                <div>
+                  <Label>Model / Article Code *</Label>
+                  <Input value={npCode} onChange={(e) => setNpCode(e.target.value)} placeholder="e.g. ART-305" />
+                </div>
+                <div>
+                  <Label>Sizes (comma-separated)</Label>
+                  <Input value={npSizes} onChange={(e) => setNpSizes(e.target.value)} placeholder="e.g. UK 6, UK 7, UK 8" />
+                </div>
+                <div>
+                  <Label>Colours (comma-separated)</Label>
+                  <Input value={npColours} onChange={(e) => setNpColours(e.target.value)} placeholder="e.g. Black, Tan" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                <div>
+                  <Label>Buy Cost ₹</Label>
+                  <Input inputMode="decimal" value={npCost} onChange={(e) => setNpCost(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 210" />
+                </div>
+                <div>
+                  <Label>Sell Price ₹</Label>
+                  <Input inputMode="decimal" value={npSell} onChange={(e) => setNpSell(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 499" />
+                </div>
+                <div>
+                  <Label>HSN Code</Label>
+                  <Input value={npHsn} onChange={(e) => setNpHsn(e.target.value)} placeholder="6403" />
+                </div>
+                <div>
+                  <Label>GST %</Label>
+                  <Input inputMode="decimal" value={npGst} onChange={(e) => setNpGst(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="5" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => setNewProdOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={npSaving}
+                  onClick={async () => {
+                    if (!npName.trim() || !npCode.trim()) {
+                      toast.error("Enter both Product Name and Model Code.");
+                      return;
+                    }
+                    setNpSaving(true);
+                    try {
+                      const sizesArr = npSizes.split(",").map((s) => s.trim()).filter(Boolean);
+                      const colsArr = npColours.split(",").map((s) => s.trim()).filter(Boolean);
+                      const axesInput: Array<{ name: string; values: string[] }> = [];
+                      if (sizesArr.length > 0) axesInput.push({ name: "size", values: sizesArr });
+                      if (colsArr.length > 0) axesInput.push({ name: "colour", values: colsArr });
+                      const combinations = axesInput.length > 0 ? generateVariantCombinations(axesInput) : [{}];
+                      const costNum = num(npCost);
+                      const sellNum = num(npSell) || costNum;
+                      const res = await createProductWithVariantsAction({
+                        modelCode: npCode.trim(),
+                        name: npName.trim(),
+                        uom: "Pair",
+                        hsnCode: npHsn.trim() || "6403",
+                        gstRate: num(npGst),
+                        customFields: {},
+                        costPrice: costNum,
+                        mrp: sellNum,
+                        sellingPrice: sellNum,
+                        wholesalePrice: sellNum,
+                        lowStockThreshold: 10,
+                        combinations,
+                        supplierId,
+                      });
+                      if (!res.ok) {
+                        toast.error(res.error);
+                        return;
+                      }
+                      const createdVariants = res.variants ?? [];
+                      setExtraCatalog((prev) => [...prev, ...createdVariants]);
+                      setBlocks((prev) => [
+                        ...prev,
+                        {
+                          key: nextKey(),
+                          productId: res.productId,
+                          cost: costNum > 0 ? String(costNum) : "",
+                          mode: "size",
+                          qty: {},
+                          total: "",
+                          cartons: "",
+                          perCarton: "12",
+                          colour: "",
+                          split: "equal",
+                        },
+                      ]);
+                      toast.success(`"${npName.trim()}" created & added to this bill!`);
+                      setNpName("");
+                      setNpCode("");
+                      setNpCost("");
+                      setNpSell("");
+                      setNewProdOpen(false);
+                    } catch (err) {
+                      toast.error(friendlyErrorMessage(err, "Could not create product."));
+                    } finally {
+                      setNpSaving(false);
+                    }
+                  }}
+                >
+                  {npSaving ? "Creating..." : "Create & Add to Bill"}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {blocks.map((b) => {
             const p = productById.get(b.productId);

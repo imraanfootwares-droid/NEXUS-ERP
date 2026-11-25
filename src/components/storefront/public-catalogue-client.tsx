@@ -36,6 +36,91 @@ interface InquirySelection {
   qty: number;
 }
 
+function CatalogueQtyStepper({
+  qty,
+  label,
+  onChange,
+  variant = "dark",
+}: {
+  qty: number;
+  label: string;
+  onChange: (nextQty: number) => void;
+  variant?: "dark" | "light";
+}) {
+  const [draft, setDraft] = useState(String(qty));
+  const [focused, setFocused] = useState(false);
+  const display = focused ? draft : String(qty);
+
+  return (
+    <div
+      className={`flex items-center justify-between rounded-lg px-1 py-0.5 ${
+        variant === "dark"
+          ? "flex-1 bg-[#171717] text-white"
+          : "w-24 border border-slate-200 bg-white text-[#171717]"
+      }`}
+    >
+      <button
+        type="button"
+        aria-label={qty <= 1 ? `Remove ${label}` : `Decrease ${label}`}
+        onClick={() => onChange(qty - 1)}
+        className={`flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded ${
+          variant === "dark" ? "text-white/90 hover:bg-white/15" : "text-slate-600 hover:bg-slate-100"
+        }`}
+      >
+        {qty <= 1 ? (
+          <Trash2 className={`h-3 w-3 ${variant === "dark" ? "text-rose-300" : "text-rose-500"}`} />
+        ) : (
+          <Minus className="h-3 w-3" />
+        )}
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        aria-label={`Quantity for ${label}`}
+        value={display}
+        onFocus={(e) => {
+          setDraft(String(qty));
+          setFocused(true);
+          e.currentTarget.select();
+        }}
+        onChange={(e) => {
+          const cleaned = e.target.value.replace(/\D/g, "").slice(0, 6);
+          setDraft(cleaned);
+          const n = Number(cleaned);
+          if (cleaned !== "" && Number.isFinite(n) && n > 0) {
+            onChange(n);
+          }
+        }}
+        onBlur={() => {
+          setFocused(false);
+          const n = Number(draft);
+          if (draft === "" || !Number.isFinite(n) || n <= 0) {
+            onChange(0);
+          } else {
+            onChange(n);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        className={`h-6 min-w-0 flex-1 bg-transparent text-center font-mono text-[11px] font-bold focus:outline-none ${
+          variant === "dark" ? "text-white" : "text-[#171717]"
+        }`}
+      />
+      <button
+        type="button"
+        aria-label={`Increase ${label}`}
+        onClick={() => onChange(qty + 1)}
+        className={`flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded ${
+          variant === "dark" ? "text-white/90 hover:bg-white/15" : "text-slate-600 hover:bg-slate-100"
+        }`}
+      >
+        <Plus className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
 export function PublicCatalogueClient({
   slug,
   tenantName,
@@ -353,38 +438,11 @@ export function PublicCatalogueClient({
                 {(canInbox || canWhatsapp) && (
                   <div className="flex gap-1.5 px-3 pb-3">
                     {itemQty > 0 ? (
-                      <div
-                        style={{ animation: "pos-stepper-in 200ms var(--ui-ease)" }}
-                        className="flex flex-1 items-center justify-between rounded-lg bg-[#171717] px-1 py-0.5 text-white"
-                      >
-                        <button
-                          type="button"
-                          aria-label={itemQty <= 1 ? `Remove ${item.name}` : `Decrease ${item.name}`}
-                          onClick={() => setItemQty(item.product_id, itemQty - 1)}
-                          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-white/90 hover:bg-white/15"
-                        >
-                          {itemQty <= 1 ? (
-                            <Trash2 className="h-3 w-3 text-rose-300" />
-                          ) : (
-                            <Minus className="h-3 w-3" />
-                          )}
-                        </button>
-                        <span
-                          key={itemQty}
-                          style={{ animation: "pos-pop 240ms var(--ui-ease)" }}
-                          className="font-mono text-[11px] font-bold"
-                        >
-                          {itemQty}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label={`Increase ${item.name}`}
-                          onClick={() => addItem(item)}
-                          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-white/90 hover:bg-white/15"
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
-                      </div>
+                      <CatalogueQtyStepper
+                        qty={itemQty}
+                        label={item.name}
+                        onChange={(next) => setItemQty(item.product_id, next)}
+                      />
                     ) : (
                       <Button
                         size="sm"
@@ -462,17 +520,23 @@ export function PublicCatalogueClient({
                     key={c.product_id}
                     className="flex items-center justify-between gap-2 border-b border-slate-200/70 pb-1.5 text-xs last:border-0 last:pb-0"
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-slate-900">{c.name}</p>
                       <p className="text-[11px] text-slate-500">
-                        {c.model_code} • Qty: {c.qty}
+                        {c.model_code}
                         {c.price != null ? ` • ₹${Number(c.price).toLocaleString("en-IN")}` : ""}
                       </p>
                     </div>
+                    <CatalogueQtyStepper
+                      qty={c.qty}
+                      label={c.name}
+                      variant="light"
+                      onChange={(next) => setItemQty(c.product_id, next)}
+                    />
                     <button
                       type="button"
                       onClick={() => setCart((prev) => prev.filter((_, i) => i !== idx))}
-                      className="p-1 text-rose-500 hover:text-rose-700"
+                      className="p-1 text-rose-500 hover:text-rose-700 cursor-pointer"
                       aria-label={`Remove ${c.name}`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

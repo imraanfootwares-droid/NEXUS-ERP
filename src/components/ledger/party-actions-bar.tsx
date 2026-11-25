@@ -95,8 +95,9 @@ export function PartyActionsBar({
             type="button"
             onClick={() => setPurchaseOpen(true)}
             className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}
+            title="Buy goods from this supplier — automatically adds stock & updates balance"
           >
-            <PackagePlus className="h-4 w-4" /> New Purchase Bill
+            <PackagePlus className="h-4 w-4" /> New Purchase Bill (Adds Stock)
           </button>
         )}
         {canEdit && (
@@ -104,8 +105,9 @@ export function PartyActionsBar({
             type="button"
             onClick={() => setMoneyTarget({ partyType: details.type, id: details.id, name: details.name, currentDue })}
             className={`${btn} bg-[#171717] text-white hover:bg-[#2a2a2a]`}
+            title={isSup ? "Record a payment or manual balance adjustment (does not change stock)" : "Record a payment or manual balance adjustment"}
           >
-            <Wallet className="h-4 w-4" /> Add / Deduct ₹
+            <Wallet className="h-4 w-4" /> {isSup ? "Pay / Adjust ₹" : "Add / Deduct ₹"}
           </button>
         )}
         {!isSup && currentDue > 0 && wa && (

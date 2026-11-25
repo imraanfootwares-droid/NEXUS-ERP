@@ -429,6 +429,22 @@ export function StockHubClient({
         </div>
       </div>
 
+      {/* Clear Workflow Guide: Own Stock vs Supplier Purchase */}
+      <Alert variant="info">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span>
+            Use <strong>Add Product</strong> for your own / opening stock. Buying from a supplier? Use{" "}
+            <strong>Suppliers → New Purchase Bill</strong> — it adds stock &amp; updates the supplier&apos;s account in one step (no double entry).
+          </span>
+          <Link
+            href="/dashboard/customers?tab=suppliers"
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#171717] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#2a2a2a]"
+          >
+            Buy from Supplier →
+          </Link>
+        </div>
+      </Alert>
+
       {/* Collapsible Catalox Sparkline Statistic Cards */}
       {showStats && (
         <KpiGrid

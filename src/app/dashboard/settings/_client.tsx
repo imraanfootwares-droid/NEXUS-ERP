@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, CheckCircle2, Download, KeyRound, Pencil, Plus, RefreshCw, Trash2, Upload, User, UserX } from "lucide-react";
+import { AlertTriangle, Building2, Check, CheckCircle2, Download, KeyRound, Landmark, Pencil, Plus, RefreshCw, Trash2, Upload, User, UserX } from "lucide-react";
 import { DataExportCard } from "@/components/ui/data-export-card";
 import { Paged } from "@/components/ui/pagination";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import {
   triggerManualBackupAction,
   updateBranchAction,
   updateBrandConfigAction,
+  updateBusinessBillingProfileAction,
   updateLedgerConfigAction,
   updateMyProfileAction,
   updateStaffAction,
@@ -136,6 +137,28 @@ export function SettingsHubClient({
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [savingPw, setSavingPw] = useState(false);
+
+  // Business & Bank Details (for Bills) inside My Profile
+  const bp = tenant.brand_config?.business_profile;
+  const defaultBranch = branches.find((b) => b.is_default) ?? branches[0];
+  const [bizName, setBizName] = useState(bp?.business_name ?? tenant.name ?? "");
+  const [bizAddress, setBizAddress] = useState(
+    bp?.address ?? tenant.brand_config?.address ?? defaultBranch?.address ?? ""
+  );
+  const [bizPhone, setBizPhone] = useState(
+    bp?.phone ?? tenant.brand_config?.phone ?? defaultBranch?.phone ?? ""
+  );
+  const [bizEmail, setBizEmail] = useState(bp?.email ?? tenant.brand_config?.email ?? "");
+  const [bizGstin, setBizGstin] = useState(bp?.gstin ?? defaultBranch?.gstin ?? "");
+  const [bizSignatory, setBizSignatory] = useState(bp?.signatory_name ?? bp?.business_name ?? tenant.name ?? "");
+  const [bankHolder, setBankHolder] = useState(bp?.bank_details?.account_holder ?? bp?.business_name ?? tenant.name ?? "");
+  const [bankName, setBankName] = useState(bp?.bank_details?.bank_name ?? "");
+  const [bankAccNo, setBankAccNo] = useState(bp?.bank_details?.account_number ?? "");
+  const [bankIfsc, setBankIfsc] = useState(bp?.bank_details?.ifsc_code ?? "");
+  const [bankBranch, setBankBranch] = useState(bp?.bank_details?.branch_name ?? "");
+  const [bankUpi, setBankUpi] = useState(bp?.bank_details?.upi_id ?? "");
+  const [savingBizProfile, setSavingBizProfile] = useState(false);
+  const canEditBusinessProfile = userRole === "owner" || userRole === "branch_admin";
 
   // Brand state
   const [uiStyle, setUiStyle] = useState<UiStyleKey>(tenant.brand_config?.ui_style ?? "style_4");
@@ -277,20 +300,213 @@ export function SettingsHubClient({
         active={tab}
         onChange={setTab}
         tabs={[
-          { id: "profile", label: "My Profile" },
-          { id: "brand", label: "Brand & Look" },
-          { id: "schema", label: "Product Fields" },
+          { id: "profile", label: "My Profile & Bank" },
+          { id: "brand", label: "Shop Look" },
+          { id: "schema", label: "Product Options" },
           { id: "tax", label: "Tax & GST" },
-          { id: "branches", label: `Branches (${branches.length}/${tenant.max_branches})` },
-          { id: "staff", label: `Staff & Resets`, badge: resets.length || undefined },
-          { id: "permissions", label: "Role Permissions" },
-          { id: "devices", label: "Offline Devices" },
+          { id: "branches", label: `Shops (${branches.length}/${tenant.max_branches})` },
+          { id: "staff", label: `Staff`, badge: resets.length || undefined },
+          { id: "permissions", label: "Staff Access" },
+          { id: "devices", label: "Offline Counters" },
           { id: "backups", label: "Backups" },
         ]}
       />
 
       {tab === "profile" && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1d528a] text-white">
+                    <Building2 className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-semibold">Shop &amp; Bank Details (Printed on Every Bill)</h3>
+                    <p className="text-xs text-[#77777d]">
+                      Save your shop name, address, phone, email, GST number, and bank account once here. Every GST Bill, Normal Bill, and PDF will use these automatically.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/dashboard/bill-designer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Open Bill Designs →
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {!canEditBusinessProfile && (
+                <Alert variant="info" className="mb-4">
+                  Only the Shop Owner or Branch Manager can edit shop &amp; bank details. You can still update your personal details below.
+                </Alert>
+              )}
+              <Form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setSavingBizProfile(true);
+                  try {
+                    await updateBusinessBillingProfileAction({
+                      business_name: bizName,
+                      address: bizAddress,
+                      phone: bizPhone,
+                      email: bizEmail,
+                      gstin: bizGstin,
+                      signatory_name: bizSignatory,
+                      bank_details: {
+                        account_holder: bankHolder,
+                        bank_name: bankName,
+                        account_number: bankAccNo,
+                        ifsc_code: bankIfsc,
+                        branch_name: bankBranch,
+                        upi_id: bankUpi,
+                      },
+                    });
+                    toast.success("Shop & bank details saved! All bills will now show these details.");
+                    router.refresh();
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Could not save shop details.");
+                  } finally {
+                    setSavingBizProfile(false);
+                  }
+                }}
+                className="space-y-5"
+              >
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-[#171717]">1. Your Shop / Business Information (Seller)</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label>Shop / Business Name *</Label>
+                      <Input
+                        value={bizName}
+                        onChange={(e) => setBizName(e.target.value)}
+                        placeholder="e.g. HAYATH ENTERPRISES"
+                        disabled={!canEditBusinessProfile}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label>GST Number (GSTIN)</Label>
+                      {canEditBusinessProfile ? (
+                        <GstinInput value={bizGstin} onChange={setBizGstin} />
+                      ) : (
+                        <Input value={bizGstin} disabled />
+                      )}
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label>Shop Full Address</Label>
+                      <Input
+                        value={bizAddress}
+                        onChange={(e) => setBizAddress(e.target.value)}
+                        placeholder="e.g. No. 19, Kattur Sadayappan Street, Periamet, Chennai - 600003, Tamil Nadu, India"
+                        disabled={!canEditBusinessProfile}
+                      />
+                    </div>
+                    <div>
+                      <Label>Shop Phone Number</Label>
+                      <Input
+                        value={bizPhone}
+                        onChange={(e) => setBizPhone(e.target.value)}
+                        placeholder="e.g. +91 7010345550"
+                        disabled={!canEditBusinessProfile}
+                      />
+                    </div>
+                    <div>
+                      <Label>Shop Email</Label>
+                      <Input
+                        type="email"
+                        value={bizEmail}
+                        onChange={(e) => setBizEmail(e.target.value)}
+                        placeholder="e.g. yourshop@gmail.com"
+                        disabled={!canEditBusinessProfile}
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label>Signature Name (Shown at Bottom Right as &quot;For ...&quot;)</Label>
+                      <Input
+                        value={bizSignatory}
+                        onChange={(e) => setBizSignatory(e.target.value)}
+                        placeholder="e.g. Hayath Enterprises"
+                        disabled={!canEditBusinessProfile}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 border-t border-[#ececee] pt-4">
+                  <div className="flex items-center gap-2">
+                    <Landmark className="h-4 w-4 text-[#1d528a]" />
+                    <p className="text-xs font-semibold text-[#171717]">2. Bank &amp; Payment Details (Printed on Bills)</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                      <Label>Account Holder Name</Label>
+                      <Input
+                        value={bankHolder}
+                        onChange={(e) => setBankHolder(e.target.value)}
+                        placeholder="e.g. HAYATH ENTERPRISES"
+                        disabled={!canEditBusinessProfile}
+                      />
+                    </div>
+                    <div>
+                      <Label>Bank Name</Label>
+                      <Input
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        placeholder="e.g. J&K BANK"
+                        disabled={!canEditBusinessProfile}
+                      />
+                    </div>
+                    <div>
+                      <Label>Account Number</Label>
+                      <Input
+                        value={bankAccNo}
+                        onChange={(e) => setBankAccNo(e.target.value)}
+                        placeholder="e.g. 2222010100000960"
+                        disabled={!canEditBusinessProfile}
+                      />
+                    </div>
+                    <div>
+                      <Label>IFSC Code</Label>
+                      <Input
+                        value={bankIfsc}
+                        onChange={(e) => setBankIfsc(e.target.value.toUpperCase())}
+                        placeholder="e.g. JAKA0PARRYS"
+                        disabled={!canEditBusinessProfile}
+                      />
+                    </div>
+                    <div>
+                      <Label>Bank Branch (Optional)</Label>
+                      <Input
+                        value={bankBranch}
+                        onChange={(e) => setBankBranch(e.target.value)}
+                        placeholder="e.g. Parrys Corner, Chennai"
+                        disabled={!canEditBusinessProfile}
+                      />
+                    </div>
+                    <div>
+                      <Label>UPI ID (Optional)</Label>
+                      <Input
+                        value={bankUpi}
+                        onChange={(e) => setBankUpi(e.target.value)}
+                        placeholder="e.g. shop@upi"
+                        disabled={!canEditBusinessProfile}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {canEditBusinessProfile && (
+                  <Button type="submit" disabled={savingBizProfile}>
+                    {savingBizProfile ? "Saving..." : "Save Shop & Bank Details"}
+                  </Button>
+                )}
+              </Form>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -434,6 +650,7 @@ export function SettingsHubClient({
               </Form>
             </CardContent>
           </Card>
+          </div>
         </div>
       )}
 

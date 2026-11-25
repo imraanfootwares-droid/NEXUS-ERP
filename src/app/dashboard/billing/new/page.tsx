@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function PosNewBillPage({
   searchParams,
 }: {
-  searchParams: Promise<{ draft?: string }>;
+  searchParams: Promise<{ draft?: string; edit?: string }>;
 }) {
   const ctx = await getServerSessionContext();
   if (!ctx || !ctx.tenant) return null;
@@ -21,7 +21,10 @@ export default async function PosNewBillPage({
     return <TierLockOverlay featureKey="gst_billing_pdf" />;
   }
 
-  const { draft } = await searchParams;
+  const { draft, edit } = await searchParams;
+  if (edit && !canAccess(ctx, "billing.history", { isMutation: true }).allowed) {
+    return <TierLockOverlay featureKey="bill_edit_history" />;
+  }
   const stockEnabled = ctx.enabledFeatures.dynamic_stock_matrix;
   const crmEnabled = ctx.enabledFeatures.customer_crm;
   const discountsEnabled = ctx.enabledFeatures.discounts_returns_payments;
@@ -31,7 +34,7 @@ export default async function PosNewBillPage({
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
       const defaultBranchId = scope.ordered[0]?.id;
-      const [varsRes, custRes, hsnRes, axesRes, tplRes] = await Promise.all([
+      const [varsRes, custRes, custCountRes, hsnRes, axesRes, tplRes] = await Promise.all([
         stockEnabled && defaultBranchId
           ? client.query<PosVariantItem & { primary_image_key: string | null }>(
               `SELECT pv.id AS variant_id, p.id AS product_id, p.name AS product_name, p.model_code,
@@ -50,42 +53,68 @@ export default async function PosNewBillPage({
           : Promise.resolve({ rows: [] as Array<PosVariantItem & { primary_image_key: string | null }> }),
         crmEnabled
           ? client.query<CustomerRow>(
-              "SELECT * FROM public.customers WHERE tenant_id = $1 AND is_active = true ORDER BY name LIMIT 200",
+              `SELECT id, tenant_id, name, phone, email, gstin, state_code, address, customer_type,
+                      default_discount_pct, credit_limit, credit_days, current_due, credit_balance, is_active, updated_at
+               FROM public.customers WHERE tenant_id = $1 AND is_active = true ORDER BY name LIMIT 100`,
               [ctx.tenant!.id]
             )
           : Promise.resolve({ rows: [] as CustomerRow[] }),
+        crmEnabled
+          ? client.query<{ cnt: string }>(
+              "SELECT COUNT(*)::text AS cnt FROM public.customers WHERE tenant_id = $1 AND is_active = true",
+              [ctx.tenant!.id]
+            )
+          : Promise.resolve({ rows: [{ cnt: "0" }] }),
         client.query<HsnCodeRow>(
-          "SELECT * FROM public.hsn_codes WHERE tenant_id IS NULL OR tenant_id = $1 ORDER BY code",
+          `SELECT id, tenant_id, code, description, category, rate_rule_type, threshold_amount,
+                  rate_below_threshold, rate_above_threshold, default_gst_rate
+           FROM public.hsn_codes WHERE tenant_id IS NULL OR tenant_id = $1 ORDER BY code`,
           [ctx.tenant!.id]
         ),
         client.query<VariantAxisRow>(
-          "SELECT * FROM public.variant_axis_definitions WHERE tenant_id = $1 ORDER BY sort_order",
+          "SELECT id, tenant_id, name, preset_values, ratio_presets, sort_order FROM public.variant_axis_definitions WHERE tenant_id = $1 ORDER BY sort_order",
           [ctx.tenant!.id]
         ),
         client.query<BillTemplateRow>(
-          "SELECT * FROM public.bill_templates WHERE tenant_id = $1 ORDER BY is_default DESC, created_at ASC LIMIT 1",
+          "SELECT id, tenant_id, name, format, is_default, config FROM public.bill_templates WHERE tenant_id = $1 ORDER BY is_default DESC, created_at ASC",
           [ctx.tenant!.id]
         ),
       ]);
 
       let draftToEdit = null;
-      if (draft) {
-        const dInv = await client.query("SELECT * FROM public.invoices WHERE id = $1 AND tenant_id = $2 AND status = 'draft'", [
-          draft,
-          ctx.tenant!.id,
-        ]);
+      const targetInvoiceId = edit || draft;
+      if (targetInvoiceId) {
+        const isFinalizedEdit = Boolean(edit);
+        const dInv = await client.query(
+          isFinalizedEdit
+            ? "SELECT * FROM public.invoices WHERE id = $1 AND tenant_id = $2 AND status <> 'cancelled' AND invoice_type <> 'return_credit_note'"
+            : "SELECT * FROM public.invoices WHERE id = $1 AND tenant_id = $2 AND status = 'draft'",
+          [targetInvoiceId, ctx.tenant!.id]
+        );
         if (dInv.rows.length > 0) {
-          const dItems = await client.query("SELECT * FROM public.invoice_items WHERE invoice_id = $1 AND tenant_id = $2", [
-            draft,
-            ctx.tenant!.id,
-          ]);
+          const row = dInv.rows[0];
+          const dItems = await client.query(
+            "SELECT * FROM public.invoice_items WHERE invoice_id = $1 AND tenant_id = $2 ORDER BY id ASC",
+            [targetInvoiceId, ctx.tenant!.id]
+          );
+          const dPays = await client.query<{ mode: string; amount: string }>(
+            "SELECT mode, amount::text FROM public.invoice_payments WHERE invoice_id = $1 AND tenant_id = $2",
+            [targetInvoiceId, ctx.tenant!.id]
+          );
           draftToEdit = {
-            id: dInv.rows[0].id,
-            branch_id: dInv.rows[0].branch_id,
-            customer_id: dInv.rows[0].customer_id,
-            customer_snapshot: dInv.rows[0].customer_snapshot ?? null,
-            invoice_type: dInv.rows[0].invoice_type,
-            tax_mode: dInv.rows[0].tax_mode,
+            id: row.id,
+            invoice_number: row.invoice_number as string | null,
+            is_finalized: row.status !== "draft",
+            branch_id: row.branch_id,
+            customer_id: row.customer_id,
+            customer_snapshot: row.customer_snapshot ?? null,
+            invoice_type: row.invoice_type,
+            tax_mode: row.tax_mode,
+            discount_type: (row.discount_type as "percent" | "flat" | null) ?? null,
+            discount_value: Number(row.discount_value || 0),
+            credit_redeemed: Number(row.credit_redeemed || 0),
+            eway_bill_no: (row.eway_bill_no as string | null) ?? "",
+            payments: dPays.rows.map((p) => ({ mode: p.mode, amount: Number(p.amount || 0) })),
             items: dItems.rows.map((it) => ({
               key: it.id,
               variant_id: it.variant_id,
@@ -96,6 +125,7 @@ export default async function PosNewBillPage({
               unit_price: Number(it.unit_price),
               line_discount_amount: Number(it.discount_amount),
               fallback_gst_rate: Number(it.gst_rate),
+              custom_gst: true,
             })),
           };
         }
@@ -109,10 +139,11 @@ export default async function PosNewBillPage({
       return {
         variants,
         customers: custRes.rows,
+        totalCustomerCount: Number(custCountRes.rows[0]?.cnt ?? custRes.rows.length),
         hsn: hsnRes.rows,
         ratioPresets,
         draftToEdit,
-        defaultTemplate: tplRes.rows[0] ?? null,
+        billTemplates: tplRes.rows,
       };
     }
   );
@@ -130,9 +161,10 @@ export default async function PosNewBillPage({
       branchLocked={scope.activeId !== "all"}
       initialVariants={data.variants}
       initialCustomers={data.customers}
+      totalCustomerCount={data.totalCustomerCount}
       initialHsn={data.hsn}
       ratioPresets={data.ratioPresets}
-      defaultTemplate={data.defaultTemplate}
+      billTemplates={data.billTemplates}
       logoUrl={logoUrl}
       stockEnabled={stockEnabled}
       crmEnabled={crmEnabled}

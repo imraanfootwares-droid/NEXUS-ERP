@@ -9,7 +9,7 @@ import { query } from "@/lib/db";
 import { deriveThumbKey, getPublicAssetUrl } from "@/lib/storage/s3-client";
 import type { EnquiryChannel, PriceDisplayMode, StorefrontConfig } from "@/types/database";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 120;
 
 export default async function PublicCataloguePage({
   params,

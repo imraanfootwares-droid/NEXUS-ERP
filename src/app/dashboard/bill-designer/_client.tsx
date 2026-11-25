@@ -1,323 +1,260 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Package, Plus, Printer, Search, Sparkles, Trash2 } from "lucide-react";
+import { Building2, Check, Package, Printer, Search, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteBillTemplateAction, saveBillTemplateAction, savePosScreenLayoutAction } from "@/actions/billing";
-import { InvoiceRenderer } from "@/components/billing/invoice-renderer";
-import { Button, Card, CardContent, CardHeader, Input, Label, Select, Switch, Tabs } from "@/components/ui/primitives";
-import type { BillDesignStyle, BillFormat, BillTemplateConfig, BillTemplateRow, TenantRow } from "@/types/database";
-
-type PresetCategory = "a4" | "a5" | "small";
-
-interface BillTemplatePreset {
-  id: string;
-  category: PresetCategory;
-  name: string;
-  desc: string;
-  format: BillFormat;
-  design_style: BillDesignStyle;
-  accent_color: string;
-  show_hsn: boolean;
-  show_gst_summary: boolean;
-  show_upi_qr: boolean;
-  header_subtitle: string;
-}
-
-const TEMPLATE_PRESETS: BillTemplatePreset[] = [
-  // A4 Full Page (5 templates)
-  {
-    id: "a4-gst-full",
-    category: "a4",
-    name: "A4 Full GST Tax Invoice",
-    desc: "Complete Indian GST layout: HSN, Taxable, CGST/SGST & Signatory",
-    format: "a4",
-    design_style: "gst_full",
-    accent_color: "#0f172a",
-    show_hsn: true,
-    show_gst_summary: true,
-    show_upi_qr: true,
-    header_subtitle: "GST Registered Supplier · Tax Invoice",
-  },
-  {
-    id: "a4-classic",
-    category: "a4",
-    name: "A4 Classic GST",
-    desc: "Clean accent line & structured tax invoice",
-    format: "a4",
-    design_style: "classic",
-    accent_color: "#0284c7",
-    show_hsn: true,
-    show_gst_summary: true,
-    show_upi_qr: true,
-    header_subtitle: "GST Tax Invoice",
-  },
-  {
-    id: "a4-modern",
-    category: "a4",
-    name: "A4 Modern Banner",
-    desc: "Colored top banner & shaded summary card",
-    format: "a4",
-    design_style: "modern",
-    accent_color: "#0f172a",
-    show_hsn: true,
-    show_gst_summary: true,
-    show_upi_qr: true,
-    header_subtitle: "Official Retail & Wholesale Invoice",
-  },
-  {
-    id: "a4-minimal",
-    category: "a4",
-    name: "A4 Minimalist Retail",
-    desc: "Ultra-clean monochrome showroom bill",
-    format: "a4",
-    design_style: "minimal",
-    accent_color: "#171717",
-    show_hsn: false,
-    show_gst_summary: true,
-    show_upi_qr: false,
-    header_subtitle: "Retail Showroom",
-  },
-  {
-    id: "a4-wholesale",
-    category: "a4",
-    name: "A4 Wholesale Ledger",
-    desc: "Bordered trade invoice with signatory box",
-    format: "a4",
-    design_style: "bordered",
-    accent_color: "#1e3a8a",
-    show_hsn: true,
-    show_gst_summary: true,
-    show_upi_qr: true,
-    header_subtitle: "Wholesale & Distribution Invoice",
-  },
-
-  // A5 Half Page (3 templates)
-  {
-    id: "a5-standard",
-    category: "a5",
-    name: "A5 Standard Bill",
-    desc: "Compact half-page bill, saves paper",
-    format: "a5",
-    design_style: "classic",
-    accent_color: "#0284c7",
-    show_hsn: true,
-    show_gst_summary: true,
-    show_upi_qr: true,
-    header_subtitle: "Half-Page Tax Invoice",
-  },
-  {
-    id: "a5-modern",
-    category: "a5",
-    name: "A5 Modern Slip",
-    desc: "Bold colored header with shaded rows",
-    format: "a5",
-    design_style: "modern",
-    accent_color: "#0f766e",
-    show_hsn: false,
-    show_gst_summary: true,
-    show_upi_qr: true,
-    header_subtitle: "Direct Counter Invoice",
-  },
-  {
-    id: "a5-cashmemo",
-    category: "a5",
-    name: "A5 Simple Cash Memo",
-    desc: "Clean non-GST cash memo / trade slip",
-    format: "a5",
-    design_style: "bordered",
-    accent_color: "#171717",
-    show_hsn: false,
-    show_gst_summary: false,
-    show_upi_qr: false,
-    header_subtitle: "Cash / Credit Memo",
-  },
-
-  // Small Bills — 80mm & 58mm Thermal (3 templates)
-  {
-    id: "small-80-classic",
-    category: "small",
-    name: "80mm Classic Receipt",
-    desc: "Standard thermal counter roll with dashed lines",
-    format: "thermal_80mm",
-    design_style: "classic",
-    accent_color: "#171717",
-    show_hsn: false,
-    show_gst_summary: true,
-    show_upi_qr: true,
-    header_subtitle: "Counter Receipt",
-  },
-  {
-    id: "small-80-bold",
-    category: "small",
-    name: "80mm Bold Header",
-    desc: "Inverted dark header & large bold total",
-    format: "thermal_80mm",
-    design_style: "bold",
-    accent_color: "#171717",
-    show_hsn: false,
-    show_gst_summary: true,
-    show_upi_qr: true,
-    header_subtitle: "Express Retail Bill",
-  },
-  {
-    id: "small-58-mini",
-    category: "small",
-    name: "58mm Mini Pocket",
-    desc: "Narrow 2-inch receipt with stacked item lines",
-    format: "thermal_58mm",
-    design_style: "minimal",
-    accent_color: "#171717",
-    show_hsn: false,
-    show_gst_summary: false,
-    show_upi_qr: false,
-    header_subtitle: "Quick Receipt",
-  },
-];
+import { InvoiceRenderer, type InvoicePreviewData } from "@/components/billing/invoice-renderer";
+import {
+  GST_TEMPLATE_PRESETS,
+  NORMAL_TEMPLATE_PRESETS,
+  buildDefaultConfigForCategory,
+  inferTemplateCategory,
+  resolveSellerProfile,
+  selectTemplateForBill,
+  type BillTemplatePreset,
+} from "@/lib/billing/seller-profile";
+import { Alert, Button, Card, CardContent, CardHeader, Input, Label, Select, Switch, Tabs } from "@/components/ui/primitives";
+import type { BillCategory, BillDesignStyle, BillFormat, BillTemplateConfig, BillTemplateRow, BranchRow, TenantRow } from "@/types/database";
 
 const SAMPLE_POS_PRODUCTS = [
-  { name: "Oxford Classic Derby", attrs: "UK 8 · Black", sku: "IMR-101-UK8", hsn: "6403", gst: 5, price: 2199, stock: 24, qty: 1 },
-  { name: "Comfort Slide Pro", attrs: "UK 10 · Black", sku: "IMR-301-UK10", hsn: "6402", gst: 5, price: 599, stock: 40, qty: 2 },
-  { name: "AeroStride Runner", attrs: "UK 9 · Navy", sku: "IMR-201-UK9", hsn: "6404", gst: 5, price: 1599, stock: 16, qty: 0 },
-  { name: "Milan Tan Loafer", attrs: "UK 8 · Tan", sku: "IMR-102-UK8", hsn: "6403", gst: 12, price: 2999, stock: 12, qty: 0 },
+  { name: "Ladies Ortho Art No : 101", attrs: "Size 6-9 · Black", sku: "ART-101", hsn: "64039110", gst: 5, price: 100, stock: 120, qty: 2 },
+  { name: "Gents Ortho Art No : 201", attrs: "Size 7-10 · Brown", sku: "ART-201", hsn: "64039110", gst: 5, price: 150, stock: 40, qty: 1 },
+  { name: "Ladies Ortho Art No : 105", attrs: "Size 5-8 · Tan", sku: "ART-105", hsn: "64039110", gst: 5, price: 110, stock: 95, qty: 0 },
+  { name: "Gents Art No : 211", attrs: "Size 6-10 · Black", sku: "ART-211", hsn: "64039110", gst: 5, price: 102, stock: 72, qty: 0 },
 ];
 
 export function BillDesignerClient({
   tenant,
+  defaultBranch,
+  logoUrl,
   templates,
 }: {
   tenant: TenantRow;
+  defaultBranch: BranchRow | null;
+  logoUrl: string | null;
   templates: BillTemplateRow[];
 }) {
   const router = useRouter();
-  const defaultCfg: BillTemplateConfig = {
-    header_title: tenant.name.toUpperCase(),
-    header_subtitle: "GST Tax Invoice",
-    footer_note: "Thank you for your business!",
-    terms: "7-day exchange with original bill.",
-    accent_color: tenant.brand_config?.primary_color ?? "#0284c7",
-    design_style: "classic",
-    show_logo: true,
-    show_hsn: true,
-    show_gst_summary: true,
-    show_discount: true,
-    show_custom_fields: false,
-    show_upi_qr: true,
-  };
-  const initial = templates[0];
-  const [tab, setTab] = useState("print");
-  const [selectedId, setSelectedId] = useState<string>(initial?.id ?? "new");
-  const [format, setFormat] = useState<BillFormat>(initial?.format ?? "a4");
-  const [name, setName] = useState(initial?.name ?? "Standard Invoice");
-  const [config, setConfig] = useState<BillTemplateConfig>({ ...defaultCfg, ...initial?.config });
-  const [presetCat, setPresetCat] = useState<PresetCategory>(
-    initial?.format === "a5"
-      ? "a5"
-      : initial?.format === "thermal_80mm" || initial?.format === "thermal_58mm"
-      ? "small"
-      : "a4"
-  );
-  const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const seller = resolveSellerProfile(tenant, defaultBranch);
+  const hasProfileDetails = Boolean(seller.address || seller.phone || seller.gstin || seller.hasBankDetails);
 
-  const selectTemplate = (id: string) => {
-    setSelectedId(id);
-    setActivePresetId(null);
-    if (id === "new") {
-      setName("New Bill Template");
-      setFormat("a4");
-      setPresetCat("a4");
-      setConfig(defaultCfg);
-      return;
-    }
-    const found = templates.find((t) => t.id === id);
-    if (found) {
-      setName(found.name);
-      setFormat(found.format);
-      setPresetCat(
-        found.format === "a5"
-          ? "a5"
-          : found.format === "thermal_80mm" || found.format === "thermal_58mm"
-          ? "small"
-          : "a4"
-      );
-      setConfig({ ...defaultCfg, ...found.config });
-    }
+  const [tab, setTab] = useState<"gst" | "normal" | "screen">("gst");
+
+  const getInitialForCategory = (cat: BillCategory): {
+    selectedId: string;
+    name: string;
+    format: BillFormat;
+    config: BillTemplateConfig;
+  } => {
+    const saved = selectTemplateForBill(templates, cat === "gst");
+    const matchesCat = saved && inferTemplateCategory(saved) === cat ? saved : null;
+    const baseCfg = buildDefaultConfigForCategory(cat, seller, tenant.brand_config?.primary_color);
+    return {
+      selectedId: matchesCat?.id ?? "new",
+      name: matchesCat?.name ?? (cat === "gst" ? "Classic Tax Grid" : "Clean Shop Bill"),
+      format: matchesCat?.format ?? ("a4" as BillFormat),
+      config: { ...baseCfg, ...(matchesCat?.config ?? {}), bill_category: cat },
+    };
   };
 
-  const applyPreset = (p: BillTemplatePreset) => {
-    setActivePresetId(p.id);
-    setFormat(p.format);
-    if (selectedId === "new") {
-      setName(p.name);
-    }
-    setConfig((prev) => ({
-      ...prev,
-      design_style: p.design_style,
-      accent_color: p.accent_color,
-      show_hsn: p.show_hsn,
-      show_gst_summary: p.show_gst_summary,
-      show_upi_qr: p.show_upi_qr,
-      header_subtitle: p.header_subtitle,
-    }));
-  };
+  const initGst = getInitialForCategory("gst");
+  const initNormal = getInitialForCategory("normal");
 
-  // Billing screen layout customizer state
+  const [gstState, setGstState] = useState(initGst);
+  const [normalState, setNormalState] = useState(initNormal);
+  const [saving, setSaving] = useState(false);
+
+  // New Bill Screen settings
   const [posLayout, setPosLayout] = useState<"grid" | "list">(tenant.brand_config?.pos_ui?.layout ?? "grid");
   const [showThumbs, setShowThumbs] = useState(tenant.brand_config?.pos_ui?.show_thumbs ?? true);
   const [showHsnCol, setShowHsnCol] = useState(tenant.brand_config?.pos_ui?.show_hsn_col ?? true);
 
-  const visiblePresets = TEMPLATE_PRESETS.filter((p) => p.category === presetCat);
+  const activeCategory: BillCategory = tab === "normal" ? "normal" : "gst";
+  const current = activeCategory === "gst" ? gstState : normalState;
+  const setCurrent = activeCategory === "gst" ? setGstState : setNormalState;
+  const presets = activeCategory === "gst" ? GST_TEMPLATE_PRESETS : NORMAL_TEMPLATE_PRESETS;
+  const savedForCat = templates.filter((t) => inferTemplateCategory(t) === activeCategory);
+
+  const selectSavedTemplate = (id: string) => {
+    if (id === "new") {
+      setCurrent({
+        selectedId: "new",
+        name: activeCategory === "gst" ? "My GST Bill" : "My Normal Bill",
+        format: "a4",
+        config: buildDefaultConfigForCategory(activeCategory, seller, tenant.brand_config?.primary_color),
+      });
+      return;
+    }
+    const found = templates.find((t) => t.id === id);
+    if (found) {
+      const baseCfg = buildDefaultConfigForCategory(activeCategory, seller, tenant.brand_config?.primary_color);
+      setCurrent({
+        selectedId: found.id,
+        name: found.name,
+        format: found.format,
+        config: { ...baseCfg, ...found.config, bill_category: activeCategory },
+      });
+    }
+  };
+
+  const applyPreset = (p: BillTemplatePreset) => {
+    setCurrent((prev) => ({
+      ...prev,
+      name: prev.selectedId === "new" ? p.name : prev.name,
+      config: {
+        ...prev.config,
+        bill_category: p.billCategory,
+        design_style: p.design_style,
+        accent_color: p.accent_color,
+        show_hsn: p.show_hsn,
+        show_gst_summary: p.show_gst_summary,
+        show_bank_details: p.show_bank_details,
+        show_ship_to: p.show_ship_to,
+        show_upi_qr: p.show_upi_qr,
+        header_subtitle: p.header_subtitle,
+        copy_label: p.copy_label,
+      },
+    }));
+  };
+
+  const previewBank = seller.hasBankDetails
+    ? seller.bankDetails
+    : {
+        account_holder: seller.businessName.toUpperCase(),
+        bank_name: "J&K BANK",
+        account_number: "2222010100000960",
+        ifsc_code: "JAKA0PARRYS",
+        upi_id: "shop@upi",
+      };
+
+  const gstPreviewData: InvoicePreviewData = {
+    logoUrl,
+    invoiceNumber: "220",
+    invoiceType: "sale",
+    dateStr: "27-06-2026",
+    sellerName: seller.businessName,
+    sellerAddress: seller.address || "No. 19, Kattur Sadayappan Street, Periamet, Chennai - 600003, Tamil Nadu, India",
+    sellerPhone: seller.phone || "+91 7010345550",
+    sellerEmail: seller.email || "yourshop@gmail.com",
+    sellerGstin: seller.gstin || "33AGHPI7481E1ZG",
+    signatoryName: seller.signatoryName,
+    bankDetails: previewBank,
+    branchName: defaultBranch?.name ?? seller.businessName,
+    branchAddress: seller.address,
+    branchGstin: seller.gstin,
+    customerName: "POTHYS RETAIL PVT LIMITED",
+    customerAddress: "JLS Godown, JLS Angu Godown No : 2, GNT Road, Sivanthi Adhithanam Street, Puzhal, Chennai - 600 066",
+    customerGstin: "33AALCP2218B1ZX",
+    shipToName: "POTHYS RETAIL PVT LIMITED",
+    shipToAddress: "No : 81, RLDA, Madras Thiruvallur High Road, Padi, Chennai - 600 050",
+    placeOfSupply: "Tamil Nadu (33)",
+    subtotal: 158804,
+    discountAmount: 0,
+    taxableAmount: 158804,
+    cgstAmount: 3970.1,
+    sgstAmount: 3970.1,
+    igstAmount: 0,
+    roundOff: 0,
+    grandTotal: 166744.2,
+    paidAmount: 166744.2,
+    dueAmount: 0,
+    items: [
+      { product_name: "LADIES ORTHO ART NO : 101", hsn_code: "64039110", qty: 120, unit_price: 100, gst_rate: 5, line_total: 12600 },
+      { product_name: "LADIES ORTHO ART NO : 105", hsn_code: "64039110", qty: 120, unit_price: 110, gst_rate: 5, line_total: 13860 },
+      { product_name: "GENTS ORTHO ART NO : 201", hsn_code: "64039110", qty: 40, unit_price: 150, gst_rate: 5, line_total: 6300 },
+      { product_name: "GENTS ART NO : 211", hsn_code: "64039110", qty: 72, unit_price: 102, gst_rate: 5, line_total: 7711.2 },
+    ],
+  };
+
+  const normalPreviewData: InvoicePreviewData = {
+    logoUrl,
+    invoiceNumber: "1045",
+    invoiceType: "estimate_bill_of_supply",
+    dateStr: "27-06-2026",
+    sellerName: seller.businessName,
+    sellerAddress: seller.address || "No. 19, Kattur Sadayappan Street, Periamet, Chennai - 600003",
+    sellerPhone: seller.phone || "+91 7010345550",
+    sellerEmail: seller.email || "yourshop@gmail.com",
+    signatoryName: seller.signatoryName,
+    bankDetails: previewBank,
+    branchName: defaultBranch?.name ?? seller.businessName,
+    customerName: "Karthik R.",
+    customerPhone: "9840099887",
+    customerAddress: "T. Nagar, Chennai - 600017",
+    subtotal: 3400,
+    discountAmount: 100,
+    taxableAmount: 3300,
+    cgstAmount: 0,
+    sgstAmount: 0,
+    igstAmount: 0,
+    roundOff: 0,
+    grandTotal: 3300,
+    paidAmount: 3300,
+    dueAmount: 0,
+    items: [
+      { product_name: "Ladies Comfort Sandal (Size 7)", qty: 2, unit_price: 650, gst_rate: 0, line_total: 1300 },
+      { product_name: "Gents Formal Leather Shoe (Size 9)", qty: 1, unit_price: 2100, gst_rate: 0, line_total: 2100 },
+    ],
+  };
 
   return (
     <div className="space-y-4">
-      <Tabs
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { id: "print", label: "Print Layout Designer (A4 / A5 / Small)" },
-          { id: "screen", label: "Billing Screen Layout" },
-        ]}
-      />
+      {!hasProfileDetails && (
+        <Alert variant="info" title="Set up your Shop & Bank Details first">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              The preview below uses sample details. Add your real Shop Address, Phone, Email, GST Number &amp; Bank Details once in My Profile.
+            </span>
+            <Link
+              href="/dashboard/settings?tab=profile"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#171717] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#2a2a2a]"
+            >
+              <Building2 className="h-3.5 w-3.5" /> Open My Profile &amp; Bank
+            </Link>
+          </div>
+        </Alert>
+      )}
 
-      {tab === "print" ? (
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Tabs
+          active={tab}
+          onChange={(v) => setTab(v as "gst" | "normal" | "screen")}
+          tabs={[
+            { id: "gst", label: "GST Bills (5 Designs)" },
+            { id: "normal", label: "Normal Bills (5 Designs)" },
+            { id: "screen", label: "New Bill Screen" },
+          ]}
+        />
+        <Link
+          href="/dashboard/settings?tab=profile"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          <Building2 className="h-3.5 w-3.5" /> Edit Shop &amp; Bank Details
+        </Link>
+      </div>
+
+      {tab !== "screen" ? (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <div className="lg:col-span-5 space-y-4">
-            {/* Ready-to-Use Template Gallery by Category */}
+            {/* 5 Creative Layouts Picker */}
             <div className="ui-tray">
               <div className="ui-surface p-3.5 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5 text-[#55555b]" />
-                    <h3 className="text-[13px] font-semibold text-[#171717]">Ready-Made Bill Templates</h3>
+                    <h3 className="text-[13px] font-semibold text-[#171717]">
+                      {activeCategory === "gst" ? "5 GST Bill Layouts" : "5 Normal Bill Layouts"}
+                    </h3>
                   </div>
-                  <div className="inline-flex rounded-full bg-[#f1f1f2] p-[2px] text-[11px]">
-                    {(
-                      [
-                        { id: "a4", label: "A4 (5)" },
-                        { id: "a5", label: "A5 (3)" },
-                        { id: "small", label: "Small (3)" },
-                      ] as const
-                    ).map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => setPresetCat(c.id)}
-                        className={`cursor-pointer rounded-full px-2.5 py-1 font-semibold transition-all ${
-                          presetCat === c.id
-                            ? "bg-white text-[#171717] shadow-2xs"
-                            : "text-[#77777d] hover:text-[#171717]"
-                        }`}
-                      >
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
+                  <span className="text-[11px] text-[#77777d]">Tap any style to preview</span>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {visiblePresets.map((p) => {
-                    const isSelected = activePresetId === p.id;
+                <div className="grid grid-cols-1 gap-2">
+                  {presets.map((p, index) => {
+                    const isSelected = current.config.design_style === p.design_style;
                     return (
                       <button
                         key={p.id}
@@ -329,17 +266,19 @@ export function BillDesignerClient({
                             : "border-[#ececee] bg-white hover:border-slate-300 hover:bg-[#fafafa]"
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-1.5">
-                          <span className="flex items-center gap-1.5 text-xs font-semibold text-[#171717]">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-2 text-xs font-semibold text-[#171717]">
                             <span
-                              className="h-2.5 w-2.5 shrink-0 rounded-full"
+                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white"
                               style={{ backgroundColor: p.accent_color }}
-                            />
+                            >
+                              {index + 1}
+                            </span>
                             {p.name}
                           </span>
-                          {isSelected && <Check className="h-3.5 w-3.5 text-[#171717]" />}
+                          {isSelected && <Check className="h-4 w-4 text-[#171717]" />}
                         </div>
-                        <p className="mt-1 text-[10.5px] leading-snug text-[#77777d]">{p.desc}</p>
+                        <p className="mt-1 pl-7 text-[11px] leading-snug text-[#77777d]">{p.desc}</p>
                       </button>
                     );
                   })}
@@ -347,160 +286,220 @@ export function BillDesignerClient({
               </div>
             </div>
 
-            {/* Fine-Tune Controls */}
+            {/* Simple Customization Controls */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">Customize Selected Template</h3>
+                <h3 className="text-sm font-semibold">
+                  Customize {activeCategory === "gst" ? "GST Bill" : "Normal Bill"}
+                </h3>
                 <div className="flex items-center gap-1.5">
-                  {selectedId !== "new" && !templates.find((t) => t.id === selectedId)?.is_default && (
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      title="Delete Template"
-                      onClick={async () => {
-                        if (!confirm(`Delete template "${name}"?`)) return;
-                        await deleteBillTemplateAction(selectedId);
-                        toast.success("Template deleted.");
-                        selectTemplate(templates[0]?.id ?? "new");
-                        router.refresh();
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                  <Button size="sm" variant="outline" onClick={() => selectTemplate("new")}>
+                  {current.selectedId !== "new" &&
+                    !templates.find((t) => t.id === current.selectedId)?.is_default && (
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        title="Delete Design"
+                        onClick={async () => {
+                          if (!confirm(`Delete "${current.name}"?`)) return;
+                          await deleteBillTemplateAction(current.selectedId);
+                          toast.success("Design deleted.");
+                          selectSavedTemplate("new");
+                          router.refresh();
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  <Button size="sm" variant="outline" onClick={() => selectSavedTemplate("new")}>
                     + New
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                {templates.length > 0 && (
+                {savedForCat.length > 0 && (
                   <div>
-                    <Label>Your Saved Templates</Label>
-                    <Select value={selectedId} onChange={(e) => selectTemplate(e.target.value)}>
-                      {templates.map((t) => (
+                    <Label>Saved Designs</Label>
+                    <Select value={current.selectedId} onChange={(e) => selectSavedTemplate(e.target.value)}>
+                      {savedForCat.map((t) => (
                         <option key={t.id} value={t.id}>
-                          {t.name} ({t.format}){t.is_default ? " ★ Default" : ""}
+                          {t.name} ({t.format.toUpperCase()}){t.is_default ? " ★ Active Default" : ""}
                         </option>
                       ))}
-                      <option value="new">+ Create New Template...</option>
+                      <option value="new">+ Save as a New Design...</option>
                     </Select>
                   </div>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <Label>Template Name</Label>
-                    <Input value={name} onChange={(e) => setName(e.target.value)} required />
+                    <Label>Design Name</Label>
+                    <Input
+                      value={current.name}
+                      onChange={(e) => setCurrent((p) => ({ ...p, name: e.target.value }))}
+                      required
+                    />
                   </div>
                   <div>
                     <Label>Paper Size</Label>
                     <Select
-                      value={format}
-                      onChange={(e) => {
-                        const f = e.target.value as BillFormat;
-                        setFormat(f);
-                        setPresetCat(f === "a5" ? "a5" : f === "a4" ? "a4" : "small");
-                      }}
+                      value={current.format}
+                      onChange={(e) => setCurrent((p) => ({ ...p, format: e.target.value as BillFormat }))}
                     >
-                      <option value="a4">A4 Full Page</option>
-                      <option value="a5">A5 Half Page</option>
-                      <option value="thermal_80mm">80mm Small Bill (Thermal)</option>
-                      <option value="thermal_58mm">58mm Mini Bill (Thermal)</option>
+                      <option value="a4">Full Page (A4)</option>
+                      <option value="a5">Half Page (A5)</option>
+                      <option value="thermal_80mm">Small Roll (80mm)</option>
+                      <option value="thermal_58mm">Mini Roll (58mm)</option>
                     </Select>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <Label>Design Style</Label>
-                    <Select
-                      value={config.design_style ?? "classic"}
-                      onChange={(e) =>
-                        setConfig({ ...config, design_style: e.target.value as BillDesignStyle })
-                      }
-                    >
-                      <option value="gst_full">Full GST Tax Invoice (Indian Format)</option>
-                      <option value="classic">Classic Clean</option>
-                      <option value="modern">Modern Banner</option>
-                      <option value="minimal">Minimalist</option>
-                      <option value="bordered">Wholesale Bordered</option>
-                      <option value="bold">Bold Dark Header</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Accent Color</Label>
+                    <Label>Main Color</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="color"
                         className="!w-12 h-9 p-1 cursor-pointer"
-                        value={config.accent_color}
-                        onChange={(e) => setConfig({ ...config, accent_color: e.target.value })}
+                        value={current.config.accent_color}
+                        onChange={(e) =>
+                          setCurrent((p) => ({ ...p, config: { ...p.config, accent_color: e.target.value } }))
+                        }
                       />
                       <span className="font-mono text-xs text-[#55555b]">
-                        {config.accent_color.toUpperCase()}
+                        {current.config.accent_color.toUpperCase()}
                       </span>
                     </div>
                   </div>
+                  <div>
+                    <Label>Copy Label (Top Right)</Label>
+                    <Input
+                      value={current.config.copy_label ?? "ORIGINAL"}
+                      onChange={(e) =>
+                        setCurrent((p) => ({ ...p, config: { ...p.config, copy_label: e.target.value } }))
+                      }
+                      placeholder="e.g. ORIGINAL"
+                    />
+                  </div>
                 </div>
+
                 <div>
-                  <Label>Header Title</Label>
+                  <Label>Shop Title on Bill</Label>
                   <Input
-                    value={config.header_title}
-                    onChange={(e) => setConfig({ ...config, header_title: e.target.value })}
+                    value={current.config.header_title}
+                    onChange={(e) =>
+                      setCurrent((p) => ({ ...p, config: { ...p.config, header_title: e.target.value } }))
+                    }
                   />
                 </div>
                 <div>
-                  <Label>Subtitle / Branch Tag</Label>
+                  <Label>Small Line Under Title (Optional)</Label>
                   <Input
-                    value={config.header_subtitle}
-                    onChange={(e) => setConfig({ ...config, header_subtitle: e.target.value })}
+                    value={current.config.header_subtitle}
+                    onChange={(e) =>
+                      setCurrent((p) => ({ ...p, config: { ...p.config, header_subtitle: e.target.value } }))
+                    }
+                    placeholder="e.g. Wholesale & Retail Footwear"
                   />
                 </div>
                 <div>
-                  <Label>Terms &amp; Conditions</Label>
+                  <Label>Thank You Message at Bottom</Label>
                   <Input
-                    value={config.terms}
-                    onChange={(e) => setConfig({ ...config, terms: e.target.value })}
+                    value={current.config.footer_note}
+                    onChange={(e) =>
+                      setCurrent((p) => ({ ...p, config: { ...p.config, footer_note: e.target.value } }))
+                    }
+                    placeholder="e.g. THANKS FOR YOUR BUSINESS"
                   />
                 </div>
                 <div>
-                  <Label>Footer Note</Label>
+                  <Label>Return / Exchange Note (Optional)</Label>
                   <Input
-                    value={config.footer_note}
-                    onChange={(e) => setConfig({ ...config, footer_note: e.target.value })}
+                    value={current.config.terms}
+                    onChange={(e) =>
+                      setCurrent((p) => ({ ...p, config: { ...p.config, terms: e.target.value } }))
+                    }
+                    placeholder="e.g. Goods once sold will not be taken back."
                   />
                 </div>
-                <div className="flex flex-col gap-1.5 pt-1">
+
+                <div className="flex flex-col gap-2 rounded-xl border border-[#ececee] bg-[#fafafa] p-3">
                   <Switch
-                    checked={config.show_hsn}
-                    onCheckedChange={(v) => setConfig({ ...config, show_hsn: v })}
-                    label="Show HSN Column on Bill"
+                    checked={current.config.show_logo}
+                    onCheckedChange={(v) =>
+                      setCurrent((p) => ({ ...p, config: { ...p.config, show_logo: v } }))
+                    }
+                    label="Show Shop Logo"
                   />
                   <Switch
-                    checked={config.show_gst_summary}
-                    onCheckedChange={(v) => setConfig({ ...config, show_gst_summary: v })}
-                    label="Show GST, GSTIN & Tax Details on Bill"
+                    checked={current.config.show_bank_details ?? true}
+                    onCheckedChange={(v) =>
+                      setCurrent((p) => ({ ...p, config: { ...p.config, show_bank_details: v } }))
+                    }
+                    label="Show Bank Details (from My Profile)"
                   />
+                  {activeCategory === "gst" && (
+                    <>
+                      <Switch
+                        checked={current.config.show_hsn}
+                        onCheckedChange={(v) =>
+                          setCurrent((p) => ({ ...p, config: { ...p.config, show_hsn: v } }))
+                        }
+                        label="Show HSN Code Column"
+                      />
+                      <Switch
+                        checked={current.config.show_ship_to ?? true}
+                        onCheckedChange={(v) =>
+                          setCurrent((p) => ({ ...p, config: { ...p.config, show_ship_to: v } }))
+                        }
+                        label="Show Delivery Address (Ship To) Box"
+                      />
+                    </>
+                  )}
                   <Switch
-                    checked={config.show_upi_qr}
-                    onCheckedChange={(v) => setConfig({ ...config, show_upi_qr: v })}
-                    label="Show UPI Payment Block"
+                    checked={current.config.show_upi_qr}
+                    onCheckedChange={(v) =>
+                      setCurrent((p) => ({ ...p, config: { ...p.config, show_upi_qr: v } }))
+                    }
+                    label="Show UPI ID on Bill"
                   />
                 </div>
+
                 <Button
                   className="w-full"
+                  disabled={saving}
                   onClick={async () => {
-                    await saveBillTemplateAction({
-                      id: selectedId === "new" ? undefined : selectedId,
-                      name: name.trim() || "Invoice Template",
-                      format,
-                      isDefault: true,
-                      config,
-                    });
-                    toast.success("Bill template saved & set as default.");
-                    router.refresh();
+                    setSaving(true);
+                    try {
+                      const configToSave: BillTemplateConfig = {
+                        ...current.config,
+                        bill_category: activeCategory,
+                        show_gst_summary: activeCategory === "gst",
+                      };
+                      await saveBillTemplateAction({
+                        id: current.selectedId === "new" ? undefined : current.selectedId,
+                        name: current.name.trim() || (activeCategory === "gst" ? "GST Bill" : "Normal Bill"),
+                        format: current.format,
+                        isDefault: true,
+                        config: configToSave,
+                      });
+                      toast.success(
+                        activeCategory === "gst"
+                          ? "Saved as your default GST Bill design!"
+                          : "Saved as your default Normal Bill design!"
+                      );
+                      router.refresh();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Could not save design.");
+                    } finally {
+                      setSaving(false);
+                    }
                   }}
                 >
-                  Save Print Layout as Default
+                  {saving
+                    ? "Saving..."
+                    : activeCategory === "gst"
+                    ? "Save as Default GST Bill"
+                    : "Save as Default Normal Bill"}
                 </Button>
               </CardContent>
             </Card>
@@ -510,85 +509,55 @@ export function BillDesignerClient({
             <div className="sticky top-4 space-y-2">
               <div className="flex items-center justify-between px-1">
                 <span className="font-mono text-[10.5px] font-medium uppercase tracking-[0.05em] text-[#77777d]">
-                  Live Bill Preview ({format.replace("_", " ").toUpperCase()} · {config.design_style ?? "classic"})
+                  Live {activeCategory === "gst" ? "GST Bill" : "Normal Bill"} Preview ({current.format.replace("_", " ").toUpperCase()})
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Updates Live
                 </span>
               </div>
               <InvoiceRenderer
-                format={format}
-                config={config}
-                data={{
-                  invoiceNumber: "CHN/26-27/0042",
-                  invoiceType: "sale",
-                  dateStr: "23/11/2026, 05:30 PM",
-                  branchName: "Chennai Retail Shop",
-                  branchAddress: "T. Nagar Main Road, Chennai",
-                  branchGstin: "33AABCI1234F1Z2",
-                  customerName: "Karthik R.",
-                  customerPhone: "9840099887",
-                  taxableAmount: 3235.24,
-                  cgstAmount: 80.88,
-                  sgstAmount: 80.88,
-                  igstAmount: 0,
-                  roundOff: 0,
-                  grandTotal: 3397,
-                  paidAmount: 3397,
-                  dueAmount: 0,
-                  items: [
-                    {
-                      product_name: "Oxford Classic Derby (UK 8 / Black)",
-                      sku: "IMR-101-UK8-BLA",
-                      hsn_code: "6403",
-                      qty: 1,
-                      unit_price: 2199,
-                      gst_rate: 5,
-                      line_total: 2199,
-                    },
-                    {
-                      product_name: "Comfort Slide Pro (UK 10 / Black)",
-                      sku: "IMR-301-UK10-BLA",
-                      hsn_code: "6402",
-                      qty: 2,
-                      unit_price: 599,
-                      gst_rate: 5,
-                      line_total: 1198,
-                    },
-                  ],
+                format={current.format}
+                config={{
+                  ...current.config,
+                  bill_category: activeCategory,
+                  show_gst_summary: activeCategory === "gst",
                 }}
+                data={activeCategory === "gst" ? gstPreviewData : normalPreviewData}
               />
             </div>
           </div>
         </div>
       ) : (
-        /* Billing Screen Layout + Live POS Preview */
+        /* New Bill Screen Layout */
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <Card className="lg:col-span-5 h-fit">
             <CardHeader>
-              <h3 className="text-sm font-semibold">POS Billing Screen Appearance</h3>
+              <h3 className="text-sm font-semibold">New Bill Screen Look</h3>
               <p className="mt-0.5 text-xs text-[#77777d]">
-                Change any setting below and watch the live POS screen preview update instantly.
+                Choose how products look while you are making a new bill.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label>Product Picker Layout</Label>
+                <Label>How to Show Products</Label>
                 <Select
                   value={posLayout}
                   onChange={(e) => setPosLayout(e.target.value as "grid" | "list")}
                 >
-                  <option value="grid">Touch Card Grid (Best for Tablets &amp; Phones)</option>
-                  <option value="list">Compact Table List (Best for Fast Barcode Counters)</option>
+                  <option value="grid">Card Grid (Best for Phones &amp; Tablets)</option>
+                  <option value="list">Simple List (Best for Fast Counter Billing)</option>
                 </Select>
               </div>
               <div className="space-y-2 rounded-xl border border-[#ececee] bg-[#fafafa] p-3">
                 <Switch
                   checked={showThumbs}
                   onCheckedChange={setShowThumbs}
-                  label="Show Product Thumbnails in POS"
+                  label="Show Product Photos"
                 />
                 <Switch
                   checked={showHsnCol}
                   onCheckedChange={setShowHsnCol}
-                  label="Show HSN & GST% in Cart"
+                  label="Show HSN & GST % in Bill"
                 />
               </div>
               <Button
@@ -600,20 +569,19 @@ export function BillDesignerClient({
                     show_hsn_col: showHsnCol,
                     quick_pay_modes: ["cash", "upi", "card"],
                   });
-                  toast.success("Billing screen layout updated.");
+                  toast.success("New Bill screen look saved!");
                   router.refresh();
                 }}
               >
-                Save Screen Layout
+                Save Screen Look
               </Button>
             </CardContent>
           </Card>
 
-          {/* Live POS Screen Preview */}
           <div className="lg:col-span-7 space-y-2">
             <div className="flex items-center justify-between px-1">
               <span className="font-mono text-[10.5px] font-medium uppercase tracking-[0.05em] text-[#77777d]">
-                Live POS Screen Preview ({posLayout === "grid" ? "Touch Card Grid" : "Compact List"})
+                Live Preview ({posLayout === "grid" ? "Card Grid" : "Simple List"})
               </span>
               <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-700">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Live
@@ -623,11 +591,10 @@ export function BillDesignerClient({
             <div className="ui-tray">
               <div className="ui-surface p-3 sm:p-4">
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
-                  {/* Left: Simulated POS Product Picker */}
                   <div className="xl:col-span-7 space-y-2.5">
                     <div className="flex items-center gap-2 rounded-lg border border-[#ececee] bg-[#fafafa] px-2.5 py-1.5 text-[11px] text-[#a3a3a8]">
                       <Search className="h-3.5 w-3.5" />
-                      <span>Search product name, SKU, or scan barcode...</span>
+                      <span>Search product name, item code, or scan barcode...</span>
                     </div>
 
                     {posLayout === "grid" ? (
@@ -708,7 +675,6 @@ export function BillDesignerClient({
                     )}
                   </div>
 
-                  {/* Right: Simulated Current Bill Cart */}
                   <div className="xl:col-span-5 flex flex-col justify-between rounded-xl border border-[#ececee] bg-[#fafafa] p-3">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between border-b border-[#ececee] pb-1.5">
@@ -751,10 +717,10 @@ export function BillDesignerClient({
                           <p className="text-[9.5px] text-white/70">3 items</p>
                           <p className="text-[11px] font-semibold">Grand Total</p>
                         </div>
-                        <span className="font-mono text-sm font-bold">₹3,397</span>
+                        <span className="font-mono text-sm font-bold">₹350</span>
                       </div>
                       <div className="flex items-center justify-center gap-1.5 rounded-lg bg-white py-1.5 text-[11px] font-semibold text-[#171717] shadow-[0_0_0_1px_rgba(0,0,0,.08)]">
-                        <Printer className="h-3 w-3" /> Finalize &amp; Print
+                        <Printer className="h-3 w-3" /> Save &amp; Print
                       </div>
                     </div>
                   </div>

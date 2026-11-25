@@ -3,9 +3,7 @@ import { canAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { buildTrendSeries, trendBucketsSql, type TrendBucketRow } from "@/lib/analytics/trend";
 import {
-  loadPeriodProfitSummary,
   loadStockValuation,
-  type PeriodProfitSummary,
   type StockValuationReport,
 } from "@/lib/analytics/stock-valuation";
 import { withTenantTx } from "@/lib/db";
@@ -29,7 +27,8 @@ export default async function DashboardOverviewPage() {
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
       const isOwnerOrAdmin = ctx.user.role === "owner" || ctx.user.role === "branch_admin";
-      const [salesRes, branchRes, trendRes, recentRes, stockValRes, inTransitRes, oversoldRes, stockValuation, periodProfit] = await Promise.all([
+      const loadVal = stockEnabled || isOwnerOrAdmin;
+      const [salesRes, branchRes, trendRes, recentRes, inTransitRes, oversoldRes, stockValuation] = await Promise.all([
         billingEnabled
           ? client.query<{ today_sales: string; month_sales: string; total_dues: string }>(
               `SELECT
@@ -48,8 +47,8 @@ export default async function DashboardOverviewPage() {
                       COALESCE(SUM(ii.line_total), 0)::float AS revenue,
                       COALESCE(SUM(ii.qty * ii.cost_price_snapshot), 0)::float AS cogs
                FROM public.branches b
-               LEFT JOIN public.invoices i ON i.branch_id = b.id AND i.status NOT IN ('draft','cancelled') AND i.invoice_type = 'sale'
-               LEFT JOIN public.invoice_items ii ON ii.invoice_id = i.id
+               LEFT JOIN public.invoices i ON i.branch_id = b.id AND i.tenant_id = $1 AND i.status NOT IN ('draft','cancelled') AND i.invoice_type = 'sale'
+               LEFT JOIN public.invoice_items ii ON ii.invoice_id = i.id AND ii.tenant_id = $1
                WHERE b.tenant_id = $1 AND b.id = ANY($2::uuid[])
                GROUP BY b.id, b.name`,
               [ctx.tenant!.id, scope.ids]
@@ -71,16 +70,6 @@ export default async function DashboardOverviewPage() {
               [ctx.tenant!.id, scope.ids]
             )
           : Promise.resolve({ rows: [] as RecentInvoiceRow[] }),
-        stockEnabled
-          ? client.query<{ total_qty: string; stock_val: string }>(
-              `SELECT COALESCE(SUM(bs.quantity), 0)::text AS total_qty,
-                      COALESCE(SUM(bs.quantity * pv.avg_cost), 0)::text AS stock_val
-               FROM public.branch_stock bs
-               JOIN public.product_variants pv ON pv.id = bs.variant_id
-               WHERE bs.tenant_id = $1 AND bs.branch_id = ANY($2::uuid[])`,
-              [ctx.tenant!.id, scope.ids]
-            )
-          : Promise.resolve({ rows: [{ total_qty: "0", stock_val: "0" }] }),
         transferEnabled
           ? client.query<{ cnt: string }>(
               "SELECT COUNT(*)::text AS cnt FROM public.stock_transfers WHERE tenant_id = $1 AND status = 'dispatched' AND (from_branch_id = ANY($2::uuid[]) OR to_branch_id = ANY($2::uuid[]))",
@@ -93,24 +82,28 @@ export default async function DashboardOverviewPage() {
               [ctx.tenant!.id, scope.ids]
             )
           : Promise.resolve({ rows: [{ cnt: "0" }] }),
-        stockEnabled || isOwnerOrAdmin
+        loadVal
           ? loadStockValuation(client, ctx.tenant!.id, scope.ids)
           : Promise.resolve(null as StockValuationReport | null),
-        billingEnabled || isOwnerOrAdmin
-          ? loadPeriodProfitSummary(client, ctx.tenant!.id, scope.ids)
-          : Promise.resolve(null as PeriodProfitSummary | null),
       ]);
+
+      // Reuse totals already computed by loadStockValuation instead of scanning branch_stock twice
+      const stockSummary = stockValuation
+        ? {
+            total_qty: String(stockValuation.summary.totalUnits),
+            stock_val: String(stockValuation.summary.totalStockCost),
+          }
+        : { total_qty: "0", stock_val: "0" };
 
       return {
         sales: salesRes.rows[0],
         branchCompare: branchRes.rows,
         trend: buildTrendSeries(trendRes.rows),
         recentInvoices: recentRes.rows,
-        stock: stockValRes.rows[0],
+        stock: stockSummary,
         inTransitCount: Number(inTransitRes.rows[0]?.cnt ?? 0),
         oversoldCount: Number(oversoldRes.rows[0]?.cnt ?? 0),
         stockValuation,
-        periodProfit,
       };
     }
   );
@@ -134,8 +127,6 @@ export default async function DashboardOverviewPage() {
       recentInvoices={data.recentInvoices}
       stock={profitAllowed ? data.stock : { total_qty: data.stock.total_qty, stock_val: "0" }}
       stockValuation={data.stockValuation}
-      periodProfit={data.periodProfit}
-      showCostAndProfit={ctx.user.role === "owner" || ctx.user.role === "branch_admin" || profitAllowed}
       inTransitCount={data.inTransitCount}
       oversoldCount={data.oversoldCount}
     />

@@ -3,9 +3,11 @@
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  Check,
   CheckCircle2,
   Download,
   Inbox,
+  Layers,
   MessageCircle,
   Minus,
   Package,
@@ -14,7 +16,8 @@ import {
   ShoppingBag,
   Trash2,
 } from "lucide-react";
-import { Form, Badge, Button, Dialog, Input, Label, Select } from "@/components/ui/primitives";
+import { Form, Badge, Button, Dialog, Input, Label } from "@/components/ui/primitives";
+import { buildStructuredWhatsAppMessage, type WhatsAppCartLine } from "@/lib/storefront/whatsapp-message";
 import type { EnquiryChannel } from "@/types/database";
 
 export interface StorefrontProductItem {
@@ -39,13 +42,92 @@ export interface StorefrontProductItem {
   }>;
 }
 
-interface CartEntry {
-  variantId: string;
-  name: string;
-  sku: string;
-  attrs: string;
-  price: number | null;
+type CartEntry = WhatsAppCartLine;
+
+function EditableCartQty({
+  qty,
+  label,
+  onChange,
+  variant = "dark",
+}: {
   qty: number;
+  label: string;
+  onChange: (nextQty: number) => void;
+  variant?: "dark" | "light";
+}) {
+  const [draft, setDraft] = useState(String(qty));
+  const [focused, setFocused] = useState(false);
+
+  const display = focused ? draft : String(qty);
+
+  return (
+    <div
+      className={`flex items-center justify-between rounded-lg px-1 py-0.5 ${
+        variant === "dark"
+          ? "flex-1 bg-[#171717] text-white shadow-[0_1px_2px_rgba(0,0,0,.22)]"
+          : "w-28 border border-slate-200 bg-white text-[#171717]"
+      }`}
+    >
+      <button
+        type="button"
+        aria-label={qty <= 1 ? `Remove ${label}` : `Decrease ${label}`}
+        onClick={() => onChange(qty - 1)}
+        className={`flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-transform active:scale-90 ${
+          variant === "dark" ? "text-white/90 hover:bg-white/15" : "text-slate-600 hover:bg-slate-100"
+        }`}
+      >
+        {qty <= 1 ? (
+          <Trash2 className={`h-3.5 w-3.5 ${variant === "dark" ? "text-rose-300" : "text-rose-500"}`} />
+        ) : (
+          <Minus className="h-3.5 w-3.5" />
+        )}
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        aria-label={`Quantity for ${label}`}
+        value={display}
+        onFocus={(e) => {
+          setDraft(String(qty));
+          setFocused(true);
+          e.currentTarget.select();
+        }}
+        onChange={(e) => {
+          const cleaned = e.target.value.replace(/\D/g, "").slice(0, 6);
+          setDraft(cleaned);
+          const n = Number(cleaned);
+          if (cleaned !== "" && Number.isFinite(n) && n > 0) {
+            onChange(n);
+          }
+        }}
+        onBlur={() => {
+          setFocused(false);
+          const n = Number(draft);
+          if (draft === "" || !Number.isFinite(n) || n <= 0) {
+            onChange(0);
+          } else {
+            onChange(n);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        className={`h-7 min-w-0 flex-1 bg-transparent text-center font-mono text-xs font-bold focus:outline-none ${
+          variant === "dark" ? "text-white placeholder:text-white/50" : "text-[#171717]"
+        }`}
+      />
+      <button
+        type="button"
+        aria-label={`Increase ${label}`}
+        onClick={() => onChange(qty + 1)}
+        className={`flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-transform active:scale-90 ${
+          variant === "dark" ? "text-white/90 hover:bg-white/15" : "text-slate-600 hover:bg-slate-100"
+        }`}
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
 }
 
 export function StorefrontClient({
@@ -82,7 +164,8 @@ export function StorefrontClient({
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [attrFilter, setAttrFilter] = useState("ALL");
-  const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
+  const [pickerProduct, setPickerProduct] = useState<StorefrontProductItem | null>(null);
+  const [pickerDraftQty, setPickerDraftQty] = useState<Record<string, string>>({});
   const [cart, setCart] = useState<CartEntry[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [customerName, setCustomerName] = useState("");
@@ -138,9 +221,50 @@ export function StorefrontClient({
     });
   };
 
+  const openVariantPicker = (p: StorefrontProductItem) => {
+    const initialDraft: Record<string, string> = {};
+    for (const v of p.variants) {
+      const existing = cart.find((c) => c.variantId === v.id)?.qty ?? 0;
+      initialDraft[v.id] = existing > 0 ? String(existing) : "";
+    }
+    setPickerDraftQty(initialDraft);
+    setPickerProduct(p);
+  };
+
+  const saveVariantPicker = () => {
+    if (!pickerProduct) return;
+    setCart((prev) => {
+      const variantIds = new Set(pickerProduct.variants.map((v) => v.id));
+      const kept = prev.filter((c) => !variantIds.has(c.variantId));
+      const added: CartEntry[] = [];
+      for (const v of pickerProduct.variants) {
+        const qty = Math.max(0, Number(pickerDraftQty[v.id] || 0));
+        if (qty > 0) {
+          added.push({
+            productId: pickerProduct.product_id,
+            variantId: v.id,
+            name: pickerProduct.name,
+            modelCode: pickerProduct.model_code,
+            sku: v.sku,
+            attrs: Object.values(v.attributes).join(" / "),
+            uom: pickerProduct.uom || "Pair",
+            price: v.display_price,
+            qty,
+            imageUrl: pickerProduct.full_url || pickerProduct.thumb_url,
+          });
+        }
+      }
+      return [...kept, ...added];
+    });
+    setPickerProduct(null);
+  };
+
   const addToCart = (p: StorefrontProductItem) => {
-    const chosenId = selectedVariants[p.product_id];
-    const v = p.variants.find((x) => x.id === chosenId) ?? p.variants[0];
+    if (p.variants.length > 1) {
+      openVariantPicker(p);
+      return;
+    }
+    const v = p.variants[0];
     if (!v) return;
     setCart((prev) => {
       const idx = prev.findIndex((c) => c.variantId === v.id);
@@ -152,12 +276,16 @@ export function StorefrontClient({
       return [
         ...prev,
         {
+          productId: p.product_id,
           variantId: v.id,
           name: p.name,
+          modelCode: p.model_code,
           sku: v.sku,
           attrs: Object.values(v.attributes).join(" / "),
+          uom: p.uom || "Pair",
           price: v.display_price,
           qty: 1,
+          imageUrl: p.full_url || p.thumb_url,
         },
       ];
     });
@@ -173,20 +301,17 @@ export function StorefrontClient({
   const canInbox = enquiriesEnabled && (effectiveChannel === "inbox" || effectiveChannel === "both");
   const canWhatsapp = Boolean(cleanWa) && (effectiveChannel === "whatsapp" || effectiveChannel === "both");
 
-  const waText = encodeURIComponent(
-    `Hello ${tenantName}, I would like to enquire about:\n` +
-      cart
-        .map(
-          (c, i) =>
-            `${i + 1}. ${c.name} (${c.sku}${c.attrs ? ` - ${c.attrs}` : ""}) x ${c.qty}${
-              c.price != null ? ` @ ₹${c.price}` : ""
-            }`
-        )
-        .join("\n") +
-      (customerName.trim() ? `\nName: ${customerName.trim()}` : "") +
-      (customerContact.trim() ? `\nContact: ${customerContact.trim()}` : "") +
-      (message.trim() ? `\nNote: ${message.trim()}` : "")
-  );
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const formattedWaMessage = buildStructuredWhatsAppMessage({
+    tenantName,
+    slug,
+    origin,
+    items: cart,
+    customerName,
+    customerContact,
+    message,
+  });
+  const waText = encodeURIComponent(formattedWaMessage);
 
   const handleSubmitEnquiry = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -388,15 +513,12 @@ export function StorefrontClient({
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {filtered.map((p) => {
-                  const chosenId = selectedVariants[p.product_id];
-                  const activeVariant = p.variants.find((v) => v.id === chosenId) ?? p.variants[0];
+                  const activeVariant = p.variants[0];
                   const activeQty = activeVariant
                     ? cart.find((c) => c.variantId === activeVariant.id)?.qty ?? 0
                     : 0;
-                  const productTotalQty = p.variants.reduce(
-                    (sum, v) => sum + (cart.find((c) => c.variantId === v.id)?.qty ?? 0),
-                    0
-                  );
+                  const selectedInCart = cart.filter((c) => c.productId === p.product_id);
+                  const productTotalQty = selectedInCart.reduce((sum, c) => sum + c.qty, 0);
                   const displayPrice = activeVariant?.display_price ?? p.variants[0]?.display_price;
                   const mrp = activeVariant?.mrp ?? p.variants[0]?.mrp;
                   const inStock = p.variants.some((v) => v.in_stock);
@@ -548,59 +670,44 @@ export function StorefrontClient({
                         </div>
                       </div>
 
-                      {/* Variant Picker + Add to Inquiry */}
+                      {/* Multi-Size/Colour Picker + Add to Inquiry */}
                       <div className="space-y-2 border-t border-slate-100 bg-slate-50/50 p-3">
-                        {p.variants.length > 1 && (
-                          <Select
-                            aria-label={`Choose a variant of ${p.name}`}
-                            value={selectedVariants[p.product_id] ?? p.variants[0]?.id ?? ""}
-                            onChange={(e) =>
-                              setSelectedVariants((prev) => ({ ...prev, [p.product_id]: e.target.value }))
-                            }
-                            className="!min-h-[32px] !px-2.5 !py-1 !text-[11px] !font-medium"
-                          >
-                            {p.variants.map((v) => (
-                              <option key={v.id} value={v.id}>
-                                {Object.values(v.attributes).join(" / ") || v.sku}
-                                {v.display_price != null ? ` — ₹${v.display_price}` : ""}
-                              </option>
+                        {p.variants.length > 1 && selectedInCart.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {selectedInCart.slice(0, 4).map((c) => (
+                              <span
+                                key={c.variantId}
+                                className="inline-flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[10px] font-medium text-[#171717] shadow-[0_0_0_1px_rgba(0,0,0,.08)]"
+                              >
+                                {c.attrs || c.sku}
+                                <strong className="font-mono text-sky-700">×{c.qty}</strong>
+                              </span>
                             ))}
-                          </Select>
+                            {selectedInCart.length > 4 && (
+                              <span className="text-[10px] font-medium text-slate-500">
+                                +{selectedInCart.length - 4} more
+                              </span>
+                            )}
+                          </div>
                         )}
                         <div className="flex gap-1.5">
-                          {activeQty > 0 && activeVariant ? (
-                            <div
-                              style={{ animation: "pos-stepper-in 200ms var(--ui-ease)" }}
-                              className="flex flex-1 items-center justify-between rounded-lg bg-[#171717] px-1 py-0.5 text-white shadow-[0_1px_2px_rgba(0,0,0,.22)]"
+                          {p.variants.length > 1 ? (
+                            <Button
+                              size="sm"
+                              className="flex-1 active:scale-95"
+                              onClick={() => openVariantPicker(p)}
                             >
-                              <button
-                                type="button"
-                                aria-label={activeQty <= 1 ? `Remove ${p.name}` : `Decrease ${p.name}`}
-                                onClick={() => setVariantQty(activeVariant.id, activeQty - 1)}
-                                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-white/90 transition-transform active:scale-90 hover:bg-white/15"
-                              >
-                                {activeQty <= 1 ? (
-                                  <Trash2 className="h-3.5 w-3.5 text-rose-300" />
-                                ) : (
-                                  <Minus className="h-3.5 w-3.5" />
-                                )}
-                              </button>
-                              <span
-                                key={activeQty}
-                                style={{ animation: "pos-pop 240ms var(--ui-ease)" }}
-                                className="font-mono text-xs font-bold"
-                              >
-                                {activeQty} in cart
-                              </span>
-                              <button
-                                type="button"
-                                aria-label={`Increase ${p.name}`}
-                                onClick={() => addToCart(p)}
-                                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-white/90 transition-transform active:scale-90 hover:bg-white/15"
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
+                              <Layers className="h-3.5 w-3.5" />
+                              {selectedInCart.length > 0
+                                ? `Edit Sizes (${selectedInCart.length} · ${productTotalQty})`
+                                : "Select Sizes & Colours"}
+                            </Button>
+                          ) : activeQty > 0 && activeVariant ? (
+                            <EditableCartQty
+                              qty={activeQty}
+                              label={p.name}
+                              onChange={(next) => setVariantQty(activeVariant.id, next)}
+                            />
                           ) : (
                             <Button
                               size="sm"
@@ -679,17 +786,25 @@ export function StorefrontClient({
                 key={c.variantId}
                 className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2 text-xs"
               >
-                <div>
-                  <p className="font-bold">{c.name}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-bold">{c.name}</p>
                   <p className="text-slate-500">
                     {c.sku}
-                    {c.attrs ? ` · ${c.attrs}` : ""} · Qty: {c.qty}
+                    {c.attrs ? ` · ${c.attrs}` : ""}
+                    {c.price != null ? ` · ₹${c.price}` : ""}
                   </p>
                 </div>
+                <EditableCartQty
+                  qty={c.qty}
+                  label={c.name}
+                  variant="light"
+                  onChange={(next) => setVariantQty(c.variantId, next)}
+                />
                 <button
                   type="button"
                   onClick={() => setCart((prev) => prev.filter((_, i) => i !== idx))}
-                  className="p-1 text-rose-500"
+                  className="p-1 text-rose-500 cursor-pointer"
+                  aria-label={`Remove ${c.name}`}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -772,6 +887,151 @@ export function StorefrontClient({
             )}
           </Form>
         )}
+      </Dialog>
+
+      {/* Multi-Size & Multi-Colour Picker Dialog */}
+      <Dialog
+        open={Boolean(pickerProduct)}
+        onClose={() => setPickerProduct(null)}
+        title={pickerProduct ? `Select Sizes & Colours — ${pickerProduct.name}` : "Select Sizes & Colours"}
+        maxWidth="max-w-lg"
+      >
+        {pickerProduct && (() => {
+          const totalSelectedPairs = pickerProduct.variants.reduce(
+            (sum, v) => sum + Math.max(0, Number(pickerDraftQty[v.id] || 0)),
+            0
+          );
+          const selectedVariantCount = pickerProduct.variants.filter(
+            (v) => Number(pickerDraftQty[v.id] || 0) > 0
+          ).length;
+
+          return (
+            <div className="space-y-3.5">
+              {/* Product Summary Header */}
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-2.5">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  {pickerProduct.thumb_url ? (
+                    <img src={pickerProduct.thumb_url} alt={pickerProduct.name} className="h-full w-full object-contain p-0.5" />
+                  ) : (
+                    <Package className="h-5 w-5 text-slate-400" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-[#171717]">{pickerProduct.name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    Code: <span className="font-mono font-semibold text-slate-700">{pickerProduct.model_code}</span> ·{" "}
+                    {pickerProduct.variants.length} options available
+                  </p>
+                </div>
+              </div>
+
+              {/* Variant Checklist + Plus/Minus & Direct Qty Stepper */}
+              <div className="max-h-[50vh] space-y-1.5 overflow-y-auto pr-1">
+                {pickerProduct.variants.map((v) => {
+                  const rawVal = pickerDraftQty[v.id] ?? "";
+                  const numVal = Math.max(0, Number(rawVal || 0));
+                  const isChecked = numVal > 0;
+                  const label = Object.values(v.attributes).join(" / ") || v.sku;
+                  return (
+                    <div
+                      key={v.id}
+                      className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition-colors ${
+                        isChecked
+                          ? "border-[#171717] bg-[#fafafa]"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPickerDraftQty((prev) => ({
+                            ...prev,
+                            [v.id]: isChecked ? "" : "1",
+                          }));
+                        }}
+                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left"
+                      >
+                        <span
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                            isChecked
+                              ? "border-[#171717] bg-[#171717] text-white"
+                              : "border-slate-300 bg-white"
+                          }`}
+                        >
+                          {isChecked && <Check className="h-3.5 w-3.5" />}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold text-[#171717]">{label}</p>
+                          <p className="text-[10.5px] text-slate-500">
+                            {v.display_price != null ? `₹${Number(v.display_price).toLocaleString("en-IN")}` : "Price on enquiry"}
+                            {" · "}
+                            {v.in_stock ? "Available" : "On Order"}
+                          </p>
+                        </div>
+                      </button>
+
+                      <div className="flex shrink-0 items-center rounded-lg border border-slate-300 bg-white p-0.5">
+                        <button
+                          type="button"
+                          aria-label={`Decrease quantity for ${label}`}
+                          disabled={numVal <= 0}
+                          onClick={() => {
+                            const next = Math.max(0, numVal - 1);
+                            setPickerDraftQty((prev) => ({ ...prev, [v.id]: next > 0 ? String(next) : "" }));
+                          }}
+                          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-35"
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          aria-label={`Quantity for ${label}`}
+                          value={rawVal}
+                          placeholder="0"
+                          onFocus={(e) => e.currentTarget.select()}
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(/\D/g, "").slice(0, 6);
+                            setPickerDraftQty((prev) => ({ ...prev, [v.id]: cleaned }));
+                          }}
+                          className="h-7 w-14 bg-transparent text-center font-mono text-xs font-bold text-[#171717] focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          aria-label={`Increase quantity for ${label}`}
+                          onClick={() => {
+                            const next = Math.min(999999, numVal + 1);
+                            setPickerDraftQty((prev) => ({ ...prev, [v.id]: String(next) }));
+                          }}
+                          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-slate-700 hover:bg-slate-100"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Save Footer */}
+              <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-3">
+                <div className="text-xs text-slate-600">
+                  <strong className="font-mono text-[#171717]">{selectedVariantCount}</strong> options ·{" "}
+                  <strong className="font-mono text-[#171717]">{totalSelectedPairs.toLocaleString("en-IN")}</strong>{" "}
+                  {pickerProduct.uom || "Pairs"}
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setPickerProduct(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="button" size="sm" onClick={saveVariantPicker}>
+                    Save to Cart
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </Dialog>
     </div>
   );

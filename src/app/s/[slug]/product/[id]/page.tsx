@@ -7,7 +7,7 @@ import { isConfigured } from "@/lib/env";
 import { query } from "@/lib/db";
 import { getPublicAssetUrl } from "@/lib/storage/s3-client";
 
-export const revalidate = 300;
+export const revalidate = 120;
 
 export default async function PublicProductDetailPage({
   params,

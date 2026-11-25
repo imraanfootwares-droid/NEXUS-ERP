@@ -2090,6 +2090,23 @@
     .px-table td.val { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
     .px-table .px-yes { width: 20px; height: 20px; background: var(--blue); color: #fff; }
     .px-no { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #F1F3F8; color: #A4ADBC; }
+    .px-badge { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .02em; vertical-align: middle; white-space: nowrap; }
+    .px-badge-new { background: #DCFCE7; color: #15803D; }
+    .px-badge-admin { background: #FEF3C7; color: #B45309; border: 1px solid rgba(217, 119, 6, 0.22); }
+    .px-admin-box { margin-top: 30px; padding: 24px 26px; border-radius: 20px; background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color: #FFFFFF; box-shadow: 0 22px 46px -24px rgba(15, 23, 42, 0.55); }
+    .px-admin-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .px-admin-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; background: rgba(251, 191, 36, 0.16); border: 1px solid rgba(251, 191, 36, 0.35); color: #FCD34D; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+    .px-admin-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .px-admin-card { padding: 14px 15px; border-radius: 14px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); }
+    .px-admin-card h4 { font-family: var(--font-display); font-size: 13.5px; font-weight: 600; color: #FFFFFF; margin-bottom: 4px; }
+    .px-admin-card p { font-size: 11.5px; line-height: 1.48; color: rgba(255, 255, 255, 0.72); }
+    .px-admin-tag { display: inline-block; margin-top: 8px; padding: 2px 8px; border-radius: 6px; background: rgba(56, 189, 248, 0.15); color: #7DD3FC; font-size: 10px; font-weight: 600; }
+    .px-admin-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .px-admin-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 10px; background: #FFFFFF; color: #0F172A; font-size: 12.5px; font-weight: 600; transition: transform 150ms ease, background 150ms ease; }
+    .px-admin-btn:hover { transform: translateY(-1px); background: #F1F5F9; }
+    .px-admin-btn-ghost { background: rgba(255, 255, 255, 0.1); color: #FFFFFF; border: 1px solid rgba(255, 255, 255, 0.18); }
+    .px-admin-btn-ghost:hover { background: rgba(255, 255, 255, 0.16); color: #FFFFFF; }
+    @media (max-width: 860px) { .px-admin-grid { grid-template-columns: 1fr; } }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 
     @media (max-width: 1040px) {
@@ -2139,10 +2156,10 @@
       <header class="navbar">
         <a href="#home" class="brand">Nexus ERP</a>
         <nav class="nav-links" aria-label="Primary Navigation">
+          <a href="/features">Features &amp; Plans</a>
           <a href="#pricing">Pricing</a>
           <a href="/s/imraan-footwear">Live Demo Storefront</a>
           <a href="#about">Modules</a>
-          <a href="#features">Capabilities</a>
         </nav>
         <a class="btn-dark" href="/login" data-auth-link>Sign In</a>
       </header>
@@ -2713,15 +2730,15 @@
           <div class="check-list">
             <div class="check-row">
               <span class="check-circle"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-              <span>Custom Bill Design, 80mm Thermal &amp; A4 GST Print.</span>
+              <span>10 Creative Bill Designs (5 GST + 5 Normal), 80mm Thermal &amp; A4 Print with My Profile Bank &amp; Signatory.</span>
             </div>
             <div class="check-row">
               <span class="check-circle"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-              <span>Excel / CSV / PDF GST Reports &amp; Daily 1-Click Backups.</span>
+              <span>Edit Finalized Bills, Before → After Version History &amp; 1-Click Revert across Customer &amp; Supplier Ledgers.</span>
             </div>
             <div class="check-row">
               <span class="check-circle"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-              <span>Live R2 Photo Showcase Website &amp; 1-Click WhatsApp PDF.</span>
+              <span>Live R2 Photo Showcase Website, Bulk Multi-Size WhatsApp Cart &amp; 1-Click PDF Catalogue.</span>
             </div>
           </div>
         </div>
@@ -2746,15 +2763,50 @@
       </div>
       <div class="px-grid" id="px-cards"></div>
       <div class="px-assure">
-        <span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>GST ready</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Works on phone and PC</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Offline billing</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Daily backups</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Upgrade anytime</span>
+        <span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>10 GST &amp; Normal Bill Designs</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Works on phone and PC</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>1-Click Data Export</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Platform Admin Add-Ons</span><span><span class="px-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Upgrade anytime</span>
       </div>
 
       <div class="px-compare-head">
-        <h3>Compare Every Feature</h3>
-        <p>See exactly what is included in each plan.</p>
+        <h3>Compare Every Feature (All 20 Modules)</h3>
+        <p>See exactly what is included per plan — and which premium add-ons Platform Super Admin can unlock individually on any tier.</p>
       </div>
       <div class="px-scroll" tabindex="0" role="region" aria-label="Plan comparison table">
         <table class="px-table" id="px-table"></table>
+      </div>
+
+      <div class="px-admin-box">
+        <div class="px-admin-top">
+          <div>
+            <span class="px-admin-pill">Platform Super Admin Controls</span>
+            <h3 style="font-family:var(--font-display);font-size:23px;font-weight:600;letter-spacing:-0.025em;margin-top:10px;">
+              Unlock Any Premium Feature Per Customer — Without Changing Their Tier
+            </h3>
+            <p style="font-size:13px;color:rgba(255,255,255,0.72);max-width:640px;margin-top:4px;">
+              Keep 4 clean tiers while enabling paid add-ons individually from the Platform Admin Mix &amp; Match Studio, with custom R2 photo &amp; edit-history caps per workspace.
+            </p>
+          </div>
+          <div class="px-admin-actions">
+            <a href="/features" class="px-admin-btn">View Full Features &amp; Admin Matrix →</a>
+            <a href="/login?portal=super" class="px-admin-btn px-admin-btn-ghost">Platform Admin Login</a>
+          </div>
+        </div>
+        <div class="px-admin-grid">
+          <div class="px-admin-card">
+            <h4>Edit Bills, History &amp; 1-Click Revert</h4>
+            <p>Edit finalized customer &amp; supplier bills with automatic stock/balance reconciliation and Before → After version history.</p>
+            <span class="px-admin-tag">Default: Tier 3+ · Toggleable for Tier 1/2</span>
+          </div>
+          <div class="px-admin-card">
+            <h4>Automated Daily Cloud Backups</h4>
+            <p>Nightly compressed R2 backups that skip idle businesses automatically. Tier 1 &amp; 2 still include 1-click manual Excel/ZIP download.</p>
+            <span class="px-admin-tag">Default: Tier 3+ · Toggleable per tenant</span>
+          </div>
+          <div class="px-admin-card">
+            <h4>Live Website, R2 Photos &amp; PDF Catalogue</h4>
+            <p>Public storefront with bulk multi-size WhatsApp cart, Enquiries Inbox &amp; PDF brochure — unlockable as a paid add-on on lower plans.</p>
+            <span class="px-admin-tag">Default: Tier 4 · Custom R2 photo cap (200 default)</span>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -2961,10 +3013,10 @@
         <div>
           <h4 class="footer-col-title">Access</h4>
           <ul class="footer-links">
+            <li><a href="/features">All Features &amp; Admin Add-Ons</a></li>
             <li><a href="#pricing">Pricing</a></li>
             <li><a href="/s/imraan-footwear">Live Demo Storefront</a></li>
             <li><a href="/login" data-auth-link>Sign In</a></li>
-            <li><a href="/login" data-auth-link>Open ERP Portal</a></li>
             <li><a href="#home" data-open-modal="Book a Demo">Book a Demo</a></li>
           </ul>
         </div>
@@ -3246,7 +3298,7 @@
       document.querySelectorAll('[data-nx-view]').forEach((el) => (el.dataset.nxView === 'pos' ? nxRenderPos(el) : nxRenderOverview(el)));
 
       /* ===== PLAN OVERVIEW & TICK / CROSS COMPARISON ===== */
-      let pxData = {"plans":[{"key":"tier_1","name":"Tier 1 — Simple Billing & GST","summary":"Mobile/PC billing, custom bill design, GST bills, sales charts, exports & daily backups.","priceInr":50000,"marketPriceInr":85000,"maxUsers":5,"maxBranches":1},{"key":"tier_2","name":"Tier 2 — Billing + Stock","summary":"Everything in Tier 1 plus customer CRM, size/colour stock matrix, Excel import & alerts.","priceInr":100000,"marketPriceInr":175000,"maxUsers":5,"maxBranches":1},{"key":"tier_3","name":"Tier 3 — Multi-Branch System","summary":"Everything in Tier 2 plus separate branch ledgers, suppliers, production, transfers & profit analytics.","priceInr":150000,"marketPriceInr":295000,"maxUsers":10,"maxBranches":5},{"key":"tier_4","name":"Tier 4 — Complete + Website & PDF","summary":"Everything in Tier 3 plus live R2 photo showcase storefront & 1-click WhatsApp PDF catalogue.","priceInr":190000,"marketPriceInr":385000,"maxUsers":15,"maxBranches":10}],"features":[{"key":"mobile_pc_access","label":"Mobile & PC Access","category":"Core","description":"Responsive PWA & offline-first remote control anywhere","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"rbac_logins","label":"Owner, Admin & Worker Logins","category":"Core","description":"Role-based logins, password management & permission matrix","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"bill_designer","label":"Custom Bill Design & Print","category":"Billing","description":"A4 / 80mm / 58mm print studio & billing screen customizer","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"gst_billing_pdf","label":"GST Bills & PDF Download","category":"Billing","description":"Local & outstation GST billing, estimates & PDF download","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"discounts_returns_payments","label":"Discounts, Returns & Split Pay","category":"Billing","description":"Line/bill discounts, credit notes, size exchanges & Cash/UPI/Card","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"analytics_basic","label":"Sales & Cashflow Dashboards","category":"Analytics","description":"Daily sales, payment split & Day-End cash reconciliation","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"data_exports_gst","label":"Excel / CSV / PDF GST Reports","category":"Reports","description":"Sales & Purchase registers, GSTR-1, HSN & e-Way/IRP JSON","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"daily_backups","label":"Daily Backups + 1-Click Download","category":"Core","description":"Automated daily compressed snapshots to private R2","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"customer_crm","label":"Customer & Wholesale CRM","category":"CRM","description":"Retail & dealer ledgers, aging buckets, credit limits & history","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"dynamic_stock_matrix","label":"Size, Colour & Attribute Matrix","category":"Inventory","description":"Multi-vertical product variants, 2D matrix & Legal Metrology labels","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"bulk_excel_import","label":"Bulk Stock & Price Import","category":"Inventory","description":"Dynamic Excel/CSV template, validation & atomic commit","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"auto_stock_and_alerts","label":"Auto Stock Minus & Alerts","category":"Inventory","description":"Atomic stock deduction, low-stock & broken-size alerts","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"multi_branch_ledgers","label":"Separate Branch Stock Ledgers","category":"Multi-Branch","description":"Independent stock & immutable ledgers per branch","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"supplier_and_production","label":"Suppliers, Purchases & Factory","category":"Operations","description":"Suppliers, material/goods purchases, dues & production batches","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"stock_transfers","label":"Factory-to-Shop Transfers","category":"Multi-Branch","description":"Size-run dispatch, GSTIN-aware Tax Invoice/Challan & receive","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"owner_profit_analytics","label":"Combined Owner Profit Analytics","category":"Analytics","description":"Cross-branch revenue, weighted-avg COGS, expenses & net margin","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"public_website_cms","label":"Live Website & Photo Showcase","category":"Storefront","description":"WebP R2 gallery, New Arrivals storefront & WhatsApp Inquiry Cart","tiers":{"tier_1":false,"tier_2":false,"tier_3":false,"tier_4":true}},{"key":"pdf_catalogue_export","label":"1-Click PDF Catalogue Export","category":"Storefront","description":"WhatsApp-ready PDF brochure with configurable price display","tiers":{"tier_1":false,"tier_2":false,"tier_3":false,"tier_4":true}}]};
+      let pxData = {"plans":[{"key":"tier_1","name":"Tier 1 — Simple Billing & GST","summary":"Mobile/PC billing, 10 bill designs, GST bills, sales charts, GST exports & 1-click manual data download.","priceInr":50000,"marketPriceInr":85000,"maxUsers":5,"maxBranches":1},{"key":"tier_2","name":"Tier 2 — Billing + Stock","summary":"Everything in Tier 1 plus customer CRM & ledger, size/colour stock matrix, Excel import & reorder alerts.","priceInr":100000,"marketPriceInr":175000,"maxUsers":5,"maxBranches":1},{"key":"tier_3","name":"Tier 3 — Multi-Branch System","summary":"Everything in Tier 2 plus Edit Old Bills & 1-Click Revert, automated daily cloud backups, suppliers, transfers & profit analytics.","priceInr":150000,"marketPriceInr":295000,"maxUsers":10,"maxBranches":5},{"key":"tier_4","name":"Tier 4 — Complete + Website & PDF","summary":"Everything in Tier 3 plus live R2 photo showcase storefront, bulk WhatsApp inquiry cart & 1-click PDF catalogue.","priceInr":190000,"marketPriceInr":385000,"maxUsers":15,"maxBranches":10}],"features":[{"key":"mobile_pc_access","label":"Mobile & PC Access","category":"Core","minTier":"tier_1","isNew":false,"premiumAddon":false,"description":"Responsive PWA & offline-first remote control anywhere","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"rbac_logins","label":"Owner, Admin & Worker Logins","category":"Core","minTier":"tier_1","isNew":false,"premiumAddon":false,"description":"Role-based logins, password management & permission matrix","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"bill_designer","label":"Custom Bill Design & Print","category":"Billing","minTier":"tier_1","isNew":true,"premiumAddon":false,"description":"5 GST + 5 Normal layouts, My Profile bank/signatory & A4/A5/80mm/58mm print","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"gst_billing_pdf","label":"GST Bills & PDF Download","category":"Billing","minTier":"tier_1","isNew":false,"premiumAddon":false,"description":"Normal/GST toggle, Ship-To consignee, local & outstation GST & PDF download","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"discounts_returns_payments","label":"Discounts, Returns & Split Pay","category":"Billing","minTier":"tier_1","isNew":false,"premiumAddon":false,"description":"Line/bill discounts, credit notes, size exchanges & Cash/UPI/Card","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"analytics_basic","label":"Sales & Cashflow Dashboards","category":"Analytics","minTier":"tier_1","isNew":false,"premiumAddon":false,"description":"Daily sales, payment split & Day-End cash reconciliation","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"data_exports_gst","label":"Excel / CSV / PDF GST Reports","category":"Reports","minTier":"tier_1","isNew":false,"premiumAddon":false,"description":"Sales & Purchase registers, GSTR-1, HSN & 1-click full data export","tiers":{"tier_1":true,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"customer_crm","label":"Customer & Wholesale CRM","category":"CRM","minTier":"tier_2","isNew":true,"premiumAddon":false,"description":"Searchable 1,000+ customer sidebar, dealer ledgers, PDF statements & dues","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"dynamic_stock_matrix","label":"Size, Colour & Attribute Matrix","category":"Inventory","minTier":"tier_2","isNew":false,"premiumAddon":false,"description":"Multi-vertical product variants, 2D matrix & Legal Metrology labels","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"bulk_excel_import","label":"Bulk Stock & Price Import","category":"Inventory","minTier":"tier_2","isNew":false,"premiumAddon":false,"description":"Dynamic Excel/CSV template, validation & atomic commit","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"auto_stock_and_alerts","label":"Auto Stock Minus & Alerts","category":"Inventory","minTier":"tier_2","isNew":false,"premiumAddon":false,"description":"Atomic stock deduction, product-photo reorder alerts & low-stock status","tiers":{"tier_1":false,"tier_2":true,"tier_3":true,"tier_4":true}},{"key":"daily_backups","label":"Automated Daily Cloud Backups","category":"Core","minTier":"tier_3","isNew":false,"premiumAddon":true,"description":"Automated daily compressed snapshots to R2 (Tier 1 & 2 include 1-click manual export)","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"bill_edit_history","label":"Edit Bills, History & 1-Click Revert","category":"Billing","minTier":"tier_3","isNew":true,"premiumAddon":true,"description":"Edit finalized bills & purchases, inspect Before→After diffs & revert to any version","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"multi_branch_ledgers","label":"Separate Branch Stock Ledgers","category":"Multi-Branch","minTier":"tier_3","isNew":false,"premiumAddon":true,"description":"Independent stock & immutable ledgers per branch","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"supplier_and_production","label":"Suppliers, Purchases & Factory","category":"Operations","minTier":"tier_3","isNew":true,"premiumAddon":true,"description":"Supplier ledger PDF, inline + Create New Product in purchases & production batches","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"stock_transfers","label":"Factory-to-Shop Transfers","category":"Multi-Branch","minTier":"tier_3","isNew":false,"premiumAddon":true,"description":"Size-run dispatch, GSTIN-aware Tax Invoice/Challan & receive","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"owner_profit_analytics","label":"Combined Owner Profit Analytics","category":"Analytics","minTier":"tier_3","isNew":false,"premiumAddon":true,"description":"Cross-branch revenue, weighted-avg COGS, expenses & net margin","tiers":{"tier_1":false,"tier_2":false,"tier_3":true,"tier_4":true}},{"key":"public_website_cms","label":"Live Website & Photo Showcase","category":"Storefront","minTier":"tier_4","isNew":true,"premiumAddon":true,"description":"WebP R2 gallery, bulk multi-size/colour picker & structured WhatsApp Inquiry Cart","tiers":{"tier_1":false,"tier_2":false,"tier_3":false,"tier_4":true}},{"key":"pdf_catalogue_export","label":"1-Click PDF Catalogue Export","category":"Storefront","minTier":"tier_4","isNew":false,"premiumAddon":true,"description":"WhatsApp-ready PDF brochure with configurable price display","tiers":{"tier_1":false,"tier_2":false,"tier_3":false,"tier_4":true}},{"key":"customer_enquiries","label":"Customer Enquiries Inbox","category":"Storefront","minTier":"tier_4","isNew":true,"premiumAddon":true,"description":"Public catalogue & storefront enquiry inbox with WhatsApp routing","tiers":{"tier_1":false,"tier_2":false,"tier_3":false,"tier_4":true}}]};
       let pxOffer = true;
       const PX_BANDS = ['Start billing', 'Add stock', 'Best for multi-branch', 'Complete + online'];
       const PX_FEATURED = 2;
@@ -3277,7 +3329,7 @@
             <button type="button" class="px-cta" data-plan-cta="${nxEsc(pxInterest(p))}">Enquire for ${nxEsc(tier)}</button>
             <div class="px-limits"><div><b>${p.maxUsers}</b>Staff logins</div><div><b>${p.maxBranches}</b>${p.maxBranches === 1 ? 'Branch' : 'Branches'}</div></div>
             <p class="px-plus">${prev ? `Everything in ${nxEsc(pxParts(prev.name).tier)}, plus:` : 'Includes:'}</p>
-            <ul class="px-list">${added.map((f) => `<li><span class="px-yes">${PX_TICK}</span>${nxEsc(f.label)}</li>`).join('')}</ul>
+            <ul class="px-list">${added.map((f) => `<li><span class="px-yes">${PX_TICK}</span><span>${nxEsc(f.label)}${f.isNew ? '<span class="px-badge px-badge-new">NEW</span>' : ''}</span></li>`).join('')}</ul>
           </div>`;
         });
 
@@ -3291,7 +3343,7 @@
         }).join('')}</tr></thead><tbody>
           <tr class="px-cat"><td colspan="${plans.length + 1}">Capacity</td></tr>
           ${limitRow('Staff logins', 'maxUsers')}${limitRow('Branches', 'maxBranches')}
-          ${cats.map((c) => `<tr class="px-cat"><td colspan="${plans.length + 1}">${nxEsc(c)}</td></tr>${features.filter((f) => f.category === c).map((f) => `<tr><td>${nxEsc(f.label)}<small>${nxEsc(f.description)}</small></td>${plans.map((p, i) => `<td${hot(i)}>${f.tiers[p.key] ? `<span class="px-yes">${PX_TICK}</span><span class="sr-only">Included</span>` : `<span class="px-no">${PX_CROSS}</span><span class="sr-only">Not included</span>`}</td>`).join('')}</tr>`).join('')}`).join('')}
+          ${cats.map((c) => `<tr class="px-cat"><td colspan="${plans.length + 1}">${nxEsc(c)}</td></tr>${features.filter((f) => f.category === c).map((f) => `<tr><td>${nxEsc(f.label)}${f.isNew ? '<span class="px-badge px-badge-new">NEW</span>' : ''}${f.premiumAddon ? '<span class="px-badge px-badge-admin">Admin Add-On</span>' : ''}<small>${nxEsc(f.description)}</small></td>${plans.map((p, i) => `<td${hot(i)}>${f.tiers[p.key] ? `<span class="px-yes">${PX_TICK}</span><span class="sr-only">Included</span>` : `<span class="px-no">${PX_CROSS}</span><span class="sr-only">Not included</span>`}</td>`).join('')}</tr>`).join('')}`).join('')}
         </tbody>`;
       }
       renderPricing();
