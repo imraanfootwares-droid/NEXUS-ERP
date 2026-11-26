@@ -2,7 +2,7 @@ import { bindings, defineConfig, defineWorker } from "cf/config";
 
 export default defineConfig({
   worker: defineWorker({
-    name: "nexus-erp",
+    name: "app",
     entrypoint: "vinext/server/fetch-handler",
     compatibilityDate: "2026-11-26",
     compatibilityFlags: ["nodejs_compat"],
