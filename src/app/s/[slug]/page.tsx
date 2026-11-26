@@ -5,7 +5,7 @@ import { isConfigured } from "@/lib/env";
 import { query } from "@/lib/db";
 import { deriveThumbKey, getPublicAssetUrl } from "@/lib/storage/s3-client";
 
-export const revalidate = 120;
+export const revalidate = 300;
 
 export default async function PublicStorefrontPage({
   params,

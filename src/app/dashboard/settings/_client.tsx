@@ -2992,7 +2992,7 @@ export function SettingsHubClient({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold">Automated Daily Backups (Latest 14 Kept)</h3>
+              <h3 className="text-sm font-semibold">Cloud Backups (Auto Every 2 Days + 1-Click Backup Now)</h3>
               <p className="text-xs text-slate-500">
                 R2 Media Used: {(tenant.storage_used_bytes / (1024 * 1024)).toFixed(2)} / {tenant.max_storage_mb} MB
               </p>

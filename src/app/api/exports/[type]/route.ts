@@ -1,10 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as XLSX from "xlsx";
 import { assertAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 
 export const runtime = "nodejs";
+
+function rowsToCsv(rows: Array<Record<string, unknown>>): string {
+  if (rows.length === 0) return "";
+  const headers = Object.keys(rows[0]);
+  const esc = (v: unknown) => {
+    const s = v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [headers.map(esc).join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\r\n");
+}
 
 export async function GET(
   request: NextRequest,
@@ -177,12 +186,8 @@ export async function GET(
     });
   }
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, type.slice(0, 30));
-
   if (format === "csv") {
-    const csv = XLSX.utils.sheet_to_csv(ws);
+    const csv = rowsToCsv(rows as Array<Record<string, unknown>>);
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
@@ -190,6 +195,11 @@ export async function GET(
       },
     });
   }
+
+  const XLSX = await import("xlsx");
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, type.slice(0, 30));
 
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
   return new NextResponse(new Uint8Array(buf), {

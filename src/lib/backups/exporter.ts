@@ -3,7 +3,6 @@ import zlib from "zlib";
 import type { PoolClient, QueryResult } from "pg";
 import { isConfigured } from "@/lib/env";
 import { withPlatformTx, withTenantTx } from "@/lib/db";
-import { buildWorkbook, collectExport } from "@/lib/exports/full-export";
 import { deleteObject, headObject, uploadBuffer } from "@/lib/storage/s3-client";
 import { backupsToPrune } from "./retention";
 
@@ -53,9 +52,9 @@ function stableRows(rows: unknown[]): unknown[] {
 
 const sha256 = (data: Buffer) => crypto.createHash("sha256").update(data).digest("hex");
 
-/** Compresses and proves the file can be read back before it counts as a backup. */
+/** Compresses (level 6 balances fast CPU with small R2 size) and verifies before upload. */
 function packVerified(json: Buffer, checksum: string): Buffer {
-  const gz = zlib.gzipSync(json, { level: 9 });
+  const gz = zlib.gzipSync(json, { level: 6 });
   if (sha256(zlib.gunzipSync(gz)) !== checksum) throw new Error("Backup failed its integrity check.");
   return gz;
 }
@@ -139,6 +138,7 @@ export async function runTenantBackup(
       if (triggerType === "scheduled" && last.rows[0]?.checksum_sha256 === checksum) {
         return { unchanged: true as const, checksum, fingerprint };
       }
+      const { buildWorkbook, collectExport } = await import("@/lib/exports/full-export");
       const workbook = buildWorkbook(await collectExport(once, tenantId));
       return { unchanged: false as const, checksum, json, workbook, fingerprint };
     },

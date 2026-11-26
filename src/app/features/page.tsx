@@ -21,7 +21,7 @@ import {
   type TierKey,
 } from "@/lib/constants/saas";
 
-export const revalidate = 120;
+export const revalidate = 300;
 
 const TIERS: TierKey[] = ["tier_1", "tier_2", "tier_3", "tier_4"];
 

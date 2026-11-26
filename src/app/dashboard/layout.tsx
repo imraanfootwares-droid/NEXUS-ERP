@@ -21,36 +21,39 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const scope = await getBranchScope(ctx);
   let lowStockCount = 0;
   let newEnquiryCount = 0;
-  if (ctx.enabledFeatures.auto_stock_and_alerts) {
-    lowStockCount = await withTenantTx(
-      { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
-      async (client) => {
-        const res = await client.query<{ cnt: string }>(
-          `SELECT COUNT(*)::text AS cnt
-           FROM public.branch_stock bs
-           JOIN public.product_variants pv ON pv.id = bs.variant_id
-           WHERE bs.tenant_id = $1 AND bs.branch_id = ANY($2::uuid[]) AND bs.quantity <= pv.low_stock_threshold AND pv.is_active = true`,
-          [ctx.tenant!.id, scope.ids]
-        );
-        return Number(res.rows[0]?.cnt ?? 0);
-      }
-    );
-  }
-  if (ctx.enabledFeatures.customer_enquiries) {
+  const checkLowStock = Boolean(ctx.enabledFeatures.auto_stock_and_alerts);
+  const checkEnquiries = Boolean(ctx.enabledFeatures.customer_enquiries);
+  if (checkLowStock || checkEnquiries) {
     try {
-      newEnquiryCount = await withTenantTx(
+      const counts = await withTenantTx(
         { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
         async (client) => {
-          const res = await client.query<{ cnt: string }>(
-            `SELECT COUNT(*)::text AS cnt
-             FROM public.tenant_enquiries
-             WHERE tenant_id = $1 AND status = 'new'`,
-            [ctx.tenant!.id]
+          const res = await client.query<{ low_stock: string; new_enquiries: string }>(
+            `SELECT
+               CASE WHEN $3::boolean THEN (
+                 SELECT COUNT(*)::text
+                 FROM public.branch_stock bs
+                 JOIN public.product_variants pv ON pv.id = bs.variant_id
+                 WHERE bs.tenant_id = $1 AND bs.branch_id = ANY($2::uuid[])
+                   AND bs.quantity <= pv.low_stock_threshold AND pv.is_active = true
+               ) ELSE '0' END AS low_stock,
+               CASE WHEN $4::boolean THEN (
+                 SELECT COUNT(*)::text
+                 FROM public.tenant_enquiries
+                 WHERE tenant_id = $1 AND status = 'new'
+               ) ELSE '0' END AS new_enquiries`,
+            [ctx.tenant!.id, scope.ids, checkLowStock, checkEnquiries]
           );
-          return Number(res.rows[0]?.cnt ?? 0);
+          return {
+            lowStock: Number(res.rows[0]?.low_stock ?? 0),
+            newEnquiries: Number(res.rows[0]?.new_enquiries ?? 0),
+          };
         }
       );
+      lowStockCount = counts.lowStock;
+      newEnquiryCount = counts.newEnquiries;
     } catch {
+      lowStockCount = 0;
       newEnquiryCount = 0;
     }
   }

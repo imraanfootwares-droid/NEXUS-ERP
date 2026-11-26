@@ -9,7 +9,7 @@ import { query } from "@/lib/db";
 import { deriveThumbKey, getPublicAssetUrl } from "@/lib/storage/s3-client";
 import type { EnquiryChannel, PriceDisplayMode, StorefrontConfig } from "@/types/database";
 
-export const revalidate = 120;
+export const revalidate = 300;
 
 export default async function PublicCataloguePage({
   params,

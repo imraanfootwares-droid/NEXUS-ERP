@@ -61,6 +61,6 @@ export async function GET() {
 
   return NextResponse.json(
     { plans, features, account },
-    { headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300" } }
+    { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } }
   );
 }

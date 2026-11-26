@@ -1,5 +1,5 @@
 import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from "pg";
-import { Pool as NeonPool } from "@neondatabase/serverless";
+import { neon, Pool as NeonPool } from "@neondatabase/serverless";
 import { env, isConfigured } from "@/lib/env";
 import { createMockClient, mockQuery } from "@/lib/dev/mock-db";
 import { DEV_ROLE_COOKIE, isDevPreviewAllowed, parseDevPreviewRole } from "@/lib/dev/preview";
@@ -147,12 +147,13 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
     return mockQuery<T>(sql, params);
   }
   if (isWorkersRuntime()) {
-    const pool = createPool(1);
-    try {
-      return await pool.query<T>(sql, params);
-    } finally {
-      await pool.end().catch(() => undefined);
+    if (!env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not configured.");
     }
+    // Single-statement queries use Neon's HTTP fetch driver (zero WebSocket handshake, ~0.2ms CPU).
+    const httpSql = neon(env.DATABASE_URL, { fullResults: true });
+    const res = await httpSql.query(sql, params ?? []);
+    return res as unknown as QueryResult<T>;
   }
   return getPool().query<T>(sql, params);
 }

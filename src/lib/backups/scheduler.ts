@@ -2,7 +2,9 @@ import { isConfigured } from "@/lib/env";
 import { withPlatformTx } from "@/lib/db";
 import { runPlatformBackup, runTenantBackup } from "./exporter";
 
-export const BACKUP_INTERVAL_HOURS = 8;
+// Automatic cloud backups run at most once every 2 days (48h) to protect Free Tier DB egress & compute;
+// owners can always trigger an instant backup anytime via "Backup Now".
+export const BACKUP_INTERVAL_HOURS = 48;
 const HOUR_MS = 60 * 60 * 1000;
 const RUN_BUDGET_MS = 20_000;
 const CHECK_EVERY_MS = HOUR_MS;

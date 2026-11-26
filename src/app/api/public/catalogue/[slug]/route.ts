@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { query, withTenantTx } from "@/lib/db";
 import { isConfigured } from "@/lib/env";
-import { renderCataloguePdfBuffer } from "@/lib/pdf/documents";
 import { fetchImageForPdf } from "@/lib/pdf/image-helper";
 import { deriveThumbKey, getPublicAssetUrl } from "@/lib/storage/s3-client";
 import type { BrandConfig, PriceDisplayMode, StorefrontConfig } from "@/types/database";
@@ -126,6 +125,7 @@ export async function GET(
   const origin = request.nextUrl.origin;
   const catalogueUrl = `${origin}/s/${tenant.slug}`;
 
+  const { renderCataloguePdfBuffer } = await import("@/lib/pdf/documents");
   const pdf = await renderCataloguePdfBuffer({
     tenantName: tenant.name,
     logoUrl: logoDataUri,
@@ -156,7 +156,7 @@ export async function GET(
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${tenant.slug}-catalogue.pdf"`,
-      "Cache-Control": "public, s-maxage=120, max-age=120, stale-while-revalidate=300",
+      "Cache-Control": "public, s-maxage=300, max-age=300, stale-while-revalidate=600",
     },
   });
 }

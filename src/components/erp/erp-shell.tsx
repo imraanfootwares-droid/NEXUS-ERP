@@ -203,41 +203,37 @@ export function ErpShell({
   useEffect(() => {
     if (ctx.impersonation) return;
     let active = true;
-    // Rare checks let the free database sleep. The server still enforces a block on every save.
+    // The server just verified accessBlock during SSR; persist it without firing an extra mount API call.
+    const cached = readCachedBlock(tenant.id, ctx.user.id);
+    if (navigator.onLine) {
+      writeCachedBlock(tenant.id, ctx.user.id, ctx.accessBlock ?? null);
+      setLiveBlock(ctx.accessBlock ?? null);
+      if (cached && !ctx.accessBlock) void triggerSync();
+    } else if (cached) {
+      setLiveBlock(cached);
+    }
+
+    // Rare checks (30m) let Neon Postgres scale to zero when idle; every save still enforces blocks server-side.
     let lastCheck = Date.now();
     const check = async () => {
       if (!navigator.onLine || document.visibilityState !== "visible") return;
-      if (Date.now() - lastCheck < 10 * 60_000) return;
+      if (Date.now() - lastCheck < 25 * 60_000) return;
       lastCheck = Date.now();
       const status = await fetchAccessStatus();
       if (!active || !status.known) return;
       writeCachedBlock(tenant.id, ctx.user.id, status.block);
       setLiveBlock(status.block);
     };
-    // Online, the server decides. The saved block applies only when it cannot be reached.
-    const start = window.setTimeout(async () => {
-      const cached = readCachedBlock(tenant.id, ctx.user.id);
-      const status = navigator.onLine ? await fetchAccessStatus() : ({ known: false } as const);
-      if (!active) return;
-      if (!status.known) {
-        if (cached) setLiveBlock(cached);
-        return;
-      }
-      writeCachedBlock(tenant.id, ctx.user.id, status.block);
-      setLiveBlock(status.block);
-      if (cached && !status.block) void triggerSync();
-    }, 0);
     const onOnline = () => {
       lastCheck = 0;
       void check();
     };
-    const timer = window.setInterval(check, 15 * 60_000);
+    const timer = window.setInterval(check, 30 * 60_000);
     window.addEventListener("focus", check);
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", check);
     return () => {
       active = false;
-      window.clearTimeout(start);
       window.clearInterval(timer);
       window.removeEventListener("focus", check);
       window.removeEventListener("online", onOnline);
