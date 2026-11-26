@@ -62,6 +62,7 @@ export interface InvoiceSnapshot {
     address?: string | null;
     ship_to_name?: string | null;
     ship_to_address?: string | null;
+    custom_logo_data_url?: string | null;
   };
   tax_mode: "inclusive" | "exclusive" | "none";
   supply_type: "intra_state" | "inter_state";
@@ -422,14 +423,15 @@ export async function recordBillRevision(
   const maxRevs = Math.max(5, Number(capRes.rows[0]?.max_revs ?? 50));
   const retentionDays = Math.max(7, Number(capRes.rows[0]?.retention_days ?? 180));
 
+  const trimBelowVersion = versionNo - maxRevs;
   await client.query(
     `DELETE FROM public.bill_revisions
      WHERE tenant_id = $1 AND entity_type = $2 AND entity_id = $3
        AND (
-         version_no <= $4 - $5
-         OR created_at < now() - make_interval(days => $6)
+         version_no <= $4::int
+         OR created_at < now() - make_interval(days => $5::int)
        )`,
-    [params.tenantId, params.entityType, params.entityId, versionNo, maxRevs, retentionDays]
+    [params.tenantId, params.entityType, params.entityId, trimBelowVersion, retentionDays]
   );
 
   return versionNo;

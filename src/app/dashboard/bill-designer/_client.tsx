@@ -3,10 +3,11 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, Check, Package, Printer, Search, Sparkles, Trash2 } from "lucide-react";
+import { Building2, Check, Package, Printer, Search, Sparkles, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { deleteBillTemplateAction, saveBillTemplateAction, savePosScreenLayoutAction } from "@/actions/billing";
 import { InvoiceRenderer, type InvoicePreviewData } from "@/components/billing/invoice-renderer";
+import { fileToLogoPngDataUrl, resolveEffectiveLogoUrl } from "@/lib/storage/logo-data-url";
 import {
   GST_TEMPLATE_PRESETS,
   NORMAL_TEMPLATE_PRESETS,
@@ -130,8 +131,13 @@ export function BillDesignerClient({
         upi_id: "shop@upi",
       };
 
+  const effectivePreviewLogo = resolveEffectiveLogoUrl({
+    templateOverride: current.config.custom_logo_data_url ?? null,
+    profileDefault: logoUrl,
+  });
+
   const gstPreviewData: InvoicePreviewData = {
-    logoUrl,
+    logoUrl: effectivePreviewLogo,
     invoiceNumber: "220",
     invoiceType: "sale",
     dateStr: "27-06-2026",
@@ -170,7 +176,7 @@ export function BillDesignerClient({
   };
 
   const normalPreviewData: InvoicePreviewData = {
-    logoUrl,
+    logoUrl: effectivePreviewLogo,
     invoiceNumber: "1045",
     invoiceType: "estimate_bill_of_supply",
     dateStr: "27-06-2026",
@@ -430,6 +436,70 @@ export function BillDesignerClient({
                     }
                     label="Show Shop Logo"
                   />
+                  {current.config.show_logo && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#e5e5e7] bg-white px-2.5 py-2 text-[11px]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {effectivePreviewLogo ? (
+                          <img
+                            src={effectivePreviewLogo}
+                            alt="Bill logo"
+                            className="h-7 w-7 shrink-0 rounded border border-[#ececee] bg-white object-contain p-0.5"
+                          />
+                        ) : (
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-dashed border-[#d4d4d8] text-[#a1a1aa]">
+                            <Building2 className="h-3.5 w-3.5" />
+                          </span>
+                        )}
+                        <span className="truncate font-medium text-[#52525b]">
+                          {current.config.custom_logo_data_url
+                            ? "Custom logo for this design"
+                            : logoUrl
+                            ? "Using Profile Default Logo"
+                            : "No logo uploaded yet"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-[#e5e5e7] bg-[#fafafa] px-2 py-1 text-[10.5px] font-semibold text-[#171717] hover:bg-[#171717] hover:text-white">
+                          <Upload className="h-3 w-3" />
+                          <span>Override</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const f = e.target.files?.[0];
+                              e.target.value = "";
+                              if (!f) return;
+                              try {
+                                const dataUrl = await fileToLogoPngDataUrl(f);
+                                setCurrent((p) => ({
+                                  ...p,
+                                  config: { ...p.config, custom_logo_data_url: dataUrl },
+                                }));
+                                toast.success("Custom logo applied to this design. Click Save to keep it.");
+                              } catch {
+                                toast.error("Could not read logo image.");
+                              }
+                            }}
+                          />
+                        </label>
+                        {current.config.custom_logo_data_url && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCurrent((p) => ({
+                                ...p,
+                                config: { ...p.config, custom_logo_data_url: null },
+                              }))
+                            }
+                            className="cursor-pointer rounded-md border border-[#e5e5e7] bg-white px-2 py-1 text-[10.5px] font-medium text-[#77777d] hover:text-[#171717]"
+                          >
+                            Use Default
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <Switch
                     checked={current.config.show_bank_details ?? true}
                     onCheckedChange={(v) =>

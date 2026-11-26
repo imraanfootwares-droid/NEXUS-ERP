@@ -8,6 +8,7 @@ import type { BillTemplateRow } from "@/types/database";
 import { renderCataloguePdfBuffer, renderChallanPdfBuffer, renderInvoicePdfBuffer } from "@/lib/pdf/documents";
 import { fetchImageForPdf } from "@/lib/pdf/image-helper";
 import { deriveThumbKey, getPublicAssetUrl } from "@/lib/storage/s3-client";
+import { resolveEffectiveLogoUrl } from "@/lib/storage/logo-data-url";
 
 export const runtime = "nodejs";
 
@@ -73,10 +74,15 @@ export async function GET(
     });
     const showLogo = tpl?.show_logo ?? true;
     const rawLogoKey = ctx.tenant.brand_config?.logo_key ?? null;
-    const logoSource =
+    const profileDefaultLogo =
       ctx.tenant.brand_config?.logo_pdf_data_url ||
       (rawLogoKey ? getPublicAssetUrl(rawLogoKey) : null);
-    const pdfSafeLogo = showLogo ? await fetchImageForPdf(logoSource, { format: "png", maxDim: 160 }) : null;
+    const logoSource = resolveEffectiveLogoUrl({
+      perBillOverride: (inv.customer_snapshot as { custom_logo_data_url?: string | null } | null)?.custom_logo_data_url ?? null,
+      templateOverride: tpl?.custom_logo_data_url ?? null,
+      profileDefault: profileDefaultLogo,
+    });
+    const pdfSafeLogo = showLogo && logoSource ? await fetchImageForPdf(logoSource, { format: "png", maxDim: 160 }) : null;
     const builtBy = inv.creator_name
       ? `${inv.creator_name}${inv.creator_login ? ` (@${inv.creator_login})` : ""}`
       : null;

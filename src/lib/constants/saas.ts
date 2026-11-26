@@ -16,9 +16,10 @@ export const FEATURE_KEYS = [
   "dynamic_stock_matrix",
   "bulk_excel_import",
   "auto_stock_and_alerts",
-  // Tier 3 (6)
+  // Tier 3 (7)
   "daily_backups",
   "bill_edit_history",
+  "trash_bin",
   "multi_branch_ledgers",
   "supplier_and_production",
   "stock_transfers",
@@ -68,6 +69,7 @@ export const TIER_DEFAULT_FEATURES: Record<TierKey, FeatureKey[]> = {
     "auto_stock_and_alerts",
     "daily_backups",
     "bill_edit_history",
+    "trash_bin",
     "multi_branch_ledgers",
     "supplier_and_production",
     "stock_transfers",
@@ -144,6 +146,12 @@ export const FEATURE_META: Record<
     minTier: "tier_3",
     category: "Billing",
     description: "Edit finalized bills & purchases, inspect Before→After diffs & revert to any version",
+  },
+  trash_bin: {
+    label: "15-Day Trash Bin & Restore",
+    minTier: "tier_3",
+    category: "Billing",
+    description: "Safely recover accidentally deleted bills, purchase bills & expenses within 15 days (auto-clears after 15 days)",
   },
   customer_crm: {
     label: "Customer & Wholesale CRM",
@@ -227,6 +235,7 @@ export const PERMISSION_DEFINITIONS = [
   { key: "analytics.view_profit", feature: "owner_profit_analytics", module: "Analytics", label: "View Cost & Profit Margins", owner: true, branch_admin: false, worker: false },
   { key: "reports.export_gst", feature: "data_exports_gst", module: "Reports", label: "Export GST & Sales Reports", owner: true, branch_admin: true, worker: false },
   { key: "backups.manage", feature: "daily_backups", module: "Settings", label: "Trigger & Download Backups", owner: true, branch_admin: false, worker: false },
+  { key: "trash.manage", feature: "trash_bin", module: "Settings", label: "View & Restore 15-Day Trash Bin", owner: true, branch_admin: true, worker: false },
   { key: "customers.view", feature: "customer_crm", module: "Customers", label: "View Customer CRM & Dues", owner: true, branch_admin: true, worker: true },
   { key: "customers.manage", feature: "customer_crm", module: "Customers", label: "Add/Edit Customers & Collect Dues", owner: true, branch_admin: true, worker: true },
   { key: "stock.view", feature: "dynamic_stock_matrix", module: "Inventory", label: "View Stock Matrix & Alerts", owner: true, branch_admin: true, worker: true },
@@ -289,7 +298,7 @@ export const TIER_META: Record<
     priceInr: 150000,
     maxUsers: 10,
     maxBranches: 5,
-    summary: "Everything in Tier 2 plus Edit Old Bills & 1-Click Revert, automated daily cloud backups, suppliers, transfers & profit analytics.",
+    summary: "Everything in Tier 2 plus Edit Old Bills & 1-Click Revert, 15-Day Trash Bin, automated daily cloud backups, suppliers, transfers & profit analytics.",
   },
   tier_4: {
     name: "Tier 4 — Complete + Website & PDF",

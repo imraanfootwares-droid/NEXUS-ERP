@@ -13,8 +13,9 @@ export default async function SettingsPage({
   const ctx = await getServerSessionContext();
   if (!ctx || !ctx.tenant) return null;
   const sp = await searchParams;
-  const validTabs = new Set(["profile", "brand", "schema", "tax", "branches", "staff", "permissions", "devices", "backups"]);
-  const initialTab = sp.tab && validTabs.has(sp.tab) ? sp.tab : "profile";
+  const validTabs = new Set(["profile", "brand", "schema", "branches", "staff", "permissions", "devices", "backups"]);
+  const requestedTab = sp.tab === "tax" ? "profile" : sp.tab;
+  const initialTab = requestedTab && validTabs.has(requestedTab) ? requestedTab : "profile";
 
   const data = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },

@@ -44,11 +44,9 @@ export default async function ReportsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1>
-          GST Reports, Expenses &amp; Day-End Close
-        </h1>
+        <h1>GST &amp; Reports</h1>
         <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-          Export Sales/Purchase Registers, GSTR-1, HSN Summary, E-Way/IRP JSON, and reconcile daily cash.
+          Download GST files for your CA, record shop expenses, and close daily cash.
         </p>
       </div>
       <ReportsAndDayEndClient

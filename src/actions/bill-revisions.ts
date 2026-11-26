@@ -21,6 +21,7 @@ import {
   type RevisionRow,
 } from "@/lib/billing/revisions";
 import { withTenantTx } from "@/lib/db";
+import { moveItemToTrash } from "@/lib/trash/service";
 
 async function loadInvoiceSnapshot(
   client: PoolClient,
@@ -202,7 +203,8 @@ async function applyInvoiceSnapshotUpdate(
     }
   }
 
-  // 3. Update invoice header
+  // 3. Update invoice header (enable audited revision flag for this transaction only)
+  await client.query("SELECT set_config('app.allow_invoice_revision', 'true', true)");
   await client.query(
     `UPDATE public.invoices SET
        invoice_type = $1,
@@ -546,10 +548,26 @@ export async function deleteInvoiceAction(invoiceId: string, reason?: string) {
         actorName: ctx.user.full_name,
       });
 
+      // Save to 15-day Trash Bin (when gated feature is active) BEFORE deleting
+      if (ctx.enabledFeatures.trash_bin) {
+        await moveItemToTrash(client, {
+          tenantId: ctx.tenant.id,
+          entityType: "invoice",
+          entityId: invoiceId,
+          title: before.invoice_number || "Draft Bill",
+          subtitle: `${before.customer_snapshot?.name || "Walk-In Customer"} · ${(before.items ?? []).length} item(s)${reason?.trim() ? ` · ${reason.trim()}` : ""}`,
+          amount: before.grand_total,
+          snapshot: before,
+          deletedBy: ctx.user.id,
+          deletedByName: ctx.user.full_name,
+        });
+      }
+
       await client.query(
         "DELETE FROM public.party_ledger_entries WHERE tenant_id = $1 AND source_type = 'invoice' AND source_id = $2",
         [ctx.tenant.id, invoiceId]
       );
+      await client.query("SELECT set_config('app.allow_invoice_revision', 'true', true)");
       await client.query("DELETE FROM public.invoices WHERE id = $1 AND tenant_id = $2", [invoiceId, ctx.tenant.id]);
     }
   );
@@ -557,6 +575,7 @@ export async function deleteInvoiceAction(invoiceId: string, reason?: string) {
   revalidatePath("/dashboard/billing");
   revalidatePath("/dashboard/customers", "layout");
   revalidatePath("/dashboard/stock");
+  revalidatePath("/dashboard/trash");
   revalidatePath("/dashboard");
 }
 
@@ -876,6 +895,21 @@ export async function deletePurchaseOrderAction(purchaseId: string, reason?: str
         actorName: ctx.user.full_name,
       });
 
+      // Save to 15-day Trash Bin (when gated feature is active) BEFORE deleting
+      if (ctx.enabledFeatures.trash_bin) {
+        await moveItemToTrash(client, {
+          tenantId: ctx.tenant.id,
+          entityType: "purchase",
+          entityId: purchaseId,
+          title: before.bill_number ? `Purchase Bill ${before.bill_number}` : "Supplier Purchase Bill",
+          subtitle: `${(before.items ?? []).length} item(s) · Paid ₹${before.paid_amount.toLocaleString("en-IN")}${reason?.trim() ? ` · ${reason.trim()}` : ""}`,
+          amount: before.total_amount,
+          snapshot: before,
+          deletedBy: ctx.user.id,
+          deletedByName: ctx.user.full_name,
+        });
+      }
+
       await client.query("DELETE FROM public.supplier_payments WHERE purchase_order_id = $1 AND tenant_id = $2", [purchaseId, ctx.tenant.id]);
       await client.query(
         "DELETE FROM public.party_ledger_entries WHERE tenant_id = $1 AND source_type = 'purchase' AND source_id = $2",
@@ -887,6 +921,7 @@ export async function deletePurchaseOrderAction(purchaseId: string, reason?: str
 
   revalidatePath("/dashboard/customers", "layout");
   revalidatePath("/dashboard/stock");
+  revalidatePath("/dashboard/trash");
   revalidatePath("/dashboard");
 }
 

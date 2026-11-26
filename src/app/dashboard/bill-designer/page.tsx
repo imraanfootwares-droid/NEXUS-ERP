@@ -37,7 +37,7 @@ export default async function BillDesignerPage() {
       <div>
         <h1>Bill Designs</h1>
         <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-          Choose from 5 Normal Bill designs and 5 GST Bill designs. Your shop address, GST number &amp; bank details come automatically from My Profile.
+          Pick how your printed bills look — 5 Normal Bill styles and 5 GST Bill styles.
         </p>
       </div>
       <BillDesignerClient

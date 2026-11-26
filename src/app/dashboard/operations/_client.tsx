@@ -216,21 +216,6 @@ export function OperationsHubClient({
 
   return (
     <div className="space-y-4">
-      {suppliersEnabled && (
-        <Alert variant="info">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span>
-              <strong>Send Stock</strong> moves your own goods between your shops or godowns. Buying new stock from a supplier? Use <strong>Suppliers → New Purchase Bill</strong> so both Stock &amp; Supplier Balance update in one step.
-            </span>
-            <Link
-              href="/dashboard/customers?tab=suppliers"
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#171717] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#2a2a2a]"
-            >
-              Open Suppliers →
-            </Link>
-          </div>
-        </Alert>
-      )}
       {tabs.length > 1 && <Tabs active={tab} onChange={setTab} tabs={tabs} />}
 
       {tab === "transfers" && transfersEnabled && (

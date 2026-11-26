@@ -344,6 +344,8 @@ export interface BillTemplateConfig {
   accent_color: string;
   design_style?: BillDesignStyle;
   show_logo: boolean;
+  /** Optional template-level logo override (PNG data URL). Defaults to Shop Profile logo when empty. */
+  custom_logo_data_url?: string | null;
   show_hsn: boolean;
   show_gst_summary: boolean;
   show_discount: boolean;

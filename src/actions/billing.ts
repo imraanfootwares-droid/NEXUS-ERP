@@ -7,6 +7,7 @@ import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import { loadInvoiceRenderProps } from "@/lib/billing/invoice-render-props";
 import { recordBillRevision } from "@/lib/billing/revisions";
+import { moveItemToTrash } from "@/lib/trash/service";
 import type { BillTemplateConfig, CustomerRow, PaymentMode } from "@/types/database";
 
 export async function createOrFinalizeInvoiceAction(payload: Record<string, unknown>) {
@@ -177,6 +178,36 @@ export async function deleteExpenseAction(expenseId: string) {
   await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
+      if (ctx.enabledFeatures.trash_bin) {
+        const expRes = await client.query<{
+          id: string;
+          branch_id: string;
+          category: string;
+          amount: string;
+          mode: string;
+          expense_date: string;
+          note: string | null;
+          created_by: string | null;
+        }>(
+          `SELECT id, branch_id, category, amount::text, mode, expense_date::text, note, created_by
+           FROM public.expenses WHERE id = $1 AND tenant_id = $2`,
+          [expenseId, ctx.tenant.id]
+        );
+        const exp = expRes.rows[0];
+        if (exp) {
+          await moveItemToTrash(client, {
+            tenantId: ctx.tenant.id,
+            entityType: "expense",
+            entityId: exp.id,
+            title: `Expense: ${exp.category}`,
+            subtitle: `${exp.expense_date} · ${exp.mode.toUpperCase()}${exp.note ? ` · ${exp.note}` : ""}`,
+            amount: Number(exp.amount || 0),
+            snapshot: { ...exp, amount: Number(exp.amount || 0) },
+            deletedBy: ctx.user.id,
+            deletedByName: ctx.user.full_name,
+          });
+        }
+      }
       await client.query("DELETE FROM public.expenses WHERE id = $1 AND tenant_id = $2", [
         expenseId,
         ctx.tenant.id,
@@ -184,6 +215,7 @@ export async function deleteExpenseAction(expenseId: string) {
     }
   );
   revalidatePath("/dashboard/reports");
+  revalidatePath("/dashboard/trash");
 }
 
 export async function processReturnOrExchangeAction(payload: Record<string, unknown>) {

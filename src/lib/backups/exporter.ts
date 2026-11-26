@@ -253,10 +253,12 @@ export async function runHousekeeping(): Promise<{
   sweptUploads: number;
   archivedAudits: number;
   prunedRevisions: number;
+  purgedTrash: number;
 }> {
   let sweptUploads = 0;
   let archivedAudits = 0;
   let prunedRevisions = 0;
+  let purgedTrash = 0;
 
   await withPlatformTx(async (client) => {
     const stale = await client.query<{ id: string; bucket: "public" | "private"; key: string }>(
@@ -277,6 +279,12 @@ export async function runHousekeeping(): Promise<{
     );
     prunedRevisions = revDel.rowCount ?? 0;
 
+    // Auto-clear Trash Bin items older than 15 days across all tenants
+    const trashDel = await client.query(
+      "DELETE FROM public.trash_items WHERE expires_at <= now()"
+    );
+    purgedTrash = trashDel.rowCount ?? 0;
+
     const oldAudits = await client.query(
       "SELECT * FROM public.audit_logs WHERE created_at < now() - interval '180 days' ORDER BY created_at ASC LIMIT 2000"
     );
@@ -294,5 +302,5 @@ export async function runHousekeeping(): Promise<{
     }
   });
 
-  return { sweptUploads, archivedAudits, prunedRevisions };
+  return { sweptUploads, archivedAudits, prunedRevisions, purgedTrash };
 }

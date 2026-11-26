@@ -19,6 +19,7 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  Table2,
   Trash2,
   Upload,
   Loader2,
@@ -140,7 +141,7 @@ export function StockHubClient({
 }) {
   const router = useRouter();
   const [section, setSection] = useState<"catalog" | "alerts" | "labels" | "ledger">("catalog");
-  const [viewMode, setViewMode] = useState<"cards" | "matrix">("cards");
+  const [viewMode, setViewMode] = useState<"cards" | "table" | "matrix">("cards");
   const [showStats, setShowStats] = useState(true);
   const [statusFilter, setStatusFilter] = useState<"all" | "available" | "low" | "out" | "archived">("all");
   const [search, setSearch] = useState("");
@@ -173,21 +174,14 @@ export function StockHubClient({
   const [newProdPhoto, setNewProdPhoto] = useState<File | null>(null);
   const [uploadingProdId, setUploadingProdId] = useState<string | null>(null);
 
-  // Category-based field templates (Slipper, Shoe, etc.)
+  // Product Categories & Default Pack Size (Sizes, Colours & Extra Details live in Settings -> Product Options)
   const [catTemplates, setCatTemplates] = useState<CategoryTemplate[]>(() =>
     resolveCategoryTemplates(tenant.brand_config)
   );
   const [catManagerOpen, setCatManagerOpen] = useState(false);
   const [newCatName, setNewCatName] = useState("");
-  const [newCatSizes, setNewCatSizes] = useState("5x8, 6x9, 7x10");
-  const [newCatColours, setNewCatColours] = useState("MIX, BLK, BRN");
   const [newCatPack, setNewCatPack] = useState("20");
-  const [newCatFields, setNewCatFields] = useState("Sole Type, Upper Material");
   const [savingCats, setSavingCats] = useState(false);
-
-  const activeCategoryTemplate = catTemplates.find(
-    (t) => t.category.toLowerCase() === category.trim().toLowerCase()
-  );
 
   const applyCategoryTemplate = (catName: string) => {
     setCategory(catName);
@@ -396,13 +390,13 @@ export function StockHubClient({
         <div>
           <h1>Products &amp; Stock</h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Manage all your products, pricing, inventory, variants, and R2 media in one place.
+            Add products, set prices, and check remaining stock.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="flex items-center gap-2 pr-1">
-            <span className="text-xs font-medium text-slate-600">Show Statistic</span>
+            <span className="text-xs font-medium text-slate-600">Show Summary</span>
             <Switch checked={showStats} onCheckedChange={setShowStats} />
           </div>
           <Button
@@ -418,7 +412,7 @@ export function StockHubClient({
               href="/dashboard/stock/import"
               className="inline-flex items-center gap-1.5 rounded-[10px] border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs"
             >
-              <Upload className="h-3.5 w-3.5" /> Import
+              <Upload className="h-3.5 w-3.5" /> Upload Excel
             </Link>
           )}
           {canManage && (
@@ -429,37 +423,21 @@ export function StockHubClient({
         </div>
       </div>
 
-      {/* Clear Workflow Guide: Own Stock vs Supplier Purchase */}
-      <Alert variant="info">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span>
-            Use <strong>Add Product</strong> for your own / opening stock. Buying from a supplier? Use{" "}
-            <strong>Suppliers → New Purchase Bill</strong> — it adds stock &amp; updates the supplier&apos;s account in one step (no double entry).
-          </span>
-          <Link
-            href="/dashboard/customers?tab=suppliers"
-            className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#171717] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#2a2a2a]"
-          >
-            Buy from Supplier →
-          </Link>
-        </div>
-      </Alert>
-
-      {/* Collapsible Catalox Sparkline Statistic Cards */}
+      {/* Collapsible Statistic Cards */}
       {showStats && (
         <KpiGrid
           items={[
             {
               label: "Total Products",
               value: activeGroups.length,
-              subtext: `${uniqueVariantsForLabels.length} active SKU variants`,
+              subtext: `${uniqueVariantsForLabels.length} size / colour items`,
               icon: <Package className="h-4 w-4" />,
               trend: "up",
             },
             {
-              label: "Stock Valuation",
+              label: "Stock Value",
               value: `₹${Math.round(totalStockValue).toLocaleString("en-IN")}`,
-              subtext: "Weighted avg inventory cost",
+              subtext: "Total stock value at cost",
               icon: <IndianRupee className="h-4 w-4" />,
               trend: "up",
             },
@@ -490,7 +468,7 @@ export function StockHubClient({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search product, model code or SKU..."
+              placeholder="Search product name or code..."
               className="pl-9 bg-white"
             />
           </div>
@@ -537,21 +515,32 @@ export function StockHubClient({
             ))}
           </div>
 
-          {/* Grid / 2D Matrix / Tools switcher */}
+          {/* Cards / Table / 2D Matrix switcher */}
           <div className="inline-flex rounded-[10px] border border-slate-200/90 bg-white p-0.5 shadow-2xs">
             <button
               type="button"
-              title="Product Cards View"
+              title="Cards View"
+              aria-label="Cards View"
               onClick={() => { setSection("catalog"); setViewMode("cards"); }}
-              className={`rounded-lg p-2 cursor-pointer ${section === "catalog" && viewMode === "cards" ? "bg-slate-100 text-slate-900" : "text-slate-400 hover:text-slate-700"}`}
+              className={`rounded-lg p-2 cursor-pointer ${section === "catalog" && viewMode === "cards" ? "bg-[#171717] text-white" : "text-slate-500 hover:text-slate-900"}`}
             >
               <LayoutGrid className="h-4 w-4" />
             </button>
             <button
               type="button"
-              title="2D Size × Colour Matrix View"
+              title="Table View"
+              aria-label="Table View"
+              onClick={() => { setSection("catalog"); setViewMode("table"); }}
+              className={`rounded-lg p-2 cursor-pointer ${section === "catalog" && viewMode === "table" ? "bg-[#171717] text-white" : "text-slate-500 hover:text-slate-900"}`}
+            >
+              <Table2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              title="Size × Colour Matrix View"
+              aria-label="Size × Colour Matrix View"
               onClick={() => { setSection("catalog"); setViewMode("matrix"); }}
-              className={`rounded-lg p-2 cursor-pointer ${section === "catalog" && viewMode === "matrix" ? "bg-slate-100 text-slate-900" : "text-slate-400 hover:text-slate-700"}`}
+              className={`rounded-lg p-2 cursor-pointer ${section === "catalog" && viewMode === "matrix" ? "bg-[#171717] text-white" : "text-slate-500 hover:text-slate-900"}`}
             >
               <Grid3X3 className="h-4 w-4" />
             </button>
@@ -600,10 +589,10 @@ export function StockHubClient({
               <button
                 type="button"
                 onClick={() => setCatManagerOpen(true)}
-                className="rounded-lg px-2.5 py-1.5 font-medium text-sky-700 hover:bg-sky-50 cursor-pointer"
-                title="Create categories (Slipper, Shoe, etc.) and assign fields to them"
+                className="rounded-lg px-2.5 py-1.5 font-medium text-[#171717] hover:bg-slate-100 cursor-pointer"
+                title="Manage product categories"
               >
-                Categories &amp; Fields
+                Categories
               </button>
             )}
           </div>
@@ -685,7 +674,7 @@ export function StockHubClient({
                         <div className="min-w-0">
                           <h3 className="font-semibold text-sm text-slate-900 truncate">{g.product_name}</h3>
                           <p className="text-xs text-slate-500 truncate">{g.category || g.brand || "Footwear"}</p>
-                          <p className="text-[11px] font-mono text-slate-400 mt-1">SKU {g.model_code}</p>
+                          <p className="text-[11px] font-mono text-slate-400 mt-1">Code {g.model_code}</p>
                         </div>
                       </div>
 
@@ -805,6 +794,151 @@ export function StockHubClient({
         )
       )}
 
+      {/* TABLE VIEW */}
+      {section === "catalog" && viewMode === "table" && (
+        visibleGroups.length === 0 ? (
+          <Card>
+            <CardContent className="p-10 text-center text-sm text-slate-500">
+              No products match this filter.
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="overflow-hidden">
+            <Paged items={visibleGroups} size={15}>
+              {(pagedRows) => (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[780px] border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-[#ececee] bg-[#fafafa] text-[11px] font-semibold uppercase tracking-wider text-[#77777d]">
+                        <th className="px-4 py-3">Product</th>
+                        <th className="px-3 py-3">Category / Supplier</th>
+                        <th className="px-3 py-3">HSN &amp; GST</th>
+                        <th className="px-3 py-3 text-right">Retail</th>
+                        <th className="px-3 py-3 text-right">Wholesale</th>
+                        <th className="px-3 py-3 text-right">Stock</th>
+                        <th className="px-3 py-3 text-center">Status</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#f0f0f1]">
+                      {pagedRows.map((g) => {
+                        const statusPill =
+                          g.status === "archived"
+                            ? { label: "Archived", cls: "bg-slate-100 text-slate-600" }
+                            : g.status === "out_of_stock"
+                            ? { label: "Out Stock", cls: "bg-rose-50 text-rose-700" }
+                            : g.status === "low_stock"
+                            ? { label: "Low Stock", cls: "bg-amber-50 text-amber-800" }
+                            : { label: "Available", cls: "bg-emerald-50 text-emerald-700" };
+
+                        return (
+                          <tr key={g.product_id} className="transition-colors hover:bg-[#fafafa]">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                {g.thumb_url ? (
+                                  <img
+                                    src={g.thumb_url}
+                                    alt={g.product_name}
+                                    className="h-10 w-10 shrink-0 rounded-lg border border-[#ececee] object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-[#d4d4d8] bg-[#fafafa] text-[#a1a1aa]">
+                                    <Package className="h-4 w-4" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="truncate font-semibold text-[#171717]">{g.product_name}</p>
+                                  <p className="font-mono text-[11px] text-[#77777d]">
+                                    Code {g.model_code}{g.brand ? ` · ${g.brand}` : ""}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3">
+                              <p className="font-medium text-[#171717]">{g.category || "—"}</p>
+                              {g.supplier_name && (
+                                <p className="truncate text-[11px] text-[#77777d] max-w-[180px]">
+                                  From: {g.supplier_name}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 font-mono text-[11px] text-[#52525b]">
+                              <div>{g.hsn_code ? `HSN ${g.hsn_code}` : "—"}</div>
+                              <div className="text-[#77777d]">GST {g.gst_rate}%</div>
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono font-semibold text-[#171717]">
+                              ₹{g.selling_price.toLocaleString("en-IN")}
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono text-[#52525b]">
+                              ₹{g.wholesale_price.toLocaleString("en-IN")}
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono font-semibold text-[#171717]">
+                              {g.total_qty.toLocaleString("en-IN")}{" "}
+                              <span className="font-sans text-[10.5px] font-normal text-[#77777d]">{g.uom}</span>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <span className={`inline-flex rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${statusPill.cls}`}>
+                                {statusPill.label}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setInspectGroup(g)}
+                                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-[#e5e5e7] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#171717] transition-colors hover:border-[#171717] hover:bg-[#171717] hover:text-white"
+                                >
+                                  <SlidersHorizontal className="h-3 w-3" />
+                                  Sizes ({g.unique_variant_count})
+                                </button>
+                                {canManage && g.is_active && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      title="Edit product"
+                                      onClick={() => openEditModal(g)}
+                                      className="cursor-pointer rounded-lg border border-[#e5e5e7] bg-white p-1.5 text-[#171717] hover:bg-[#f4f4f5]"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Archive product"
+                                      onClick={() => setDeleteTarget(g)}
+                                      className="cursor-pointer rounded-lg border border-[#e5e5e7] bg-white p-1.5 text-rose-600 hover:bg-rose-50"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </>
+                                )}
+                                {canManage && !g.is_active && (
+                                  <button
+                                    type="button"
+                                    title="Restore product"
+                                    onClick={async () => {
+                                      await restoreProductAction(g.product_id);
+                                      toast.success(`Restored "${g.product_name}".`);
+                                      router.refresh();
+                                    }}
+                                    className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-[#e5e5e7] bg-white px-2 py-1 text-[11px] font-semibold text-[#171717] hover:bg-[#f4f4f5]"
+                                  >
+                                    <RotateCcw className="h-3 w-3" /> Restore
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Paged>
+          </Card>
+        )
+      )}
+
       {/* 2D SIZE × COLOUR MATRIX VIEW */}
       {section === "catalog" && viewMode === "matrix" && (
         <div className="space-y-4">
@@ -828,7 +962,7 @@ export function StockHubClient({
                       )}
                       <div>
                         <p className="font-semibold text-slate-900 text-sm">{g.product_name}</p>
-                        <p className="text-xs text-slate-500">SKU {g.model_code} • Retail ₹{g.selling_price} • Wholesale ₹{g.wholesale_price}</p>
+                        <p className="text-xs text-slate-500">Code {g.model_code} • Retail ₹{g.selling_price} • Wholesale ₹{g.wholesale_price}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1277,8 +1411,7 @@ export function StockHubClient({
             e.preventDefault();
             // Deduplicate axes by lowercase name so duplicate "Size" axes never split combinations
             const dedupMap = new Map<string, string[]>();
-            const sourceAxisNames =
-              axes.length > 0 ? axes.map((a) => a.name) : ["Size", "Colour"];
+            const sourceAxisNames = axes.map((a) => a.name);
             for (const rawName of sourceAxisNames) {
               const norm = rawName.trim().toLowerCase();
               const canonical =
@@ -1558,79 +1691,46 @@ export function StockHubClient({
             </div>
           </div>
 
-          {/* 4. Sizes & Colours (Deduplicated, Single-Line Small Add Button) */}
+          {/* 4. Sizes, Colours & Options — Single Source of Truth from Settings -> Product Options */}
           <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-            <p className="text-xs font-semibold text-slate-800">Sizes &amp; Colours (Optional — tap or type any size)</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-slate-800">Sizes, Colours &amp; Options (from Product Options)</p>
+              <Link
+                href="/dashboard/settings?tab=schema"
+                className="text-[11px] font-semibold text-[#171717] underline underline-offset-2 hover:text-[#52525b]"
+              >
+                Add / Edit Options →
+              </Link>
+            </div>
             {(() => {
               const merged = new Map<string, string[]>();
               const addPreset = (label: string, vals: string[]) => {
                 merged.set(label, Array.from(new Set([...(merged.get(label) ?? []), ...vals])));
               };
-              if (axes.length > 0) {
-                for (const a of axes) {
-                  const norm = a.name.trim().toLowerCase();
-                  const canonical = norm === "size" ? "Size" : norm === "colour" || norm === "color" ? "Colour" : a.name.trim();
-                  addPreset(canonical, a.preset_values);
-                }
-              } else {
-                addPreset("Size", ["5x8", "6x9", "7x10"]);
-                addPreset("Colour", ["MIX", "BLK", "BRN"]);
-              }
-              if (activeCategoryTemplate) {
-                addPreset("Size", activeCategoryTemplate.default_sizes);
-                addPreset("Colour", activeCategoryTemplate.default_colours);
+              for (const a of axes) {
+                const norm = a.name.trim().toLowerCase();
+                const canonical = norm === "size" ? "Size" : norm === "colour" || norm === "color" ? "Colour" : a.name.trim();
+                addPreset(canonical, a.preset_values);
               }
               for (const [k, vals] of Object.entries(selectedAxisVals)) {
                 if (merged.has(k)) addPreset(k, vals);
               }
-              return Array.from(merged.entries()).map(([axisName, presets]) => {
-                const isSizeAxis = axisName.toLowerCase().includes("size");
-                const CARTON_SIZE_SETS: Array<{ label: string; values: string[] }> = [
-                  { label: "Set 5–8", values: ["5", "6", "7", "8"] },
-                  { label: "Set 6–8", values: ["6", "7", "8"] },
-                  { label: "Set 6–9", values: ["6", "7", "8", "9"] },
-                  { label: "Set 7–10", values: ["7", "8", "9", "10"] },
-                  { label: "Set 9–12", values: ["9", "10", "11", "12"] },
-                ];
-                const allPresets = isSizeAxis
-                  ? Array.from(new Set(["5", "6", "7", "8", "9", "10", "11", "12", ...presets]))
-                  : presets;
+              if (merged.size === 0) {
                 return (
+                  <p className="text-xs text-slate-500">
+                    No option groups set yet. You can save this as a single-variant product, or{" "}
+                    <Link href="/dashboard/settings?tab=schema" className="font-semibold text-[#171717] underline">
+                      add Sizes &amp; Colours in Product Options
+                    </Link>
+                    .
+                  </p>
+                );
+              }
+              return Array.from(merged.entries()).map(([axisName, presets]) => (
                 <div key={axisName} className="space-y-1.5">
                   <Label>{axisName}</Label>
-                  {isSizeAxis && (
-                    <div className="flex flex-wrap items-center gap-1.5 pb-1">
-                      <span className="text-[11px] font-medium text-slate-500">Carton Size Sets (1-click):</span>
-                      {CARTON_SIZE_SETS.map((set) => {
-                        const selected = selectedAxisVals[axisName] ?? [];
-                        const allOn = set.values.every((v) => selected.includes(v));
-                        return (
-                          <button
-                            key={set.label}
-                            type="button"
-                            onClick={() => {
-                              setSelectedAxisVals((prev) => {
-                                const cur = prev[axisName] ?? [];
-                                const next = allOn
-                                  ? cur.filter((x) => !set.values.includes(x))
-                                  : Array.from(new Set([...cur, ...set.values]));
-                                return { ...prev, [axisName]: next };
-                              });
-                            }}
-                            className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold border cursor-pointer transition-colors ${
-                              allOn
-                                ? "bg-sky-600 text-white border-sky-600"
-                                : "bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100"
-                            }`}
-                          >
-                            {set.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
                   <div className="flex flex-wrap gap-1.5">
-                    {allPresets.map((val) => {
+                    {presets.map((val) => {
                       const active = (selectedAxisVals[axisName] ?? []).includes(val);
                       return (
                         <button
@@ -1652,7 +1752,7 @@ export function StockHubClient({
                     <Input
                       value={customAxisInput[axisName] ?? ""}
                       onChange={(e) => setCustomAxisInput((prev) => ({ ...prev, [axisName]: e.target.value }))}
-                      placeholder={`Type any ${axisName.toLowerCase()} (e.g. 6x9, 40x43)`}
+                      placeholder={`Quick add custom ${axisName.toLowerCase()} for this product`}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
@@ -1685,39 +1785,35 @@ export function StockHubClient({
                     </button>
                   </div>
                 </div>
-                );
-              });
+              ));
             })()}
           </div>
 
-          {/* Category-Specific Fields (Shown cleanly if category has them) */}
-          {activeCategoryTemplate && activeCategoryTemplate.extra_fields.length > 0 && (
-            <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
-              {activeCategoryTemplate.extra_fields.map((fieldLabel) => {
-                const key = fieldLabel.toLowerCase().replace(/[^a-z0-9]+/g, "_");
-                return (
-                  <div key={key}>
-                    <Label>{fieldLabel}</Label>
-                    <Input
-                      value={String(cfValues[key] ?? "")}
-                      onChange={(e) => setCfValues((prev) => ({ ...prev, [key]: e.target.value }))}
-                      placeholder={`Enter ${fieldLabel}`}
-                    />
-                  </div>
-                );
-              })}
+          {/* Extra Product Details — Single Source of Truth from Settings -> Product Options */}
+          {customFields.length > 0 && (
+            <div className="space-y-2.5 rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-800">Extra Product Details</p>
+                <Link
+                  href="/dashboard/settings?tab=schema"
+                  className="text-[11px] font-semibold text-[#171717] underline underline-offset-2 hover:text-[#52525b]"
+                >
+                  Edit Fields →
+                </Link>
+              </div>
+              <CustomFieldRenderer fields={customFields} values={cfValues} onChange={setCfValues} />
             </div>
           )}
 
-          {/* 5. Collapsible Optional Details (Brand, Default Pcs/Carton & Extra Fields) */}
+          {/* 5. Collapsible Optional Details (Brand & Default Pcs/Carton) */}
           <div className="rounded-xl border border-slate-200 bg-white">
             <button
               type="button"
               onClick={() => setShowAdvancedProd((v) => !v)}
               className="flex w-full items-center justify-between px-4 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer rounded-xl"
             >
-              <span>More Options (Brand, Default Pcs/Carton &amp; Extra Fields)</span>
-              <span className="text-[11px] text-sky-700">{showAdvancedProd ? "Hide ▲" : "Show ▼"}</span>
+              <span>More Options (Brand &amp; Default Pcs/Carton)</span>
+              <span className="text-[11px] text-[#171717]">{showAdvancedProd ? "Hide ▲" : "Show ▼"}</span>
             </button>
             {showAdvancedProd && (
               <div className="space-y-3 border-t border-slate-100 p-4">
@@ -1734,7 +1830,6 @@ export function StockHubClient({
                     />
                   </div>
                 </div>
-                <CustomFieldRenderer fields={customFields} values={cfValues} onChange={setCfValues} />
               </div>
             )}
           </div>
@@ -1751,28 +1846,28 @@ export function StockHubClient({
         </Form>
       </Dialog>
 
-      {/* Simple Category & Fields Manager Modal */}
+      {/* Simple Product Categories Manager Modal */}
       <Dialog
         open={catManagerOpen}
         onClose={() => setCatManagerOpen(false)}
-        title="Product Categories & Dynamic Fields"
-        maxWidth="max-w-2xl"
+        title="Product Categories"
+        maxWidth="max-w-xl"
       >
         <div className="space-y-4 text-xs">
           <p className="text-slate-600">
-            Create categories like <strong>Slipper</strong>, <strong>Shoe</strong>, or <strong>Sandal</strong> and assign their default sizes, pieces per box/carton, and fields. When you select that category while adding a product, all its fields appear automatically.
+            Organize your products into categories like <strong>Slipper</strong>, <strong>Shoe</strong>, or <strong>Sandal</strong> with a default carton pack size.{" "}
+            <Link href="/dashboard/settings?tab=schema" className="font-semibold text-[#171717] underline">
+              Sizes, Colours &amp; Extra Product Details
+            </Link>{" "}
+            are managed in one place under <strong>Profile &amp; Settings → Product Options</strong>.
           </p>
 
           <div className="max-h-56 space-y-2 overflow-y-auto">
             {catTemplates.map((t, idx) => (
-              <div key={t.category + idx} className="flex items-start justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                <div className="space-y-0.5">
-                  <p className="font-bold text-slate-900">
-                    {t.category} <Badge variant="default" className="ml-1">{t.default_pieces_per_carton} pcs/box</Badge>
-                  </p>
-                  <p className="text-slate-600"><strong>Sizes:</strong> {t.default_sizes.join(", ") || "Any"}</p>
-                  <p className="text-slate-600"><strong>Fields:</strong> {t.extra_fields.join(", ") || "None"}</p>
-                </div>
+              <div key={t.category + idx} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="font-semibold text-slate-900">
+                  {t.category} <Badge variant="default" className="ml-1.5">{t.default_pieces_per_carton} pcs/box</Badge>
+                </p>
                 <button
                   type="button"
                   onClick={() => setCatTemplates((prev) => prev.filter((_, i) => i !== idx))}
@@ -1786,13 +1881,10 @@ export function StockHubClient({
           </div>
 
           <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
-            <p className="font-bold text-slate-800">Add New Category</p>
+            <p className="font-semibold text-slate-800">Add New Category</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div><Label>Category Name *</Label><Input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} placeholder="e.g. Slipper, Sports Shoe" /></div>
               <div><Label>Default Pcs per Carton / Box</Label><Input type="text" inputMode="numeric" value={newCatPack} onChange={(e) => setNewCatPack(e.target.value.replace(/\D/g, ""))} placeholder="20" /></div>
-              <div><Label>Default Sizes (comma separated)</Label><Input value={newCatSizes} onChange={(e) => setNewCatSizes(e.target.value)} placeholder="5x8, 6x9, 7x10" /></div>
-              <div><Label>Default Colours (comma separated)</Label><Input value={newCatColours} onChange={(e) => setNewCatColours(e.target.value)} placeholder="MIX, BLK, BRN" /></div>
-              <div className="sm:col-span-2"><Label>Extra Fields for this Category (comma separated)</Label><Input value={newCatFields} onChange={(e) => setNewCatFields(e.target.value)} placeholder="Sole Type, Upper Material, Packaging" /></div>
             </div>
             <Button
               type="button"
@@ -1803,10 +1895,10 @@ export function StockHubClient({
                 if (!name) return;
                 const entry: CategoryTemplate = {
                   category: name,
-                  default_sizes: newCatSizes.split(",").map((s) => s.trim()).filter(Boolean),
-                  default_colours: newCatColours.split(",").map((s) => s.trim()).filter(Boolean),
+                  default_sizes: [],
+                  default_colours: [],
                   default_pieces_per_carton: Math.max(1, Number(newCatPack || 20)),
-                  extra_fields: newCatFields.split(",").map((s) => s.trim()).filter(Boolean),
+                  extra_fields: [],
                 };
                 setCatTemplates((prev) => [...prev.filter((x) => x.category.toLowerCase() !== name.toLowerCase()), entry]);
                 setNewCatName("");
@@ -1825,7 +1917,7 @@ export function StockHubClient({
                 setSavingCats(true);
                 try {
                   await updateCategoryTemplatesAction(catTemplates);
-                  toast.success("Categories & fields saved!");
+                  toast.success("Categories saved!");
                   setCatManagerOpen(false);
                   router.refresh();
                 } catch (err) {
@@ -1835,7 +1927,7 @@ export function StockHubClient({
                 }
               }}
             >
-              {savingCats ? "Saving..." : "Save All Categories"}
+              {savingCats ? "Saving..." : "Save Categories"}
             </Button>
           </div>
         </div>

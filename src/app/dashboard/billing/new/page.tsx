@@ -148,9 +148,9 @@ export default async function PosNewBillPage({
     }
   );
 
-  const logoUrl = ctx.tenant.brand_config?.logo_key
-    ? getPublicAssetUrl(ctx.tenant.brand_config.logo_key)
-    : ctx.tenant.brand_config?.logo_pdf_data_url ?? null;
+  const logoUrl =
+    ctx.tenant.brand_config?.logo_pdf_data_url ||
+    (ctx.tenant.brand_config?.logo_key ? getPublicAssetUrl(ctx.tenant.brand_config.logo_key) : null);
 
   return (
     <PosTerminal

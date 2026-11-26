@@ -21,12 +21,19 @@ export async function updateBrandConfigAction(
     let finalLogoKey = ctx.tenant.brand_config?.logo_key ?? null;
     let deltaBytes = 0;
 
-    if (confirmLogoKey && confirmLogoKey !== finalLogoKey) {
+    if (confirmLogoKey === null) {
+      if (finalLogoKey) {
+        const oldHead = await headObject("public", finalLogoKey).catch(() => ({ exists: false, contentLength: 0 }));
+        await deleteObject("public", finalLogoKey).catch(() => undefined);
+        deltaBytes -= oldHead.contentLength;
+      }
+      finalLogoKey = null;
+    } else if (confirmLogoKey && confirmLogoKey !== finalLogoKey) {
       const head = await headObject("public", confirmLogoKey);
       if (head.exists) {
         if (finalLogoKey) {
           const oldHead = await headObject("public", finalLogoKey).catch(() => ({ exists: false, contentLength: 0 }));
-          await deleteObject("public", finalLogoKey);
+          await deleteObject("public", finalLogoKey).catch(() => undefined);
           deltaBytes -= oldHead.contentLength;
         }
         deltaBytes += head.contentLength;
@@ -48,6 +55,11 @@ export async function updateBrandConfigAction(
   });
 
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/bill-designer");
+  revalidatePath("/dashboard/billing");
+  revalidatePath("/dashboard/billing/new");
+  revalidatePath("/dashboard/storefront");
+  revalidatePath(`/s/${ctx.tenant.slug}`);
   revalidatePath("/dashboard");
 }
 
@@ -94,6 +106,15 @@ export async function updateBusinessBillingProfileAction(input: BusinessBillingP
       JSON.stringify(nextBrand),
       tenant.id,
     ]);
+    // Keep the default branch's GSTIN & state code in sync so the user only enters GSTIN once.
+    const detectedState = /^\d{2}/.test(cleanGstin) ? cleanGstin.slice(0, 2) : null;
+    await client.query(
+      `UPDATE public.branches
+       SET gstin = $1,
+           state_code = COALESCE($2, state_code)
+       WHERE tenant_id = $3 AND is_default = true`,
+      [cleanGstin || null, detectedState, tenant.id]
+    );
   });
 
   revalidatePath("/dashboard/settings");
@@ -192,6 +213,16 @@ export async function updateTaxConfigAction(tax: TaxConfig) {
   revalidatePath("/dashboard/settings");
 }
 
+function revalidateProductSchemaPaths(slug: string) {
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/stock");
+  revalidatePath("/dashboard/stock/import");
+  revalidatePath("/dashboard/billing/new");
+  revalidatePath("/dashboard/operations");
+  revalidatePath("/dashboard/storefront");
+  revalidatePath(`/s/${slug}`);
+}
+
 export async function upsertVariantAxisAction(input: {
   id?: string;
   name: string;
@@ -201,23 +232,28 @@ export async function upsertVariantAxisAction(input: {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "settings.catalog_schema", { isMutation: true });
 
+  const cleanName = input.name.trim();
+  const cleanValues = Array.from(new Set(input.presetValues.map((v) => v.trim()).filter(Boolean)));
+  if (!cleanName) throw new Error("Option group name is required.");
+  if (cleanValues.length === 0) throw new Error("Add at least one choice.");
+
   await withTenantTx({ tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin }, async (client) => {
     if (input.id) {
       await client.query(
         `UPDATE public.variant_axis_definitions
-         SET name = $1, preset_values = $2, ratio_presets = $3
+         SET name = $1, preset_values = $2, ratio_presets = COALESCE($3::jsonb, ratio_presets)
          WHERE id = $4 AND tenant_id = $5`,
-        [input.name.trim(), input.presetValues, JSON.stringify(input.ratioPresets ?? []), input.id, ctx.tenant.id]
+        [cleanName, cleanValues, input.ratioPresets ? JSON.stringify(input.ratioPresets) : null, input.id, ctx.tenant.id]
       );
     } else {
       await client.query(
         `INSERT INTO public.variant_axis_definitions (tenant_id, name, preset_values, ratio_presets)
          VALUES ($1, $2, $3, $4)`,
-        [ctx.tenant.id, input.name.trim(), input.presetValues, JSON.stringify(input.ratioPresets ?? [])]
+        [ctx.tenant.id, cleanName, cleanValues, JSON.stringify(input.ratioPresets ?? [])]
       );
     }
   });
-  revalidatePath("/dashboard/settings");
+  revalidateProductSchemaPaths(ctx.tenant.slug);
 }
 
 export async function createCustomFieldAction(input: {
@@ -232,7 +268,10 @@ export async function createCustomFieldAction(input: {
   const ctx = await getServerSessionContext();
   assertAccess(ctx, "settings.catalog_schema", { isMutation: true });
 
+  const cleanLabel = input.label.trim();
+  if (!cleanLabel) throw new Error("Field name is required.");
   const cleanKey = input.fieldKey.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+  const cleanOptions = Array.from(new Set(input.options.map((o) => o.trim()).filter(Boolean)));
   await withTenantTx({ tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin }, async (client) => {
     await client.query(
       `INSERT INTO public.custom_field_definitions
@@ -241,16 +280,57 @@ export async function createCustomFieldAction(input: {
       [
         ctx.tenant.id,
         cleanKey,
-        input.label.trim(),
+        cleanLabel,
         input.fieldType,
-        input.options,
+        cleanOptions,
         input.showOnBill,
         input.showOnWebsite,
         input.showInCatalogue,
       ]
     );
   });
-  revalidatePath("/dashboard/settings");
+  revalidateProductSchemaPaths(ctx.tenant.slug);
+}
+
+export async function updateCustomFieldAction(input: {
+  id: string;
+  label: string;
+  fieldType: "text" | "number" | "select" | "boolean" | "date";
+  options: string[];
+  showOnBill: boolean;
+  showOnWebsite: boolean;
+  showInCatalogue: boolean;
+}) {
+  const ctx = await getServerSessionContext();
+  assertAccess(ctx, "settings.catalog_schema", { isMutation: true });
+
+  const cleanLabel = input.label.trim();
+  if (!cleanLabel) throw new Error("Field name is required.");
+  const cleanOptions = Array.from(new Set(input.options.map((o) => o.trim()).filter(Boolean)));
+
+  await withTenantTx({ tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin }, async (client) => {
+    await client.query(
+      `UPDATE public.custom_field_definitions
+       SET label = $1,
+           field_type = $2,
+           options = $3,
+           show_on_bill = $4,
+           show_on_website = $5,
+           show_in_catalogue = $6
+       WHERE id = $7 AND tenant_id = $8`,
+      [
+        cleanLabel,
+        input.fieldType,
+        cleanOptions,
+        input.showOnBill,
+        input.showOnWebsite,
+        input.showInCatalogue,
+        input.id,
+        ctx.tenant.id,
+      ]
+    );
+  });
+  revalidateProductSchemaPaths(ctx.tenant.slug);
 }
 
 export async function createBranchAction(input: {
@@ -523,7 +603,7 @@ export async function deleteVariantAxisAction(axisId: string) {
       ctx.tenant.id,
     ]);
   });
-  revalidatePath("/dashboard/settings");
+  revalidateProductSchemaPaths(ctx.tenant.slug);
 }
 
 export async function deleteCustomFieldAction(fieldId: string) {
@@ -536,7 +616,7 @@ export async function deleteCustomFieldAction(fieldId: string) {
       ctx.tenant.id,
     ]);
   });
-  revalidatePath("/dashboard/settings");
+  revalidateProductSchemaPaths(ctx.tenant.slug);
 }
 
 export async function updateMyProfileAction(input: {

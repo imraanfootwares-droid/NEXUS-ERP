@@ -86,9 +86,9 @@ export default async function OperationsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1>Send Stock Between Branches</h1>
+        <h1>Send Stock Between Shops</h1>
         <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-          Pick products in cartons or pairs, add transport / LR / vehicle details, and send stock to another branch.
+          Move your own stock from one shop or godown to another.
         </p>
       </div>
       <OperationsHubClient

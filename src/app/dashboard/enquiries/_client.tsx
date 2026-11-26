@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, ExternalLink, Mail, MessageCircle, Phone } from "lucide-react";
 import { toast } from "sonner";
@@ -33,12 +33,12 @@ export function DashboardEnquiriesClient({
   );
   const [savingSettings, setSavingSettings] = useState(false);
 
-  const [origin, setOrigin] = useState("");
+  const origin = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => ""
+  );
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
 
   const cataloguePath = `/s/${tenant.slug}/catalogue`;
   const publicCatalogueLink = origin ? `${origin}${cataloguePath}` : cataloguePath;
@@ -208,7 +208,7 @@ export function DashboardEnquiriesClient({
         <div>
           <h1>Customer Enquiries</h1>
           <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-            Customer enquiries from your public PDF catalogue and storefront — visible to your entire team.
+            Orders and enquiries sent from your website and PDF catalogue.
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs">

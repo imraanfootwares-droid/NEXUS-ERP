@@ -7,6 +7,7 @@ import {
 } from "@/lib/billing/seller-profile";
 import { INDIAN_STATES } from "@/lib/constants/saas";
 import { getPublicAssetUrl } from "@/lib/storage/s3-client";
+import { resolveEffectiveLogoUrl } from "@/lib/storage/logo-data-url";
 import type { BillTemplateConfig, BillTemplateRow, TenantRow } from "@/types/database";
 
 export interface InvoiceRenderProps {
@@ -74,9 +75,14 @@ export async function loadInvoiceRenderProps(
     format: template?.format ?? "a4",
     config: mergedConfig,
     data: {
-      logoUrl:
-        tenant.brand_config?.logo_pdf_data_url ||
-        (tenant.brand_config?.logo_key ? getPublicAssetUrl(tenant.brand_config.logo_key) : null),
+      logoUrl: resolveEffectiveLogoUrl({
+        perBillOverride:
+          (inv.customer_snapshot as { custom_logo_data_url?: string | null } | null)?.custom_logo_data_url ?? null,
+        templateOverride: mergedConfig.custom_logo_data_url ?? null,
+        profileDefault:
+          tenant.brand_config?.logo_pdf_data_url ||
+          (tenant.brand_config?.logo_key ? getPublicAssetUrl(tenant.brand_config.logo_key) : null),
+      }),
       builtBy: inv.creator_name
         ? `${inv.creator_name}${inv.creator_login ? ` (@${inv.creator_login})` : ""}`
         : null,

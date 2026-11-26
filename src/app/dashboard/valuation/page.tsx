@@ -34,9 +34,9 @@ export default async function StockValuationPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1>Stock Valuation &amp; Profit Analytics</h1>
+        <h1>Stock Value &amp; Profit</h1>
         <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-          Track sales profit margins by day/month/year, total stock cost, expected retail &amp; wholesale value, and export reports.
+          See how much your stock is worth and how much profit you earned.
         </p>
       </div>
       <StockValuationPanel

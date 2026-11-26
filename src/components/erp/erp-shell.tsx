@@ -13,6 +13,7 @@ import {
   FileSpreadsheet,
   Globe,
   Inbox,
+  Info,
   KeyRound,
   LayoutDashboard,
   Lock,
@@ -25,6 +26,7 @@ import {
   Receipt,
   RefreshCw,
   Settings,
+  Trash2,
   Users,
   Wifi,
   WifiOff,
@@ -36,6 +38,7 @@ import { exitImpersonationAction } from "@/actions/platform";
 import { Form, Button, Dialog, Input, Label, Select } from "@/components/ui/primitives";
 import { AccessBlockedScreen } from "@/components/access/access-blocked-screen";
 import { canAccess } from "@/lib/auth/access";
+import { getPageGuide } from "@/lib/help/page-guides";
 import { fetchAccessStatus, readCachedBlock, writeCachedBlock } from "@/lib/offline/access-block";
 import type { PermissionKey } from "@/lib/constants/saas";
 import {
@@ -100,6 +103,8 @@ export function ErpShell({
   const [outbox, setOutbox] = useState<OutboxEntry[]>([]);
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const pageGuide = getPageGuide(pathname);
 
   const [pwOpen, setPwOpen] = useState(false);
   const [pwBannerDismissed, setPwBannerDismissed] = useState(false);
@@ -316,7 +321,10 @@ export function ErpShell({
     },
     {
       title: "Settings",
-      items: [{ href: "/dashboard/settings", label: "Profile & Settings", icon: <Settings className="h-4 w-4" /> }],
+      items: [
+        { href: "/dashboard/settings", label: "Profile & Settings", icon: <Settings className="h-4 w-4" /> },
+        { href: "/dashboard/trash", label: "Trash", icon: <Trash2 className="h-4 w-4" />, permission: "trash.manage" },
+      ],
     },
   ];
 
@@ -530,7 +538,7 @@ export function ErpShell({
 
       {tenant.stock_outdated_banner && (
         <div className="no-print bg-amber-50 border-b border-amber-200 text-amber-950 px-4 py-1.5 text-xs flex items-center justify-between gap-2">
-          <span>Stock tracking was re-enabled. Please run a Stock Count in Stock &amp; Matrix to verify physical balances.</span>
+          <span>Stock tracking was turned back on. Please check your item counts in Stock &amp; Products.</span>
           <Link href="/dashboard/stock" className="shrink-0 font-semibold underline">Go to Stock</Link>
         </div>
       )}
@@ -576,19 +584,24 @@ export function ErpShell({
                 <Menu className="h-5 w-5" />
               </button>
               <div className="hidden min-w-0 items-center gap-1.5 text-[13px] md:flex">
-                <Link href="/dashboard" className="text-[#a3a3a8] transition-colors hover:text-[#171717]">Dashboard</Link>
-                {currentSectionLabel !== "Dashboard" ? (
+                <Link href="/dashboard" className="text-[#a3a3a8] transition-colors hover:text-[#171717]">Home</Link>
+                {currentSectionLabel !== "Home" && (
                   <>
                     <ChevronRight className="h-3 w-3 shrink-0 text-[#c9c9cd]" />
                     <span className="truncate font-medium text-[#171717]">{currentSectionLabel}</span>
                   </>
-                ) : (
-                  <>
-                    <ChevronRight className="h-3 w-3 shrink-0 text-[#c9c9cd]" />
-                    <span className="font-medium text-[#171717]">Overview</span>
-                  </>
                 )}
               </div>
+              <button
+                type="button"
+                onClick={() => setHelpOpen(true)}
+                title={`How ${pageGuide.title} works`}
+                aria-label={`How ${pageGuide.title} works`}
+                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-[#e5e5e7] bg-[#fafafa] px-2.5 text-[11.5px] font-medium text-[#52525b] transition-colors hover:border-[#171717] hover:bg-[#171717] hover:text-white"
+              >
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden sm:inline">How it works</span>
+              </button>
             </div>
 
             <div className="flex shrink-0 items-center gap-1.5">
@@ -669,9 +682,9 @@ export function ErpShell({
       <nav aria-label="Quick navigation" className="no-print fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-[var(--ui-line)] bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
         {[
           { href: "/dashboard", label: "Home", icon: <BarChart3 className="h-4 w-4" /> },
-          { href: "/dashboard/billing/new", label: "POS", icon: <Plus className="h-4 w-4" /> },
+          { href: "/dashboard/billing/new", label: "Bill", icon: <Plus className="h-4 w-4" /> },
           { href: "/dashboard/stock", label: "Stock", icon: <Boxes className="h-4 w-4" /> },
-          { href: "/dashboard/operations", label: "Ops", icon: <PackageCheck className="h-4 w-4" /> },
+          { href: "/dashboard/operations", label: "Send", icon: <PackageCheck className="h-4 w-4" /> },
         ].map((b) => (
           <Link
             key={b.href}
@@ -736,6 +749,47 @@ export function ErpShell({
               ))}
             </div>
           )}
+        </div>
+      </Dialog>
+
+      {/* Universal Page Guide Modal (i icon) */}
+      <Dialog
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        title={`How "${pageGuide.title}" Works`}
+        subtitle={pageGuide.whatItIs}
+        maxWidth="max-w-lg"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#77777d]">
+              Step-by-step guide
+            </p>
+            <ol className="space-y-2">
+              {pageGuide.steps.map((step, idx) => (
+                <li
+                  key={idx}
+                  className="flex items-start gap-2.5 rounded-xl border border-[#ececee] bg-[#fafafa] p-3 text-xs leading-relaxed text-[#171717]"
+                >
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#171717] text-[10.5px] font-bold text-white">
+                    {idx + 1}
+                  </span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          <div className="rounded-xl border border-[#e5e5e7] bg-white p-3 text-xs text-[#52525b]">
+            <span className="font-semibold text-[#171717]">Tip: </span>
+            {pageGuide.tip}
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <Button type="button" size="sm" onClick={() => setHelpOpen(false)}>
+              Got it
+            </Button>
+          </div>
         </div>
       </Dialog>
 

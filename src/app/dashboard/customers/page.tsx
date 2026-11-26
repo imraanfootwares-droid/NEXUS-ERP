@@ -111,9 +111,9 @@ export default async function CustomersPage({
   return (
     <div className="space-y-4">
       <div>
-        <h1>Customer &amp; Supplier Ledgers</h1>
+        <h1>Customers &amp; Suppliers</h1>
         <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-          Track retail &amp; wholesale customer dues alongside raw-material &amp; vendor payables in separate tabs.
+          See who owes you money and who you need to pay.
         </p>
       </div>
       <CustomersClient

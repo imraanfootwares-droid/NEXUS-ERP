@@ -72,9 +72,9 @@ export default async function StorefrontManagePage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1>Your Online Website &amp; PDF Catalogue</h1>
+          <h1>Website &amp; PDF Catalogue</h1>
           <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-            Choose which products appear on your website, upload photos, and share your PDF catalogue link on WhatsApp.
+            Turn on your online product catalogue and share it on WhatsApp.
           </p>
         </div>
         <Link

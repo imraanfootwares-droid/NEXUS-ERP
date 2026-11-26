@@ -180,9 +180,9 @@ export function DashboardOrganisationClient({
   return (
     <div className="space-y-4">
       <div>
-        <h1>Organisation Tree</h1>
+        <h1>Shops &amp; Team</h1>
         <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-          Visual map of all branches and team members under {tenant.name}.
+          See all your shops and staff under {tenant.name}.
         </p>
       </div>
 

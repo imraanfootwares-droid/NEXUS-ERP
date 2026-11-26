@@ -37,9 +37,9 @@ export default async function StockImportPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1>Bulk Stock &amp; Price Import</h1>
+        <h1>Upload Products from Excel</h1>
         <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-          Download your dynamic Excel template, validate rows client-side &amp; commit atomically in 500-row chunks.
+          Download the Excel template, fill in your products and stock, and upload it in one step.
         </p>
       </div>
       <StockImportClient

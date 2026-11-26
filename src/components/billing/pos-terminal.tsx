@@ -23,6 +23,7 @@ import {
   Settings,
   ShoppingCart,
   Trash2,
+  Upload,
   User,
   Users,
   X,
@@ -31,6 +32,7 @@ import { toast } from "sonner";
 import { createOrFinalizeInvoiceAction, searchCustomersForBillingAction } from "@/actions/billing";
 import { updateFinalizedInvoiceAction } from "@/actions/bill-revisions";
 import { InvoiceRenderer } from "@/components/billing/invoice-renderer";
+import { fileToLogoPngDataUrl, LOGO_HIDE_SENTINEL, resolveEffectiveLogoUrl } from "@/lib/storage/logo-data-url";
 import {
   buildDefaultConfigForCategory,
   resolveSellerProfile,
@@ -154,6 +156,7 @@ export function PosTerminal({
       address?: string | null;
       ship_to_name?: string | null;
       ship_to_address?: string | null;
+      custom_logo_data_url?: string | null;
     } | null;
     invoice_type: InvoiceType;
     tax_mode: TaxMode;
@@ -185,6 +188,9 @@ export function PosTerminal({
   const [shipToDiff, setShipToDiff] = useState(Boolean(draftSnap?.ship_to_address));
   const [shipToName, setShipToName] = useState(draftSnap?.ship_to_name || "");
   const [shipToAddress, setShipToAddress] = useState(draftSnap?.ship_to_address || "");
+  const [billLogoOverride, setBillLogoOverride] = useState<string | null>(
+    draftSnap?.custom_logo_data_url ?? null
+  );
 
   const [invoiceType, setInvoiceType] = useState<InvoiceType>(draftToEdit?.invoice_type ?? "sale");
   const [taxMode, setTaxMode] = useState<TaxMode>(
@@ -780,6 +786,7 @@ export function PosTerminal({
             address: walkInAddress.trim() || selectedCustomer.address || null,
             ship_to_name: shipToDiff ? shipToName.trim() || walkInName.trim() || selectedCustomer.name : null,
             ship_to_address: shipToDiff ? shipToAddress.trim() || null : null,
+            custom_logo_data_url: billLogoOverride,
           }
         : {
             name: walkInName.trim() || "Walk-In Customer",
@@ -789,6 +796,7 @@ export function PosTerminal({
             address: walkInAddress.trim() || null,
             ship_to_name: shipToDiff ? shipToName.trim() || walkInName.trim() || "Walk-In Customer" : null,
             ship_to_address: shipToDiff ? shipToAddress.trim() || null : null,
+            custom_logo_data_url: billLogoOverride,
           },
       tax_mode: invoiceType === "estimate_bill_of_supply" ? "none" : taxMode,
       supply_type: gstCalc.supply_type,
@@ -879,9 +887,176 @@ export function PosTerminal({
         ) ?? null
       : null;
 
+  const taxModeShortLabel =
+    taxMode === "inclusive" ? "Tax Included" : taxMode === "exclusive" ? "Add Tax Extra" : "No Tax (0%)";
+
+  const gstAndDeliveryDrawer = detailsOpen ? (
+    <div className="ui-page space-y-2.5 rounded-xl border border-[#ececee] bg-[#fafafa] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
+        <span className="text-[11.5px] font-semibold text-[#171717]">Buyer GST, Address &amp; Tax</span>
+        <span className="rounded-full border border-[#e5e5e7] bg-white px-2 py-0.5 text-[10px] font-medium text-[#52525b]">
+          {gstCalc.supply_type === "inter_state"
+            ? `Other State (${INDIAN_STATES[effectivePlaceOfSupply] || effectivePlaceOfSupply}) → IGST`
+            : "Same State → CGST + SGST"}
+        </span>
+      </div>
+
+      {invoiceType === "sale" && (
+        <div className="space-y-1">
+          <span className="block text-[10.5px] font-medium text-[#77777d]">How is GST calculated?</span>
+          <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#e5e5e7] bg-[#f1f1f3] p-0.5 text-[11px] font-medium">
+            {(
+              [
+                { id: "inclusive", label: "Tax Included" },
+                { id: "exclusive", label: "Add Tax Extra" },
+                { id: "none", label: "No Tax" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setTaxMode(opt.id)}
+                className={`cursor-pointer rounded-md py-1 transition-colors ${
+                  taxMode === opt.id
+                    ? "bg-white font-semibold text-[#171717] shadow-2xs"
+                    : "text-[#77777d] hover:text-[#171717]"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {customerId && (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Input
+            aria-label="Buyer company name"
+            placeholder="Company / Party Name"
+            value={walkInName}
+            onChange={(e) => setWalkInName(e.target.value)}
+          />
+          <Input
+            aria-label="Buyer phone"
+            placeholder="Phone number"
+            inputMode="tel"
+            value={walkInPhone}
+            onChange={(e) => setWalkInPhone(e.target.value)}
+          />
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <GstinInput value={walkInGstin} onChange={setWalkInGstin} onStateDetected={setWalkInState} />
+        <Select aria-label="Place of supply" value={effectivePlaceOfSupply} onChange={(e) => setWalkInState(e.target.value)}>
+          {stateOptions}
+        </Select>
+      </div>
+      <Input
+        aria-label="Buyer address"
+        placeholder="Billing Address (Optional)"
+        value={walkInAddress}
+        onChange={(e) => setWalkInAddress(e.target.value)}
+      />
+      <label className="flex items-center gap-2 text-[11.5px] font-medium text-[#3f3f46] cursor-pointer">
+        <input
+          type="checkbox"
+          checked={shipToDiff}
+          onChange={(e) => setShipToDiff(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-slate-300"
+        />
+        Deliver to a different address
+      </label>
+      {shipToDiff && (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Input
+            aria-label="Delivery name"
+            placeholder="Delivery Name (e.g. Godown)"
+            value={shipToName}
+            onChange={(e) => setShipToName(e.target.value)}
+          />
+          <Input
+            aria-label="Delivery address"
+            placeholder="Delivery Full Address"
+            value={shipToAddress}
+            onChange={(e) => setShipToAddress(e.target.value)}
+          />
+        </div>
+      )}
+
+      {/* Optional Per-Bill Logo Override (Defaults to Profile Logo) */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#e5e5e7] bg-white px-2.5 py-2 text-[11px]">
+        <div className="flex items-center gap-2 min-w-0">
+          {billLogoOverride === LOGO_HIDE_SENTINEL ? (
+            <span className="truncate font-medium text-[#77777d]">Bill logo hidden for this bill</span>
+          ) : (
+            <>
+              {(billLogoOverride || logoUrl) && (
+                <img
+                  src={billLogoOverride || logoUrl || ""}
+                  alt="Bill logo"
+                  className="h-6 w-6 shrink-0 rounded border border-[#ececee] object-contain p-0.5"
+                />
+              )}
+              <span className="truncate font-medium text-[#52525b]">
+                {billLogoOverride
+                  ? "Custom logo for this bill"
+                  : logoUrl
+                  ? "Logo: Profile Default"
+                  : "No default logo set"}
+              </span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-[#e5e5e7] bg-[#fafafa] px-2 py-1 text-[10.5px] font-semibold text-[#171717] hover:bg-[#171717] hover:text-white">
+            <Upload className="h-3 w-3" />
+            <span>Override</span>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                try {
+                  const dataUrl = await fileToLogoPngDataUrl(f);
+                  setBillLogoOverride(dataUrl);
+                  toast.success("Custom logo set for this bill only.");
+                } catch {
+                  toast.error("Could not read logo image.");
+                }
+              }}
+            />
+          </label>
+          {billLogoOverride !== LOGO_HIDE_SENTINEL && (billLogoOverride || logoUrl) && (
+            <button
+              type="button"
+              onClick={() => setBillLogoOverride(LOGO_HIDE_SENTINEL)}
+              className="cursor-pointer rounded-md border border-[#e5e5e7] bg-white px-2 py-1 text-[10.5px] font-medium text-[#77777d] hover:text-[#171717]"
+            >
+              Hide
+            </button>
+          )}
+          {billLogoOverride && (
+            <button
+              type="button"
+              onClick={() => setBillLogoOverride(null)}
+              className="cursor-pointer rounded-md border border-[#e5e5e7] bg-white px-2 py-1 text-[10.5px] font-semibold text-[#171717] hover:bg-[#f4f4f5]"
+            >
+              Default
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   const customerFields = (
-    <div className="space-y-2.5">
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+    <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <Input
           aria-label="Customer name"
           placeholder="Customer name"
@@ -891,96 +1066,37 @@ export function PosTerminal({
         />
         <Input aria-label="Customer phone" placeholder="Phone number" inputMode="tel" value={walkInPhone} onChange={(e) => setWalkInPhone(e.target.value)} />
       </div>
-      {detailsOpen || invoiceType === "sale" ? (
-        <div className="ui-page space-y-2.5 rounded-xl border border-[#ececee] bg-[#fafafa] p-3 sm:p-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-1.5">
-            <span className="text-[12px] font-semibold text-[#3f3f46]">
-              Buyer GST &amp; Address <span className="font-normal text-[#77777d]">(Optional · Recommended)</span>
-            </span>
-            <span
-              className={`max-w-full truncate rounded-full px-2.5 py-1 font-mono text-[10.5px] font-semibold ${
-                gstCalc.supply_type === "inter_state"
-                  ? "bg-sky-100 text-sky-800"
-                  : "bg-emerald-50 text-emerald-700"
-              }`}
-            >
-              {gstCalc.supply_type === "inter_state"
-                ? `Inter-State (${INDIAN_STATES[effectivePlaceOfSupply] || effectivePlaceOfSupply}) → IGST`
-                : `Same State → CGST + SGST`}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            <GstinInput value={walkInGstin} onChange={setWalkInGstin} onStateDetected={setWalkInState} />
-            <Select aria-label="Place of supply" value={effectivePlaceOfSupply} onChange={(e) => setWalkInState(e.target.value)}>
-              {stateOptions}
-            </Select>
-          </div>
-          <Input
-            aria-label="Buyer address"
-            placeholder="Billing Address (Optional)"
-            value={walkInAddress}
-            onChange={(e) => setWalkInAddress(e.target.value)}
-          />
-          <label className="flex items-center gap-2 text-[11.5px] font-medium text-[#3f3f46] cursor-pointer">
-            <input
-              type="checkbox"
-              checked={shipToDiff}
-              onChange={(e) => setShipToDiff(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-slate-300"
-            />
-            Delivery address is different from billing address
-          </label>
-          {shipToDiff && (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Input
-                aria-label="Delivery name"
-                placeholder="Delivery Name (e.g. Pothys Godown)"
-                value={shipToName}
-                onChange={(e) => setShipToName(e.target.value)}
-              />
-              <Input
-                aria-label="Delivery address"
-                placeholder="Delivery Full Address"
-                value={shipToAddress}
-                onChange={(e) => setShipToAddress(e.target.value)}
-              />
-            </div>
-          )}
-        </div>
-      ) : null}
-      {crmEnabled ? (
-        matchedCustomer ? (
-          <button type="button" className="pos-link !text-emerald-700" onClick={() => chooseCustomer(matchedCustomer.id)}>
-            Existing customer: {matchedCustomer.name}. Tap to use their account
-          </button>
-        ) : walkInPhoneClean || walkInGstinClean ? (
-          <p className="text-[11px] font-medium text-emerald-700">Will be saved to Customers when finalized</p>
-        ) : walkInPhone.trim() ? (
-          <p className="text-[11px] font-medium text-amber-700">Enter a 10-digit phone number to save this customer</p>
-        ) : (
-          <p className="text-[11px] text-[#77777d]">Add a phone or GSTIN to save this customer</p>
-        )
+      {crmEnabled && matchedCustomer ? (
+        <button type="button" className="pos-link !text-emerald-700" onClick={() => chooseCustomer(matchedCustomer.id)}>
+          Existing customer: {matchedCustomer.name} — tap to select
+        </button>
+      ) : crmEnabled && (walkInPhoneClean || walkInGstinClean) ? (
+        <p className="text-[11px] font-medium text-emerald-700">Will be saved to Customers automatically</p>
+      ) : crmEnabled && walkInPhone.trim() ? (
+        <p className="text-[11px] font-medium text-amber-700">Enter 10-digit phone number to save customer</p>
       ) : null}
     </div>
   );
 
   const billBody = (
-    <div className="space-y-5 divide-y divide-[#f0f0f1] p-4 sm:p-5 [&>section+section]:pt-5">
-      <section className="space-y-2.5">
+    <div className="space-y-4 divide-y divide-[#f0f0f1] p-4 sm:p-4 [&>section+section]:pt-4">
+      <section className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <p className="ui-eyebrow">Customer</p>
-          {!customerId && (
-            <button type="button" className="pos-link" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((v) => !v)}>
-              {detailsOpen ? "Hide GSTIN" : "GSTIN & state"}
-              <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${detailsOpen ? "rotate-180" : ""}`} />
-            </button>
-          )}
+          <button type="button" className="pos-link" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((v) => !v)}>
+            {detailsOpen
+              ? "Hide GST & address"
+              : invoiceType === "sale"
+              ? `GST & delivery (${taxModeShortLabel})`
+              : "GST & delivery"}
+            <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${detailsOpen ? "rotate-180" : ""}`} />
+          </button>
         </div>
         {crmEnabled ? (
           <button
             type="button"
             onClick={() => setCustomerSidebarOpen(true)}
-            className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-[#e4e4e7] bg-white px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,.04)] transition-colors hover:border-[#171717] hover:bg-[#fafafa]"
+            className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-[#e4e4e7] bg-white px-3 py-2 text-left shadow-[0_1px_2px_rgba(0,0,0,.04)] transition-colors hover:border-[#171717] hover:bg-[#fafafa]"
           >
             <span className="flex min-w-0 items-center gap-2.5">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f4f4f5] text-[#171717]">
@@ -993,7 +1109,7 @@ export function PosTerminal({
                 <span className="block truncate text-[11px] text-[#77777d]">
                   {selectedCustomer
                     ? `${selectedCustomer.customer_type === "wholesale" ? "Wholesale" : "Retail"}${selectedCustomer.phone ? ` · ${selectedCustomer.phone}` : ""}${Number(selectedCustomer.current_due) > 0 ? ` · Due ${money(Number(selectedCustomer.current_due))}` : ""}`
-                    : `Tap to browse ${(totalCustomerCount ?? customers.length).toLocaleString("en-IN")} saved customers`}
+                    : `Browse ${(totalCustomerCount ?? customers.length).toLocaleString("en-IN")} saved customers`}
                 </span>
               </span>
             </span>
@@ -1003,78 +1119,22 @@ export function PosTerminal({
           </button>
         ) : null}
         {!customerId ? customerFields : null}
-        {customerId && invoiceType === "sale" ? (
-          <div className="ui-page space-y-2.5 rounded-xl border border-[#ececee] bg-[#fafafa] p-3 sm:p-3.5">
-            <div className="flex flex-wrap items-center justify-between gap-1.5">
-              <span className="text-[12px] font-semibold text-[#3f3f46]">
-                Buyer GST &amp; Delivery <span className="font-normal text-[#77777d]">(Optional · Recommended)</span>
+        {gstAndDeliveryDrawer}
+        {invoiceType === "sale" &&
+          (!tenant.tax_config.gst_enabled || !(tenant.brand_config?.business_profile?.gstin || activeBranch?.gstin)) && (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-900">
+              <span className="flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                <span>Add your shop GST Number to print it on GST bills.</span>
               </span>
-              <span
-                className={`max-w-full truncate rounded-full px-2.5 py-1 font-mono text-[10.5px] font-semibold ${
-                  gstCalc.supply_type === "inter_state"
-                    ? "bg-sky-100 text-sky-800"
-                    : "bg-emerald-50 text-emerald-700"
-                }`}
+              <Link
+                href="/dashboard/settings?tab=profile"
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-900 px-2.5 py-1 text-[10.5px] font-semibold text-white hover:bg-amber-950"
               >
-                {gstCalc.supply_type === "inter_state"
-                  ? `Inter-State (${INDIAN_STATES[effectivePlaceOfSupply] || effectivePlaceOfSupply}) → IGST`
-                  : `Same State → CGST + SGST`}
-              </span>
+                <Settings className="h-3 w-3" /> Setup
+              </Link>
             </div>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <Input
-                aria-label="Buyer company name"
-                placeholder="Company / Party Name"
-                value={walkInName}
-                onChange={(e) => setWalkInName(e.target.value)}
-              />
-              <Input
-                aria-label="Buyer phone"
-                placeholder="Phone number"
-                inputMode="tel"
-                value={walkInPhone}
-                onChange={(e) => setWalkInPhone(e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <GstinInput value={walkInGstin} onChange={setWalkInGstin} onStateDetected={setWalkInState} />
-              <Select aria-label="Place of supply" value={effectivePlaceOfSupply} onChange={(e) => setWalkInState(e.target.value)}>
-                {stateOptions}
-              </Select>
-            </div>
-            <Input
-              aria-label="Buyer address"
-              placeholder="Billing Address (Optional)"
-              value={walkInAddress}
-              onChange={(e) => setWalkInAddress(e.target.value)}
-            />
-            <label className="flex items-center gap-2 text-[11.5px] font-medium text-[#3f3f46] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={shipToDiff}
-                onChange={(e) => setShipToDiff(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-slate-300"
-              />
-              Delivery address is different from billing address
-            </label>
-            {shipToDiff && (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <Input
-                  aria-label="Delivery name"
-                  placeholder="Delivery Name (e.g. Pothys Godown)"
-                  value={shipToName}
-                  onChange={(e) => setShipToName(e.target.value)}
-                />
-                <Input
-                  aria-label="Delivery address"
-                  placeholder="Delivery Full Address"
-                  value={shipToAddress}
-                  onChange={(e) => setShipToAddress(e.target.value)}
-                />
-              </div>
-            )}
-          </div>
-        ) : null}
+          )}
         {selectedCustomer && creditBalance > 0 && (
           <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 px-2.5 py-2 text-xs text-emerald-800">
             <span>Credit available {money(creditBalance)}</span>
@@ -1101,55 +1161,6 @@ export function PosTerminal({
             </p>
           )}
       </section>
-
-      {invoiceType === "sale" && (
-        <section className="space-y-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[12.5px] font-medium text-[#55555b]">Tax Calculation</span>
-            <div className="flex items-center gap-2">
-              <div className="w-40 sm:w-44">
-                <Select
-                  aria-label="Tax mode"
-                  value={taxMode}
-                  onChange={(e) => setTaxMode(e.target.value as TaxMode)}
-                  className="!text-[12.5px]"
-                >
-                  <option value="inclusive">Inclusive (MRP)</option>
-                  <option value="exclusive">Exclusive (B2B)</option>
-                  <option value="none">No Tax (0%)</option>
-                </Select>
-              </div>
-              <Link
-                href="/dashboard/settings?tab=tax"
-                className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#f1f1f2] px-2 py-2 text-[11px] font-semibold text-[#171717] transition-colors hover:bg-[#e4e4e7]"
-                title="GST & Tax Settings"
-              >
-                <Settings className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-          </div>
-
-          {(!tenant.tax_config.gst_enabled || !(tenant.brand_config?.business_profile?.gstin || activeBranch?.gstin)) && (
-            <div className="flex items-start justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-900">
-              <div className="flex items-start gap-1.5">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                <div>
-                  <p className="font-semibold">GST details not set</p>
-                  <p className="text-[10.5px] text-amber-800">
-                    Add your GST Number in My Profile &amp; Bank to show it on GST bills.
-                  </p>
-                </div>
-              </div>
-              <Link
-                href="/dashboard/settings?tab=profile"
-                className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-900 px-2.5 py-1.5 text-[10.5px] font-semibold text-white hover:bg-amber-950"
-              >
-                <Settings className="h-3 w-3" /> Setup
-              </Link>
-            </div>
-          )}
-        </section>
-      )}
 
       <section>
         <div className="mb-2.5 flex items-center justify-between">
@@ -1801,12 +1812,17 @@ export function PosTerminal({
                 bill_category: isGstPreview ? "gst" : "normal",
                 show_gst_summary: isGstPreview ? pickedTpl?.config?.show_gst_summary ?? true : false,
               };
+              const effectivePreviewLogo = resolveEffectiveLogoUrl({
+                perBillOverride: billLogoOverride,
+                templateOverride: pickedTpl?.config?.custom_logo_data_url ?? null,
+                profileDefault: logoUrl,
+              });
               return (
                 <InvoiceRenderer
                   format={pickedTpl?.format ?? "a4"}
                   config={previewCfg}
                   data={{
-                    logoUrl,
+                    logoUrl: effectivePreviewLogo,
                     invoiceNumber: isEditingFinalized ? draftToEdit?.invoice_number || "PREVIEW" : "PREVIEW",
                     invoiceType,
                     dateStr: new Date().toLocaleDateString("en-IN", {
