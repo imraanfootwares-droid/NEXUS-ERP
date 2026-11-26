@@ -1,58 +1,40 @@
-import sharp from "sharp";
-
 /**
- * Fetches an image URL (including WebP from Cloudflare R2) and converts it into a
- * base64 data URI (JPEG or PNG) that `@react-pdf/renderer` can reliably embed.
- * Returns null if the image cannot be fetched or decoded.
+ * Fetches an image URL and returns a base64 PNG/JPEG data URI that
+ * `@react-pdf/renderer` can embed without native C++ addons (Cloudflare Workers safe).
+ * Returns null if the image cannot be fetched or is an unsupported format (e.g. WebP).
  */
 export async function fetchImageForPdf(
   url: string | null | undefined,
-  opts?: { format?: "jpeg" | "png"; maxDim?: number }
+  _opts?: { format?: "jpeg" | "png"; maxDim?: number }
 ): Promise<string | null> {
   if (!url) return null;
   if (url.startsWith("data:image/png;base64,") || url.startsWith("data:image/jpeg;base64,")) {
     return url;
   }
-
-  const format = opts?.format ?? "jpeg";
-  const maxDim = opts?.maxDim ?? 420;
+  if (url.startsWith("data:image/")) {
+    // @react-pdf/renderer only supports PNG and JPEG data URIs
+    return null;
+  }
 
   try {
-    let inputBuf: Buffer;
-    if (url.startsWith("data:image/")) {
-      const commaIdx = url.indexOf(",");
-      if (commaIdx < 0) return null;
-      inputBuf = Buffer.from(url.slice(commaIdx + 1), "base64");
-    } else {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      try {
-        const res = await fetch(url, {
-          signal: controller.signal,
-          cache: "force-cache",
-        });
-        if (!res.ok) return null;
-        inputBuf = Buffer.from(await res.arrayBuffer());
-      } finally {
-        clearTimeout(timeout);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        cache: "force-cache",
+      });
+      if (!res.ok) return null;
+      const contentType = (res.headers.get("content-type") || "").toLowerCase().split(";")[0].trim();
+      if (contentType !== "image/png" && contentType !== "image/jpeg" && contentType !== "image/jpg") {
+        return null;
       }
+      const normalizedType = contentType === "image/jpg" ? "image/jpeg" : contentType;
+      const buf = Buffer.from(await res.arrayBuffer());
+      return `data:${normalizedType};base64,${buf.toString("base64")}`;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const pipeline = sharp(inputBuf).resize(maxDim, maxDim, {
-      fit: "inside",
-      withoutEnlargement: true,
-    });
-
-    if (format === "png") {
-      const out = await pipeline.png({ compressionLevel: 8 }).toBuffer();
-      return `data:image/png;base64,${out.toString("base64")}`;
-    }
-
-    const out = await pipeline
-      .flatten({ background: "#f8fafc" })
-      .jpeg({ quality: 86, mozjpeg: true })
-      .toBuffer();
-    return `data:image/jpeg;base64,${out.toString("base64")}`;
   } catch {
     return null;
   }

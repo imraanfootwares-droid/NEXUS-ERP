@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const envSchema = z.object({
-  DEPLOYMENT_TARGET: z.enum(["vercel", "vps"]).default("vercel"),
+  DEPLOYMENT_TARGET: z.enum(["vercel", "vps", "cloudflare"]).default("vercel"),
   NEXT_PUBLIC_APP_DOMAIN: z.string().default("localhost:3000"),
   NEXT_PUBLIC_APP_URL: z.string().default("http://localhost:3000"),
 
@@ -29,24 +29,57 @@ const envSchema = z.object({
   S3_PUBLIC_URL: z.string().optional(),
 });
 
-const parsed = envSchema.safeParse(process.env);
+type EnvValues = z.infer<typeof envSchema>;
 
-export const env = parsed.success
-  ? parsed.data
-  : envSchema.parse({});
+function readEnv(): EnvValues {
+  const parsed = envSchema.safeParse(process.env);
+  return parsed.success ? parsed.data : envSchema.parse({});
+}
+
+export const env: EnvValues = new Proxy({} as EnvValues, {
+  get(_target, prop) {
+    if (typeof prop !== "string") return undefined;
+    return readEnv()[prop as keyof EnvValues];
+  },
+  ownKeys() {
+    return Object.keys(readEnv());
+  },
+  getOwnPropertyDescriptor(_target, prop) {
+    const current = readEnv();
+    if (typeof prop === "string" && prop in current) {
+      return { enumerable: true, configurable: true, value: current[prop as keyof EnvValues] };
+    }
+    return undefined;
+  },
+});
 
 export const isConfigured = {
-  db: Boolean(env.DATABASE_URL && env.DATABASE_URL.startsWith("postgres")),
-  auth: Boolean(env.AUTH_SECRET && env.AUTH_SECRET.length >= 32),
-  storage: Boolean(
-    env.S3_ENDPOINT &&
-      env.S3_ACCESS_KEY_ID &&
-      env.S3_SECRET_ACCESS_KEY &&
-      env.S3_BUCKET_PUBLIC &&
-      env.S3_BUCKET_PRIVATE
-  ),
-  cron: Boolean(env.CRON_SECRET && env.CRON_SECRET.length >= 8),
-  bootstrap: Boolean(env.APP_OWNER_BOOTSTRAP_TOKEN && env.APP_OWNER_BOOTSTRAP_TOKEN.length >= 8),
+  get db() {
+    const current = readEnv();
+    return Boolean(current.DATABASE_URL && current.DATABASE_URL.startsWith("postgres"));
+  },
+  get auth() {
+    const current = readEnv();
+    return Boolean(current.AUTH_SECRET && current.AUTH_SECRET.length >= 32);
+  },
+  get storage() {
+    const current = readEnv();
+    return Boolean(
+      current.S3_ENDPOINT &&
+        current.S3_ACCESS_KEY_ID &&
+        current.S3_SECRET_ACCESS_KEY &&
+        current.S3_BUCKET_PUBLIC &&
+        current.S3_BUCKET_PRIVATE
+    );
+  },
+  get cron() {
+    const current = readEnv();
+    return Boolean(current.CRON_SECRET && current.CRON_SECRET.length >= 8);
+  },
+  get bootstrap() {
+    const current = readEnv();
+    return Boolean(current.APP_OWNER_BOOTSTRAP_TOKEN && current.APP_OWNER_BOOTSTRAP_TOKEN.length >= 8);
+  },
 };
 
 export function getAuthSecret(): Uint8Array {

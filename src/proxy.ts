@@ -31,7 +31,8 @@ export async function proxy(request: NextRequest) {
     host === appDomain ||
     host === "localhost" ||
     host === "127.0.0.1" ||
-    host.endsWith(".vercel.app");
+    host.endsWith(".vercel.app") ||
+    host.endsWith(".workers.dev");
 
   if (!isPlatformHost && !pathname.startsWith("/s/") && !pathname.startsWith("/dashboard") && !pathname.startsWith("/login") && !pathname.startsWith("/signup")) {
     const rewriteUrl = request.nextUrl.clone();

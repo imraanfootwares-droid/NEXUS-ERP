@@ -19,14 +19,21 @@ async function shouldUseMockDb(): Promise<boolean> {
   }
 }
 
-function createPool(): Pool {
+function isWorkersRuntime(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    navigator.userAgent === "Cloudflare-Workers"
+  );
+}
+
+function createPool(max = 10): Pool {
   if (!env.DATABASE_URL) {
     throw new Error("DATABASE_URL is not configured.");
   }
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
-    max: 10,
-    idleTimeoutMillis: 20_000,
+    max,
+    idleTimeoutMillis: isWorkersRuntime() ? 5_000 : 20_000,
     connectionTimeoutMillis: 10_000,
     ssl: env.DATABASE_URL.includes("localhost") || env.DATABASE_URL.includes("127.0.0.1")
       ? false
@@ -40,6 +47,9 @@ function createPool(): Pool {
 }
 
 export function getPool(): Pool {
+  if (isWorkersRuntime()) {
+    return createPool(1);
+  }
   if (!globalThis.__nexusPgPool) {
     globalThis.__nexusPgPool = createPool();
   }
@@ -86,7 +96,9 @@ export async function withTenantTx<T>(
   if (await shouldUseMockDb()) {
     return fn(createMockClient());
   }
-  const rawClient = await getPool().connect();
+  const workers = isWorkersRuntime();
+  const pool = workers ? createPool(1) : getPool();
+  const rawClient = await pool.connect();
   const client = serializeClientQueries(rawClient);
   // A snapshot gives exports one consistent view without blocking people who are billing.
   await client.query(options?.snapshot ? "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY" : "BEGIN");
@@ -103,6 +115,9 @@ export async function withTenantTx<T>(
     throw err;
   } finally {
     rawClient.release();
+    if (workers) {
+      await pool.end().catch(() => undefined);
+    }
   }
 }
 
@@ -120,6 +135,14 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
 ): Promise<QueryResult<T>> {
   if (await shouldUseMockDb()) {
     return mockQuery<T>(sql, params);
+  }
+  if (isWorkersRuntime()) {
+    const pool = createPool(1);
+    try {
+      return await pool.query<T>(sql, params);
+    } finally {
+      await pool.end().catch(() => undefined);
+    }
   }
   return getPool().query<T>(sql, params);
 }
