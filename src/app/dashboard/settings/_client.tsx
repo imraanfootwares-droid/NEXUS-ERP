@@ -3,34 +3,39 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Building2, Check, CheckCircle2, Download, Eye, FileText, Globe, KeyRound, Landmark, Layers, Package, Pencil, Plus, Receipt, RefreshCw, SlidersHorizontal, Trash2, Upload, User, UserX } from "lucide-react";
+import { AlertTriangle, Building2, Check, CheckCircle2, Download, Eye, FileText, Globe, KeyRound, Landmark, Layers, LayoutGrid, Network, Package, Pencil, Plus, Receipt, RefreshCw, SlidersHorizontal, Trash2, Upload, User } from "lucide-react";
 import { DataExportCard } from "@/components/ui/data-export-card";
+import { VisualProductBuilder } from "@/components/settings/visual-product-builder";
 import { Paged } from "@/components/ui/pagination";
 import { toast } from "sonner";
 import {
   changeMyPasswordAction,
-  createBranchAction,
   createCustomFieldAction,
-  createStaffAction,
-  deleteBranchAction,
   deleteCustomFieldAction,
   deleteVariantAxisAction,
   getBackupDownloadUrlAction,
-  resetStaffPasswordAction,
   toggleDeviceActiveAction,
-  toggleStaffActiveAction,
   triggerManualBackupAction,
-  updateBranchAction,
   updateBrandConfigAction,
   updateBusinessBillingProfileAction,
+  updateCategoryTemplatesAction,
   updateCustomFieldAction,
   updateLedgerConfigAction,
   updateMyProfileAction,
-  updateStaffAction,
   updateTaxConfigAction,
-  updateTenantRolePermissionAction,
   upsertVariantAxisAction,
 } from "@/actions/settings";
+import {
+  FOOTWEAR_CATEGORY_STARTERS,
+  parseCommaList,
+  removeCategoryTemplate,
+  resolveCategoryTemplates,
+  resolveColoursForCategory,
+  resolveCustomFieldsForCategory,
+  resolveSizesForCategory,
+  upsertCategoryTemplate,
+  VERTICAL_CATEGORY_PRESETS,
+} from "@/lib/catalog/category-templates";
 import { GstinInput } from "@/components/ui/dynamic-fields";
 import { compressLogoImage, IMAGE_CACHE_CONTROL } from "@/lib/storage/image-compress";
 import { fileToLogoPngDataUrl } from "@/lib/storage/logo-data-url";
@@ -48,11 +53,11 @@ import { Form,
   Switch,
   Tabs,
 } from "@/components/ui/primitives";
-import { isFeatureEnabled } from "@/lib/auth/access";
 import { resolveLedgerConfig } from "@/lib/ledger/defaults";
-import { INDIAN_STATES, PERMISSION_DEFINITIONS, type PermissionKey } from "@/lib/constants/saas";
+import { INDIAN_STATES, type PermissionKey } from "@/lib/constants/saas";
 import type {
   BranchRow,
+  CategoryTemplate,
   CustomFieldRow,
   TenantRow,
   UiStyleKey,
@@ -68,12 +73,11 @@ export function SettingsHubClient({
   permissions,
   axes,
   fields,
-  staff,
-  resets,
-  rolePermRows,
   devices,
   backups,
   stockEnabled,
+  categoryPresetsEnabled = true,
+  visualBuilderEnabled = true,
   backupsEnabled,
 }: {
   tenant: TenantRow;
@@ -91,24 +95,6 @@ export function SettingsHubClient({
   permissions: Record<PermissionKey, boolean>;
   axes: VariantAxisRow[];
   fields: CustomFieldRow[];
-  staff: Array<{
-    id: string;
-    full_name: string;
-    username: string | null;
-    email: string | null;
-    role: "owner" | "branch_admin" | "worker";
-    is_active: boolean;
-  }>;
-  resets: Array<{
-    id: string;
-    user_id: string;
-    identifier_submitted: string;
-    note: string | null;
-    created_at: string;
-    full_name: string | null;
-    role: string | null;
-  }>;
-  rolePermRows: Array<{ role: "branch_admin" | "worker"; permission_key: string; allowed: boolean }>;
   devices: Array<{
     id: string;
     branch_id: string;
@@ -125,6 +111,8 @@ export function SettingsHubClient({
     created_at: string;
   }>;
   stockEnabled: boolean;
+  categoryPresetsEnabled?: boolean;
+  visualBuilderEnabled?: boolean;
   backupsEnabled: boolean;
 }) {
   const router = useRouter();
@@ -264,6 +252,24 @@ export function SettingsHubClient({
   const [hsnDigits, setHsnDigits] = useState<4 | 6>(tenant.tax_config.hsn_digits ?? 4);
   const [stateCode, setStateCode] = useState(tenant.tax_config.default_state_code ?? "33");
 
+  // Product Categories (Category -> Sizes, Colours, Pack & Attached Fields)
+  const [catTemplates, setCatTemplates] = useState<CategoryTemplate[]>(() =>
+    resolveCategoryTemplates(tenant.brand_config, tenant.vertical_key)
+  );
+  const [catEditingOrig, setCatEditingOrig] = useState<string | null>(null);
+  const [catName, setCatName] = useState("");
+  const [catSizes, setCatSizes] = useState("");
+  const [catColours, setCatColours] = useState("");
+  const [catPack, setCatPack] = useState("20");
+  const [catAttachedFields, setCatAttachedFields] = useState<string[]>([]);
+  const [catCustomFieldInput, setCatCustomFieldInput] = useState("");
+  const [savingCatTemplates, setSavingCatTemplates] = useState(false);
+  const [previewCategory, setPreviewCategory] = useState<string>(() => {
+    const initial = resolveCategoryTemplates(tenant.brand_config, tenant.vertical_key);
+    return initial[0]?.category ?? "";
+  });
+  const [builderMode, setBuilderMode] = useState<"normal" | "visual">("normal");
+
   // Schema state (Add New inline forms + dedicated Edit Popup Modals)
   const [axisName, setAxisName] = useState("");
   const [axisVals, setAxisVals] = useState("");
@@ -294,30 +300,6 @@ export function SettingsHubClient({
   const [previewSampleCode, setPreviewSampleCode] = useState("IMR-101");
   const [previewSamplePrice, setPreviewSamplePrice] = useState(1599);
 
-  // Branch state
-  const [editBranchId, setEditBranchId] = useState<string | null>(null);
-  const [bName, setBName] = useState("");
-  const [bCode, setBCode] = useState("");
-  const [bType, setBType] = useState<"factory" | "retail" | "warehouse">("retail");
-  const [bGstin, setBGstin] = useState("");
-  const [bState, setBState] = useState("33");
-
-  // Staff state
-  const [editStaffTarget, setEditStaffTarget] = useState<{ id: string; full_name: string; email: string; role: "branch_admin" | "worker" } | null>(null);
-  const [sName, setSName] = useState("");
-  const [sUsername, setSUsername] = useState("");
-  const [sEmail, setSEmail] = useState("");
-  const [sRole, setSRole] = useState<"branch_admin" | "worker">("worker");
-  const [sPw, setSPw] = useState("");
-  const [sBranch, setSBranch] = useState(branches[0]?.id ?? "");
-  const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
-  const [resetPw, setResetPw] = useState("");
-
-  const permLookup = new Map<string, boolean>();
-  for (const r of rolePermRows) {
-    permLookup.set(`${r.role}:${r.permission_key}`, r.allowed);
-  }
-
   return (
     <div className="space-y-4">
       <Tabs
@@ -327,9 +309,6 @@ export function SettingsHubClient({
           { id: "profile", label: "My Profile, Bank & GST" },
           { id: "brand", label: "Shop Look" },
           { id: "schema", label: "Product Options" },
-          { id: "branches", label: `Shops (${branches.length}/${tenant.max_branches})` },
-          { id: "staff", label: `Staff`, badge: resets.length || undefined },
-          { id: "permissions", label: "Staff Access" },
           { id: "devices", label: "Offline Counters" },
           { id: "backups", label: "Backups" },
         ]}
@@ -1095,12 +1074,34 @@ export function SettingsHubClient({
 
       {tab === "schema" && (() => {
         // Build live preview lists that include saved items + live modal edits or new drafts!
+        const draftCatSizes = parseCommaList(catSizes);
+        const draftCatColours = parseCommaList(catColours);
+        const hasDraftCat = catName.trim().length > 0;
+        const effectiveCatTemplates = hasDraftCat
+          ? upsertCategoryTemplate(
+              catTemplates,
+              {
+                category: catName.trim(),
+                default_sizes: draftCatSizes,
+                default_colours: draftCatColours,
+                default_pieces_per_carton: Math.max(1, Number(catPack || 20)),
+                extra_fields: catAttachedFields,
+              },
+              catEditingOrig
+            )
+          : catTemplates;
+        const activePreviewCat =
+          effectiveCatTemplates.find((t) => t.category.toLowerCase() === previewCategory.trim().toLowerCase())
+            ?.category ??
+          effectiveCatTemplates[0]?.category ??
+          "";
+
         const draftAxisVals = Array.from(new Set(axisVals.split(",").map((s) => s.trim()).filter(Boolean)));
         const hasDraftAxis = axisName.trim().length > 0 && draftAxisVals.length > 0;
         const modalAxisVals = editAxisModal
           ? Array.from(new Set(editAxisModal.vals.split(",").map((s) => s.trim()).filter(Boolean)))
           : [];
-        const previewAxes: Array<{ id: string; name: string; preset_values: string[]; isDraft?: boolean }> = [
+        const basePreviewAxes: Array<{ id: string; name: string; preset_values: string[]; isDraft?: boolean }> = [
           ...axes.map((a) =>
             editAxisModal && editAxisModal.id === a.id && editAxisModal.name.trim() && modalAxisVals.length > 0
               ? { id: a.id, name: editAxisModal.name.trim(), preset_values: modalAxisVals, isDraft: true }
@@ -1111,12 +1112,37 @@ export function SettingsHubClient({
             : []),
         ];
 
+        const catSizeRes = resolveSizesForCategory(effectiveCatTemplates, activePreviewCat, basePreviewAxes);
+        const catColourRes = resolveColoursForCategory(effectiveCatTemplates, activePreviewCat, basePreviewAxes);
+        const previewAxes: Array<{ id: string; name: string; preset_values: string[]; isDraft?: boolean; badge?: string }> = [];
+        if (catSizeRes.sizes.length > 0) {
+          previewAxes.push({
+            id: `__cat_size_${activePreviewCat || "general"}__`,
+            name: "Size",
+            preset_values: catSizeRes.sizes,
+            badge: catSizeRes.source === "category" && activePreviewCat ? `${activePreviewCat} sizes` : undefined,
+          });
+        }
+        if (catColourRes.colours.length > 0) {
+          previewAxes.push({
+            id: `__cat_colour_${activePreviewCat || "general"}__`,
+            name: "Colour",
+            preset_values: catColourRes.colours,
+            badge: catColourRes.source === "category" && activePreviewCat ? `${activePreviewCat} colours` : undefined,
+          });
+        }
+        for (const ax of basePreviewAxes) {
+          const lower = ax.name.trim().toLowerCase();
+          if (lower === "size" || lower === "sizes" || lower === "colour" || lower === "color") continue;
+          previewAxes.push(ax);
+        }
+
         const draftFieldOpts = Array.from(new Set(cfOpts.split(",").map((s) => s.trim()).filter(Boolean)));
         const hasDraftField = cfLabel.trim().length > 0;
         const modalFieldOpts = editFieldModal
           ? Array.from(new Set(editFieldModal.opts.split(",").map((s) => s.trim()).filter(Boolean)))
           : [];
-        const previewFields: Array<{
+        const allPreviewFields: Array<{
           id: string;
           label: string;
           field_type: "text" | "number" | "select" | "boolean" | "date";
@@ -1163,6 +1189,31 @@ export function SettingsHubClient({
               ]
             : []),
         ];
+
+        const catFieldsResolved = resolveCustomFieldsForCategory(
+          effectiveCatTemplates,
+          activePreviewCat,
+          fields
+        );
+        const previewFields = catFieldsResolved.isCategoryFiltered
+          ? [
+              ...catFieldsResolved.fields.map((cf) => {
+                const live = allPreviewFields.find((p) => p.id === cf.id);
+                return (
+                  live ?? {
+                    id: cf.id,
+                    label: cf.label,
+                    field_type: cf.field_type,
+                    options: Array.isArray(cf.options) ? cf.options : [],
+                    show_on_bill: cf.show_on_bill,
+                    show_on_website: cf.show_on_website,
+                    show_in_catalogue: cf.show_in_catalogue,
+                  }
+                );
+              }),
+              ...(hasDraftField ? allPreviewFields.filter((p) => p.id === "__draft_field__") : []),
+            ]
+          : allPreviewFields;
 
         const getSelectedForAxis = (ax: { id: string; preset_values: string[] }) => {
           const picked = previewSelected[ax.id];
@@ -1249,30 +1300,616 @@ export function SettingsHubClient({
         ];
 
         const activeWebsiteSummary = previewAxes.map((ax) => `${ax.name}: ${getWebsitePick(ax)}`).filter(Boolean).join(", ");
+        const canManageCategories = userRole === "owner" || userRole === "branch_admin" || permissions["settings.catalog_schema"];
+
+        const startEditCategory = (t: CategoryTemplate) => {
+          setCatEditingOrig(t.category);
+          setCatName(t.category);
+          setCatSizes(t.default_sizes.join(", "));
+          setCatColours(t.default_colours.join(", "));
+          setCatPack(String(t.default_pieces_per_carton || 20));
+          setCatAttachedFields([...t.extra_fields]);
+          setPreviewCategory(t.category);
+        };
+
+        const resetCategoryForm = () => {
+          setCatEditingOrig(null);
+          setCatName("");
+          setCatSizes("");
+          setCatColours("");
+          setCatPack("20");
+          setCatAttachedFields([]);
+          setCatCustomFieldInput("");
+        };
+
+        const saveCategoryForm = async (e: React.FormEvent) => {
+          e.preventDefault();
+          const clean = catName.trim();
+          if (!clean) {
+            toast.error("Please enter a category name (e.g. Men's Footwear).");
+            return;
+          }
+          const nextEntry: CategoryTemplate = {
+            category: clean,
+            default_sizes: parseCommaList(catSizes),
+            default_colours: parseCommaList(catColours),
+            default_pieces_per_carton: Math.max(1, Number(catPack || 20)),
+            extra_fields: Array.from(new Set(catAttachedFields.map((f) => f.trim()).filter(Boolean))),
+          };
+          const nextList = upsertCategoryTemplate(catTemplates, nextEntry, catEditingOrig);
+          setSavingCatTemplates(true);
+          try {
+            await updateCategoryTemplatesAction(nextList);
+            setCatTemplates(nextList);
+            setPreviewCategory(clean);
+            toast.success(catEditingOrig ? `Updated "${clean}"!` : `Added "${clean}"!`);
+            resetCategoryForm();
+            router.refresh();
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not save category.");
+          } finally {
+            setSavingCatTemplates(false);
+          }
+        };
+
+        const deleteCategoryItem = async (targetName: string) => {
+          if (!confirm(`Remove category "${targetName}"? Existing products won't be deleted.`)) return;
+          const nextList = removeCategoryTemplate(catTemplates, targetName);
+          setSavingCatTemplates(true);
+          try {
+            await updateCategoryTemplatesAction(nextList);
+            setCatTemplates(nextList);
+            if (previewCategory.toLowerCase() === targetName.toLowerCase()) {
+              setPreviewCategory(nextList[0]?.category ?? "");
+            }
+            if (catEditingOrig?.toLowerCase() === targetName.toLowerCase()) {
+              resetCategoryForm();
+            }
+            toast.success(`Removed "${targetName}".`);
+            router.refresh();
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not remove category.");
+          } finally {
+            setSavingCatTemplates(false);
+          }
+        };
+
+        const toggleAttachedField = (fieldLabel: string) => {
+          setCatAttachedFields((prev) =>
+            prev.some((x) => x.toLowerCase() === fieldLabel.toLowerCase())
+              ? prev.filter((x) => x.toLowerCase() !== fieldLabel.toLowerCase())
+              : [...prev, fieldLabel]
+          );
+        };
+
+        const totalConfiguredSizes = catTemplates.reduce((sum, t) => sum + t.default_sizes.length, 0);
+
+        const saveVisualTemplates = async (nextList: CategoryTemplate[], successMessage?: string) => {
+          setSavingCatTemplates(true);
+          try {
+            await updateCategoryTemplatesAction(nextList);
+            setCatTemplates(nextList);
+            if (successMessage) toast.success(successMessage);
+            router.refresh();
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not save categories.");
+          } finally {
+            setSavingCatTemplates(false);
+          }
+        };
+
+        const createVisualField = async (input: {
+          label: string;
+          fieldType: "text" | "number" | "select" | "boolean" | "date";
+          options: string[];
+        }) => {
+          await createCustomFieldAction({
+            fieldKey: input.label,
+            label: input.label,
+            fieldType: input.fieldType,
+            options: input.options,
+            showOnBill: false,
+            showOnWebsite: true,
+            showInCatalogue: true,
+          });
+          router.refresh();
+        };
 
         return (
           <div className="space-y-4">
-            {!stockEnabled ? (
-              <Alert variant="warning">Dynamic Stock Matrix is not active on your current plan.</Alert>
+            {!stockEnabled && !categoryPresetsEnabled && !visualBuilderEnabled ? (
+              <Alert variant="warning">Product Options are not active on your current plan.</Alert>
             ) : (
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 items-start">
-                {/* LEFT COLUMN: BUILDER (7 cols) */}
-                <div className="space-y-4 lg:col-span-7">
-                  {/* Card 1: Sizes, Colours & Variant Options */}
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center gap-2.5">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#171717] text-white">
-                          <Layers className="h-4 w-4" />
-                        </span>
-                        <div>
-                          <h3 className="text-sm font-semibold">1. Sizes, Colours &amp; Options ({axes.length})</h3>
-                          <p className="text-[11.5px] text-[#77777d]">
-                            Each option combination creates its own stock count &amp; barcode when adding products.
-                          </p>
-                        </div>
+              <>
+                {/* Builder Mode Switcher + Plain-English Overview */}
+                <div className="rounded-2xl border border-[#e5e5e7] bg-[#fafafa] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-[#171717]">How Your Products Are Organized</p>
+                      <p className="mt-0.5 text-xs text-[#77777d]">
+                        When adding stock, you pick a <strong>Category</strong> first — the right <strong>Sizes</strong>,{" "}
+                        <strong>Colours</strong>, and <strong>Extra Details</strong> for that category appear automatically.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      {/* Normal Builder / Visual Builder Toggle */}
+                      <div
+                        role="tablist"
+                        aria-label="Product builder view"
+                        className="inline-flex rounded-full bg-[#e7e7e9] p-1 text-xs font-semibold"
+                      >
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={builderMode === "normal"}
+                          onClick={() => setBuilderMode("normal")}
+                          className={`cursor-pointer inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 transition-all ${
+                            builderMode === "normal"
+                              ? "bg-white text-[#171717] shadow-xs"
+                              : "text-[#77777d] hover:text-[#171717]"
+                          }`}
+                        >
+                          <LayoutGrid className="h-3.5 w-3.5" /> Normal Builder
+                        </button>
+                        {visualBuilderEnabled && (
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={builderMode === "visual"}
+                            onClick={() => setBuilderMode("visual")}
+                            className={`cursor-pointer inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 transition-all ${
+                              builderMode === "visual"
+                                ? "bg-white text-[#171717] shadow-xs"
+                                : "text-[#77777d] hover:text-[#171717]"
+                            }`}
+                          >
+                            <Network className="h-3.5 w-3.5" /> Visual Builder
+                          </button>
+                        )}
                       </div>
-                    </CardHeader>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+                        <span className="rounded-full bg-white px-2.5 py-1 text-[#171717] border border-[#e5e5e7]">
+                          {catTemplates.length} Categories
+                        </span>
+                        <span className="rounded-full bg-white px-2.5 py-1 text-[#171717] border border-[#e5e5e7]">
+                          {totalConfiguredSizes} Sizes
+                        </span>
+                        <span className="rounded-full bg-white px-2.5 py-1 text-[#171717] border border-[#e5e5e7]">
+                          {fields.length} Fields
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  {builderMode === "normal" && (
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 text-xs">
+                      <div className="rounded-xl border border-[#ececee] bg-white px-3 py-2">
+                        <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#77777d]">Step 1 · Product</p>
+                        <p className="mt-0.5 font-semibold text-[#171717]">Name, Code &amp; Price</p>
+                        <p className="text-[11px] text-[#77777d]">Example: Classic Runner · IMR-101</p>
+                      </div>
+                      <div className="rounded-xl border border-[#ececee] bg-white px-3 py-2">
+                        <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#77777d]">Step 2 · Pick Category</p>
+                        <p className="mt-0.5 font-semibold text-[#171717]">Men&apos;s, Women&apos;s, Kids, Baby…</p>
+                        <p className="text-[11px] text-[#77777d]">Each category has its own size list</p>
+                      </div>
+                      <div className="rounded-xl border border-[#ececee] bg-white px-3 py-2">
+                        <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#77777d]">Step 3 · Sizes &amp; Details</p>
+                        <p className="mt-0.5 font-semibold text-[#171717]">Right Sizes + Attached Fields</p>
+                        <p className="text-[11px] text-[#77777d]">Only shows what belongs to that category</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {builderMode === "visual" ? (
+                  <VisualProductBuilder
+                    templates={catTemplates}
+                    customFields={fields}
+                    canManage={canManageCategories}
+                    saving={savingCatTemplates}
+                    onSaveTemplates={saveVisualTemplates}
+                    onCreateField={createVisualField}
+                  />
+                ) : (
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 items-start">
+                  {/* LEFT COLUMN: BUILDER (7 cols) */}
+                  <div className="space-y-4 lg:col-span-7">
+                    {/* Card 1: Product Categories & Their Sizes (Visual Cards + Dynamic Editor) */}
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center gap-2.5">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#171717] text-white">
+                            <Package className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <h3 className="text-sm font-semibold">
+                              1. Product Categories &amp; Sizes ({catTemplates.length})
+                            </h3>
+                            <p className="text-[11.5px] text-[#77777d]">
+                              Click any category to preview it on the right, or edit its sizes, colours, and attached details.
+                            </p>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {catTemplates.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-[#d4d4d8] bg-[#fafafa] p-4 text-center text-xs text-[#77777d]">
+                            No categories yet. Click a starter button below (like Men&apos;s Footwear) or add your own.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                            {catTemplates.map((t) => {
+                              const isSelected = activePreviewCat.toLowerCase() === t.category.toLowerCase();
+                              return (
+                                <div
+                                  key={t.category}
+                                  onClick={() => setPreviewCategory(t.category)}
+                                  className={`cursor-pointer rounded-xl border p-3 text-xs transition-all ${
+                                    isSelected
+                                      ? "border-[#171717] bg-white ring-1 ring-[#171717]/15"
+                                      : "border-[#ececee] bg-[#fafafa] hover:border-[#d4d4d8]"
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <p className="font-semibold text-[#171717] truncate">{t.category}</p>
+                                        <span className="rounded-full bg-[#f4f4f5] px-2 py-0.5 text-[10px] font-medium text-[#52525b]">
+                                          {t.default_pieces_per_carton} / box
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {canManageCategories && (
+                                      <div
+                                        className="flex items-center gap-1 shrink-0"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <button
+                                          type="button"
+                                          title={`Edit ${t.category}`}
+                                          onClick={() => startEditCategory(t)}
+                                          className="rounded-lg bg-white p-1.5 text-[#171717] shadow-[0_0_0_1px_rgba(0,0,0,.08)] transition-colors hover:bg-[#f4f4f5] cursor-pointer"
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          title={`Remove ${t.category}`}
+                                          disabled={savingCatTemplates}
+                                          onClick={() => deleteCategoryItem(t.category)}
+                                          className="rounded-lg bg-white p-1.5 text-rose-600 shadow-[0_0_0_1px_rgba(0,0,0,.08)] transition-colors hover:bg-rose-50 cursor-pointer"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Sizes visual chips */}
+                                  <div className="mt-2.5 space-y-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[#77777d]">
+                                      Sizes ({t.default_sizes.length})
+                                    </p>
+                                    {t.default_sizes.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {t.default_sizes.map((s) => (
+                                          <span
+                                            key={s}
+                                            className="rounded-md border border-[#e5e5e7] bg-white px-2 py-0.5 text-[10.5px] font-semibold text-[#171717]"
+                                          >
+                                            {s}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[10.5px] text-[#77777d] italic">Uses general sizes</p>
+                                    )}
+                                  </div>
+
+                                  {/* Attached Fields visual badges */}
+                                  <div className="mt-2 space-y-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[#77777d]">
+                                      Attached Fields ({t.extra_fields.length})
+                                    </p>
+                                    {t.extra_fields.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {t.extra_fields.map((ef) => (
+                                          <span
+                                            key={ef}
+                                            className="rounded-md bg-[#171717]/5 border border-[#e5e5e7] px-2 py-0.5 text-[10px] font-medium text-[#171717]"
+                                          >
+                                            {ef}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[10.5px] text-[#77777d] italic">Shows all general extra details</p>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* 1-Click Business Presets (Multiple Verticals) */}
+                        <div className="space-y-2 border-t border-[#ececee] pt-3">
+                          <div className="flex flex-wrap items-center justify-between gap-1">
+                            <p className="text-[11px] font-semibold text-[#171717]">
+                              Ready-Made Business Presets (1-click setup):
+                            </p>
+                            <span className="text-[10.5px] text-[#77777d]">
+                              Loads categories, sizes &amp; fields — you can edit anything after
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {VERTICAL_CATEGORY_PRESETS.map((preset) => (
+                              <button
+                                key={preset.key}
+                                type="button"
+                                disabled={!canManageCategories || savingCatTemplates}
+                                title={preset.description}
+                                onClick={async () => {
+                                  if (
+                                    !confirm(
+                                      `Load the "${preset.label}" preset (${preset.categories
+                                        .map((c) => c.category)
+                                        .join(", ")})? This replaces your category list above (existing products are not affected).`
+                                    )
+                                  ) {
+                                    return;
+                                  }
+                                  const nextList = preset.categories.map((c) => ({
+                                    ...c,
+                                    default_sizes: [...c.default_sizes],
+                                    default_colours: [...c.default_colours],
+                                    extra_fields: [...c.extra_fields],
+                                  }));
+                                  setSavingCatTemplates(true);
+                                  try {
+                                    await updateCategoryTemplatesAction(nextList);
+                                    setCatTemplates(nextList);
+                                    setPreviewCategory(nextList[0]?.category ?? "");
+                                    resetCategoryForm();
+                                    toast.success(`Loaded ${preset.label} preset (${nextList.length} categories)!`);
+                                    router.refresh();
+                                  } catch (err) {
+                                    toast.error(err instanceof Error ? err.message : "Could not load preset.");
+                                  } finally {
+                                    setSavingCatTemplates(false);
+                                  }
+                                }}
+                                className="cursor-pointer rounded-full border border-[#171717]/20 bg-white px-3 py-1 text-[11px] font-semibold text-[#171717] transition-colors hover:bg-[#171717] hover:text-white disabled:opacity-50"
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="pt-1 space-y-1">
+                            <p className="text-[10.5px] font-medium text-[#77777d]">
+                              Or add one footwear category to the form below:
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {FOOTWEAR_CATEGORY_STARTERS.map((starter) => (
+                                <button
+                                  key={starter.category}
+                                  type="button"
+                                  onClick={() => {
+                                    setCatEditingOrig(null);
+                                    setCatName(starter.category);
+                                    setCatSizes(starter.default_sizes.join(", "));
+                                    setCatColours(starter.default_colours.join(", "));
+                                    setCatPack(String(starter.default_pieces_per_carton));
+                                    setCatAttachedFields([...starter.extra_fields]);
+                                    setPreviewCategory(starter.category);
+                                  }}
+                                  className="cursor-pointer rounded-full border border-[#e5e5e7] bg-[#fafafa] px-2.5 py-1 text-[11px] font-medium text-[#171717] transition-colors hover:bg-[#171717] hover:text-white hover:border-[#171717]"
+                                >
+                                  + {starter.category}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Add / Edit Category Form */}
+                        <Form
+                          onSubmit={saveCategoryForm}
+                          className="space-y-3 rounded-xl border border-[#ececee] bg-[#fafafa] p-3.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="mb-0">
+                              {catEditingOrig ? `Editing Category: ${catEditingOrig}` : "Add New Category"}
+                            </Label>
+                            <div className="flex items-center gap-2">
+                              {hasDraftCat && (
+                                <span className="rounded-full bg-[#171717] px-2 py-0.5 text-[10px] font-semibold text-white">
+                                  Live in preview →
+                                </span>
+                              )}
+                              {catEditingOrig && (
+                                <button
+                                  type="button"
+                                  onClick={resetCategoryForm}
+                                  className="text-[11px] font-medium text-[#77777d] hover:text-[#171717] cursor-pointer"
+                                >
+                                  Cancel edit
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+                            <div className="sm:col-span-8">
+                              <Label className="text-[11px]">Category Name *</Label>
+                              <Input
+                                placeholder="e.g. Men's Footwear, Baby Footwear, School Shoes"
+                                value={catName}
+                                onChange={(e) => {
+                                  setCatName(e.target.value);
+                                  if (e.target.value.trim()) setPreviewCategory(e.target.value.trim());
+                                }}
+                                required
+                              />
+                            </div>
+                            <div className="sm:col-span-4">
+                              <Label className="text-[11px]">Pairs per Box / Carton</Label>
+                              <Input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="20"
+                                value={catPack}
+                                onChange={(e) => setCatPack(e.target.value.replace(/\D/g, ""))}
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <Label className="text-[11px]">
+                              Sizes for this Category (separate with commas)
+                            </Label>
+                            <Input
+                              placeholder="e.g. 6, 7, 8, 9, 10, 11  or  0-3M, 3-6M, 6-12M"
+                              value={catSizes}
+                              onChange={(e) => setCatSizes(e.target.value)}
+                            />
+                            {draftCatSizes.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {draftCatSizes.map((s) => (
+                                  <span
+                                    key={s}
+                                    className="rounded-md bg-white border border-[#e5e5e7] px-2 py-0.5 text-[10.5px] font-semibold text-[#171717]"
+                                  >
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div>
+                            <Label className="text-[11px]">
+                              Colours for this Category (optional, separate with commas)
+                            </Label>
+                            <Input
+                              placeholder="e.g. Black, Brown, Tan, White (leave empty to use general colours)"
+                              value={catColours}
+                              onChange={(e) => setCatColours(e.target.value)}
+                            />
+                          </div>
+
+                          {/* Attach Extra Fields to this Category */}
+                          <div className="space-y-2 rounded-lg border border-[#e5e5e7] bg-white p-3">
+                            <p className="text-[11px] font-semibold text-[#171717]">
+                              Fields Attached to This Category (optional)
+                            </p>
+                            <p className="text-[10.5px] text-[#77777d]">
+                              Tap fields to attach them to this category, or type a new field name below. Leave empty to show all general fields.
+                            </p>
+                            {fields.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {fields.map((f) => {
+                                  const active = catAttachedFields.some(
+                                    (x) => x.toLowerCase() === f.label.toLowerCase()
+                                  );
+                                  return (
+                                    <button
+                                      key={f.id}
+                                      type="button"
+                                      onClick={() => toggleAttachedField(f.label)}
+                                      className={`cursor-pointer rounded-lg px-2.5 py-1 text-[11px] font-medium border transition-colors ${
+                                        active
+                                          ? "bg-[#171717] text-white border-[#171717]"
+                                          : "bg-[#fafafa] text-[#52525b] border-[#e5e5e7] hover:border-[#171717]"
+                                      }`}
+                                    >
+                                      {active ? "✓ " : "+ "}
+                                      {f.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {catAttachedFields.filter(
+                              (lbl) => !fields.some((f) => f.label.toLowerCase() === lbl.toLowerCase())
+                            ).length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {catAttachedFields
+                                  .filter((lbl) => !fields.some((f) => f.label.toLowerCase() === lbl.toLowerCase()))
+                                  .map((lbl) => (
+                                    <button
+                                      key={lbl}
+                                      type="button"
+                                      onClick={() => toggleAttachedField(lbl)}
+                                      className="cursor-pointer rounded-lg bg-[#171717] px-2.5 py-1 text-[11px] font-medium text-white"
+                                      title="Click to remove"
+                                    >
+                                      ✓ {lbl} ×
+                                    </button>
+                                  ))}
+                              </div>
+                            )}
+                            <div className="flex gap-1.5">
+                              <Input
+                                value={catCustomFieldInput}
+                                onChange={(e) => setCatCustomFieldInput(e.target.value)}
+                                placeholder="Add custom field for this category (e.g. Heel Height, Soft Sole)"
+                                className="h-8 text-xs"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    const raw = catCustomFieldInput.trim();
+                                    if (!raw) return;
+                                    const parts = parseCommaList(raw);
+                                    setCatAttachedFields((prev) => Array.from(new Set([...prev, ...parts])));
+                                    setCatCustomFieldInput("");
+                                  }
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const raw = catCustomFieldInput.trim();
+                                  if (!raw) return;
+                                  const parts = parseCommaList(raw);
+                                  setCatAttachedFields((prev) => Array.from(new Set([...prev, ...parts])));
+                                  setCatCustomFieldInput("");
+                                }}
+                              >
+                                <Plus className="h-3.5 w-3.5" /> Attach
+                              </Button>
+                            </div>
+                          </div>
+
+                          <Button type="submit" size="sm" disabled={!canManageCategories || savingCatTemplates}>
+                            <Plus className="h-3.5 w-3.5" />{" "}
+                            {savingCatTemplates
+                              ? "Saving..."
+                              : catEditingOrig
+                              ? "Save Category Changes"
+                              : "Save Category"}
+                          </Button>
+                        </Form>
+                      </CardContent>
+                    </Card>
+
+                    {/* Card 2: General Sizes, Colours & Options */}
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center gap-2.5">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#171717] text-white">
+                            <Layers className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <h3 className="text-sm font-semibold">2. General Sizes, Colours &amp; Options ({axes.length})</h3>
+                            <p className="text-[11.5px] text-[#77777d]">
+                              Shared choices used across all categories (like Colours or Pack Type, or fallback Sizes).
+                            </p>
+                          </div>
+                        </div>
+                      </CardHeader>
                     <CardContent className="space-y-4">
                       {axes.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-[#d4d4d8] bg-[#fafafa] p-4 text-center text-xs text-[#77777d]">
@@ -1422,9 +2059,9 @@ export function SettingsHubClient({
                           <SlidersHorizontal className="h-4 w-4" />
                         </span>
                         <div>
-                          <h3 className="text-sm font-semibold">2. Extra Product Details ({fields.length})</h3>
+                          <h3 className="text-sm font-semibold">3. Extra Product Details ({fields.length})</h3>
                           <p className="text-[11.5px] text-[#77777d]">
-                            Custom fields like Sole Type, Upper Material, or Carton Pack — choose where each appears.
+                            Reusable detail fields (like Sole Type, Material, or Warranty). You can attach them to any category above.
                           </p>
                         </div>
                       </div>
@@ -1709,6 +2346,40 @@ export function SettingsHubClient({
                                 />
                               </div>
                             </div>
+                            {/* Category Switcher in Live Preview */}
+                            {effectiveCatTemplates.length > 0 && (
+                              <div className="border-t border-[#ececee] pt-2.5 space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10.5px] font-semibold uppercase tracking-wider text-[#77777d]">
+                                    Category (Tap to test sizes &amp; fields)
+                                  </span>
+                                  {activePreviewCat && (
+                                    <span className="text-[10px] font-medium text-[#52525b]">
+                                      {catSizeRes.sizes.length} sizes · {previewFields.length} fields
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {effectiveCatTemplates.map((t) => {
+                                    const active = activePreviewCat.toLowerCase() === t.category.toLowerCase();
+                                    return (
+                                      <button
+                                        key={t.category}
+                                        type="button"
+                                        onClick={() => setPreviewCategory(t.category)}
+                                        className={`cursor-pointer rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
+                                          active
+                                            ? "bg-[#171717] text-white"
+                                            : "bg-white text-[#52525b] border border-[#e5e5e7] hover:border-[#171717] hover:text-[#171717]"
+                                        }`}
+                                      >
+                                        {t.category}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           {/* Interactive Variant Option Chips */}
@@ -2087,6 +2758,8 @@ export function SettingsHubClient({
                   </Card>
                 </div>
               </div>
+                )}
+              </>
             )}
 
             {/* Popup Edit Modal: Option Group (Sizes, Colours & Options) */}
@@ -2290,352 +2963,6 @@ export function SettingsHubClient({
         );
       })()}
 
-      {tab === "branches" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader><h3 className="text-sm font-semibold">Active Branches</h3></CardHeader>
-            <CardContent className="space-y-2">
-              <Paged items={branches} size={8}>{(pagedRows) => pagedRows.map((b) => (
-                <div key={b.id} className="rounded-[10px] border border-slate-200 p-3 text-xs flex flex-wrap justify-between items-center gap-2">
-                  <div>
-                    <p className="font-semibold text-slate-900">{b.name} ({b.code}) {b.is_default && <Badge variant="info" className="ml-1">Default</Badge>}</p>
-                    <p className="text-slate-500">{b.type} • State {b.state_code} • GSTIN: {b.gstin || "None"}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {b.is_read_only && <Badge variant="warning">Read-Only</Badge>}
-                    {permissions["settings.tax_and_hsn"] && (
-                      <>
-                        <button
-                          type="button"
-                          title="Edit Branch"
-                          onClick={() => {
-                            setEditBranchId(b.id);
-                            setBName(b.name);
-                            setBCode(b.code);
-                            setBType(b.type);
-                            setBGstin(b.gstin ?? "");
-                            setBState(b.state_code);
-                          }}
-                          className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50 cursor-pointer"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        {!b.is_default && (
-                          <button
-                            type="button"
-                            title="Delete Branch"
-                            onClick={async () => {
-                              if (!confirm(`Delete branch "${b.name}"?`)) return;
-                              try {
-                                await deleteBranchAction(b.id);
-                                toast.success("Branch deleted.");
-                                router.refresh();
-                              } catch (err) {
-                                toast.error(err instanceof Error ? err.message : "Cannot delete branch with existing transactions.");
-                              }
-                            }}
-                            className="rounded-lg bg-white p-1.5 text-rose-600 shadow-[0_0_0_1px_rgba(0,0,0,.08)] transition-colors hover:bg-rose-50 cursor-pointer"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}</Paged>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><h3 className="text-sm font-semibold">{editBranchId ? "Edit Branch" : "Add Branch"}</h3></CardHeader>
-            <CardContent>
-              <Form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  try {
-                    if (editBranchId) {
-                      await updateBranchAction({ id: editBranchId, name: bName, code: bCode, type: bType, gstin: bGstin, stateCode: bState });
-                      toast.success("Branch updated.");
-                    } else {
-                      await createBranchAction({ name: bName, code: bCode, type: bType, gstin: bGstin, stateCode: bState });
-                      toast.success("Branch created.");
-                    }
-                    setEditBranchId(null);
-                    setBName("");
-                    setBCode("");
-                    setBGstin("");
-                    router.refresh();
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Failed");
-                  }
-                }}
-                className="space-y-3"
-              >
-                <div className="grid grid-cols-2 gap-2">
-                  <div><Label>Name</Label><Input value={bName} onChange={(e) => setBName(e.target.value)} required /></div>
-                  <div><Label>Code (≤4)</Label><Input maxLength={4} value={bCode} onChange={(e) => setBCode(e.target.value.toUpperCase())} required /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label>Type</Label>
-                    <Select value={bType} onChange={(e) => setBType(e.target.value as typeof bType)}>
-                      <option value="retail">Retail Shop</option>
-                      <option value="factory">Factory</option>
-                      <option value="warehouse">Warehouse</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>State</Label>
-                    <Select value={bState} onChange={(e) => setBState(e.target.value)}>
-                      {Object.entries(INDIAN_STATES).map(([c, n]) => <option key={c} value={c}>{c} — {n}</option>)}
-                    </Select>
-                  </div>
-                </div>
-                <div>
-                  <Label>Branch GSTIN (optional)</Label>
-                  <GstinInput value={bGstin} onChange={setBGstin} onStateDetected={setBState} />
-                </div>
-                <div className="flex gap-2">
-                  <Button type="submit" disabled={!permissions["settings.tax_and_hsn"]}>
-                    {editBranchId ? "Update Branch" : "Create Branch"}
-                  </Button>
-                  {editBranchId && (
-                    <Button variant="outline" onClick={() => { setEditBranchId(null); setBName(""); setBCode(""); setBGstin(""); }}>
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              </Form>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {tab === "staff" && (
-        <div className="space-y-4">
-          {resets.length > 0 && permissions["staff.reset_password"] && (
-            <Card className="border-amber-300 bg-amber-50/40">
-              <CardHeader><h3 className="text-sm font-semibold">Pending Staff Password Reset Requests</h3></CardHeader>
-              <CardContent className="space-y-2">
-                <Paged items={resets} size={8}>{(pagedRows) => pagedRows.map((r) => (
-                  <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white border border-amber-200 p-2.5 text-xs">
-                    <div>
-                      <p className="font-bold">{r.full_name} ({r.role})</p>
-                      <p className="text-slate-500">Submitted: {r.identifier_submitted} {r.note ? `• "${r.note}"` : ""}</p>
-                    </div>
-                    <Button size="sm" onClick={() => setResetTarget({ id: r.user_id, name: r.full_name ?? r.identifier_submitted })}>
-                      <KeyRound className="h-3.5 w-3.5" /> Reset Password
-                    </Button>
-                  </div>
-                ))}</Paged>
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader><h3 className="text-sm font-semibold">Team ({staff.length}/{tenant.max_users})</h3></CardHeader>
-              <CardContent className="space-y-2">
-                <Paged items={staff} size={10}>{(pagedRows) => pagedRows.map((u) => (
-                  <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-slate-200 p-3 text-xs">
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {u.full_name} <Badge>{u.role}</Badge>
-                        {!u.is_active && <Badge variant="danger" className="ml-1">Disabled</Badge>}
-                      </p>
-                      <p className="text-slate-500">Username: <code>{u.username ?? "—"}</code> {u.email ? `• ${u.email}` : ""}</p>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {permissions["staff.reset_password"] && u.role !== "owner" && (userRole === "owner" || u.role === "worker") && (
-                        <Button size="sm" variant="outline" onClick={() => setResetTarget({ id: u.id, name: u.full_name })}>
-                          <KeyRound className="h-3.5 w-3.5" /> Reset PW
-                        </Button>
-                      )}
-                      {permissions["settings.staff_and_roles"] && u.role !== "owner" && (
-                        <>
-                          <button
-                            type="button"
-                            title="Edit Staff"
-                            onClick={() =>
-                              setEditStaffTarget({
-                                id: u.id,
-                                full_name: u.full_name,
-                                email: u.email ?? "",
-                                role: u.role === "branch_admin" ? "branch_admin" : "worker",
-                              })
-                            }
-                            className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50 cursor-pointer"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            title={u.is_active ? "Deactivate Staff" : "Reactivate Staff"}
-                            onClick={async () => {
-                              if (!confirm(`${u.is_active ? "Deactivate" : "Reactivate"} staff account "${u.full_name}"?`)) return;
-                              await toggleStaffActiveAction(u.id, !u.is_active);
-                              toast.success(u.is_active ? "Staff deactivated." : "Staff reactivated.");
-                              router.refresh();
-                            }}
-                            className={`rounded-lg p-1.5 text-white cursor-pointer ${u.is_active ? "bg-rose-500 hover:bg-rose-600" : "bg-emerald-600 hover:bg-emerald-700"}`}
-                          >
-                            <UserX className="h-3.5 w-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}</Paged>
-              </CardContent>
-            </Card>
-
-            {permissions["staff.create"] && (
-              <Card>
-                <CardHeader><h3 className="text-sm font-semibold">Add Staff Account</h3></CardHeader>
-                <CardContent>
-                  <Form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      try {
-                        await createStaffAction({
-                          fullName: sName,
-                          username: sUsername,
-                          email: sEmail || undefined,
-                          role: sRole,
-                          password: sPw,
-                          branchIds: sBranch ? [sBranch] : [],
-                        });
-                        setSName(""); setSUsername(""); setSEmail(""); setSPw("");
-                        toast.success("Staff account created.");
-                        router.refresh();
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "Failed");
-                      }
-                    }}
-                    className="space-y-3"
-                  >
-                    <div className="grid grid-cols-2 gap-2">
-                      <div><Label>Full Name</Label><Input value={sName} onChange={(e) => setSName(e.target.value)} required /></div>
-                      <div><Label>Username</Label><Input value={sUsername} onChange={(e) => setSUsername(e.target.value)} required /></div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <Label>Role</Label>
-                        <Select value={sRole} onChange={(e) => setSRole(e.target.value as "branch_admin" | "worker")}>
-                          <option value="worker">Worker (Counter / Stock)</option>
-                          <option value="branch_admin">Branch / Shop Admin</option>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label>Assigned Branch</Label>
-                        <Select value={sBranch} onChange={(e) => setSBranch(e.target.value)}>
-                          {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                        </Select>
-                      </div>
-                    </div>
-                    <div><Label>Email (optional)</Label><Input type="email" value={sEmail} onChange={(e) => setSEmail(e.target.value)} /></div>
-                    <div><Label>Temporary Password (min 8 chars)</Label><Input type="text" minLength={8} value={sPw} onChange={(e) => setSPw(e.target.value)} required /></div>
-                    <Button type="submit">Add Staff Member</Button>
-                  </Form>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
-      )}
-
-      {tab === "permissions" && (() => {
-        const activePerms = PERMISSION_DEFINITIONS.filter((p) => isFeatureEnabled(tenant, p.feature));
-        const grouped = new Map<string, typeof activePerms>();
-        for (const p of activePerms) {
-          const list = grouped.get(p.module) ?? [];
-          list.push(p);
-          grouped.set(p.module, list);
-        }
-        const modules = Array.from(grouped.entries());
-
-        return (
-          <div className="space-y-3">
-            <div className="ui-tray">
-              <div className="ui-surface flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                <div>
-                  <h3 className="text-[13px] font-semibold text-[#171717]">
-                    Staff Role Permissions ({activePerms.length} permissions · All on One Page)
-                  </h3>
-                  <p className="text-[11.5px] text-[#77777d]">
-                    Click any box to allow or block what Branch Admins and Workers can do. Changes save automatically.
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 text-[11px] text-[#77777d]">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-[4px] bg-[#171717] text-white">
-                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                    </span>
-                    Allowed
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-[4px] bg-white shadow-[inset_0_0_0_1px_rgba(0,0,0,.18)]" />
-                    Blocked
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-              {modules.map(([modName, perms]) => (
-                <div key={modName} className="ui-tray">
-                  <div className="ui-surface overflow-hidden">
-                    <div className="grid grid-cols-[1fr_64px_64px] items-center border-b border-[#ececee] bg-[#fafafa] px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.05em] text-[#77777d]">
-                      <span className="text-[#171717]">
-                        {modName} <span className="font-normal text-[#a3a3a8]">({perms.length})</span>
-                      </span>
-                      <span className="text-center">Admin</span>
-                      <span className="text-center">Worker</span>
-                    </div>
-                    <div className="divide-y divide-[#f1f1f2]">
-                      {perms.map((p) => (
-                        <div
-                          key={p.key}
-                          className="grid grid-cols-[1fr_64px_64px] items-center px-3 py-1.5 text-xs hover:bg-[#fafafa]"
-                        >
-                          <span className="truncate pr-2 font-medium text-[#171717]">{p.label}</span>
-                          {(["branch_admin", "worker"] as const).map((role) => {
-                            const val = permLookup.get(`${role}:${p.key}`) ?? p[role];
-                            return (
-                              <div key={role} className="flex justify-center">
-                                <button
-                                  type="button"
-                                  disabled={!permissions["settings.staff_and_roles"]}
-                                  role="checkbox"
-                                  aria-checked={val}
-                                  aria-label={`${p.label} for ${role === "branch_admin" ? "Branch Admin" : "Worker"}`}
-                                  onClick={async () => {
-                                    await updateTenantRolePermissionAction(role, p.key, !val);
-                                    toast.success("Permission updated.");
-                                    router.refresh();
-                                  }}
-                                  className={`inline-flex h-[18px] w-[18px] items-center justify-center rounded-[5px] cursor-pointer transition-all active:scale-90 disabled:opacity-50 ${
-                                    val
-                                      ? "bg-[#171717] text-white shadow-2xs"
-                                      : "bg-white text-transparent shadow-[inset_0_0_0_1px_rgba(0,0,0,.18)] hover:bg-[#f4f4f5]"
-                                  }`}
-                                >
-                                  <Check className="h-3 w-3" strokeWidth={3} />
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
       {tab === "devices" && (
         <Card>
           <CardHeader><h3 className="text-sm font-semibold">Registered Offline POS Devices</h3></CardHeader>
@@ -2727,87 +3054,6 @@ export function SettingsHubClient({
           </CardContent>
         </Card>
       )}
-
-      <Dialog
-        open={Boolean(resetTarget)}
-        onClose={() => setResetTarget(null)}
-        title={`Reset Password — ${resetTarget?.name ?? ""}`}
-      >
-        <Form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (!resetTarget) return;
-            try {
-              await resetStaffPasswordAction(resetTarget.id, resetPw);
-              toast.success("Staff password updated.");
-              setResetTarget(null);
-              setResetPw("");
-              router.refresh();
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Failed");
-            }
-          }}
-          className="space-y-3"
-        >
-          <div>
-            <Label>New Temporary Password (min 8 chars)</Label>
-            <Input type="text" minLength={8} value={resetPw} onChange={(e) => setResetPw(e.target.value)} required />
-          </div>
-          <Button type="submit" className="w-full">Save Password</Button>
-        </Form>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(editStaffTarget)}
-        onClose={() => setEditStaffTarget(null)}
-        title={`Edit Staff — ${editStaffTarget?.full_name ?? ""}`}
-      >
-        {editStaffTarget && (
-          <Form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              await updateStaffAction({
-                id: editStaffTarget.id,
-                fullName: editStaffTarget.full_name,
-                email: editStaffTarget.email || undefined,
-                role: editStaffTarget.role,
-              });
-              toast.success("Staff details updated.");
-              setEditStaffTarget(null);
-              router.refresh();
-            }}
-            className="space-y-3"
-          >
-            <div>
-              <Label>Full Name</Label>
-              <Input
-                value={editStaffTarget.full_name}
-                onChange={(e) => setEditStaffTarget({ ...editStaffTarget, full_name: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <Label>Email (optional)</Label>
-              <Input
-                type="email"
-                value={editStaffTarget.email}
-                onChange={(e) => setEditStaffTarget({ ...editStaffTarget, email: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Role</Label>
-              <Select
-                value={editStaffTarget.role}
-                onChange={(e) => setEditStaffTarget({ ...editStaffTarget, role: e.target.value as "branch_admin" | "worker" })}
-              >
-                <option value="worker">Worker (Counter / Stock)</option>
-                <option value="branch_admin">Branch / Shop Admin</option>
-              </Select>
-            </div>
-            <Button type="submit" className="w-full">Save Staff Changes</Button>
-          </Form>
-        )}
-      </Dialog>
     </div>
   );
 }

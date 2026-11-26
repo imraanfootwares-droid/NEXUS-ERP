@@ -3,7 +3,7 @@ export type TenantRole = "owner" | "branch_admin" | "worker";
 export type TenantStatus = "active" | "suspended";
 
 export const FEATURE_KEYS = [
-  // Tier 1 (7)
+  // Tier 1 (9)
   "mobile_pc_access",
   "rbac_logins",
   "bill_designer",
@@ -11,17 +11,21 @@ export const FEATURE_KEYS = [
   "discounts_returns_payments",
   "analytics_basic",
   "data_exports_gst",
+  "category_size_presets",
+  "visual_product_builder",
   // Tier 2 (4)
   "customer_crm",
   "dynamic_stock_matrix",
   "bulk_excel_import",
   "auto_stock_and_alerts",
-  // Tier 3 (7)
+  // Tier 3 (9)
   "daily_backups",
   "bill_edit_history",
   "trash_bin",
   "multi_branch_ledgers",
   "supplier_and_production",
+  "ai_bill_scanner",
+  "bill_photo_archive",
   "stock_transfers",
   "owner_profit_analytics",
   // Tier 4 (3)
@@ -41,6 +45,8 @@ export const TIER_DEFAULT_FEATURES: Record<TierKey, FeatureKey[]> = {
     "discounts_returns_payments",
     "analytics_basic",
     "data_exports_gst",
+    "category_size_presets",
+    "visual_product_builder",
   ],
   tier_2: [
     "mobile_pc_access",
@@ -50,6 +56,8 @@ export const TIER_DEFAULT_FEATURES: Record<TierKey, FeatureKey[]> = {
     "discounts_returns_payments",
     "analytics_basic",
     "data_exports_gst",
+    "category_size_presets",
+    "visual_product_builder",
     "customer_crm",
     "dynamic_stock_matrix",
     "bulk_excel_import",
@@ -63,6 +71,8 @@ export const TIER_DEFAULT_FEATURES: Record<TierKey, FeatureKey[]> = {
     "discounts_returns_payments",
     "analytics_basic",
     "data_exports_gst",
+    "category_size_presets",
+    "visual_product_builder",
     "customer_crm",
     "dynamic_stock_matrix",
     "bulk_excel_import",
@@ -72,6 +82,8 @@ export const TIER_DEFAULT_FEATURES: Record<TierKey, FeatureKey[]> = {
     "trash_bin",
     "multi_branch_ledgers",
     "supplier_and_production",
+    "ai_bill_scanner",
+    "bill_photo_archive",
     "stock_transfers",
     "owner_profit_analytics",
   ],
@@ -135,6 +147,18 @@ export const FEATURE_META: Record<
     category: "Reports",
     description: "Sales & Purchase registers, GSTR-1, HSN & e-Way/IRP JSON",
   },
+  category_size_presets: {
+    label: "Dynamic Category Sizes & 5 Vertical Presets",
+    minTier: "tier_1",
+    category: "Inventory",
+    description: "Category-specific sizes, colours, attached fields & 1-click Footwear, Apparel, Electronics, FMCG & Hardware presets",
+  },
+  visual_product_builder: {
+    label: "Visual Block Product Builder",
+    minTier: "tier_1",
+    category: "Inventory",
+    description: "Interactive block canvas to wire Product → Categories → Sizes → Fields with Normal & Visual builder toggle",
+  },
   daily_backups: {
     label: "Automated Daily Cloud Backups",
     minTier: "tier_3",
@@ -188,6 +212,18 @@ export const FEATURE_META: Record<
     minTier: "tier_3",
     category: "Operations",
     description: "Suppliers, material/goods purchases, dues & production batches",
+  },
+  ai_bill_scanner: {
+    label: "Free AI Physical Bill Scanner",
+    minTier: "tier_3",
+    category: "Operations",
+    description: "Smart prompt + 1-click ChatGPT/Gemini/AI Studio/DeepSeek + editable stock preview (Tier 3+, Super Admin unlockable on Tier 1)",
+  },
+  bill_photo_archive: {
+    label: "Physical Bill Photo Archive (WebP)",
+    minTier: "tier_3",
+    category: "Operations",
+    description: "Auto-optimized supplier bill photos saved in R2 & viewable anytime in the ledger (Tier 3+, Super Admin unlockable on Tier 1)",
   },
   stock_transfers: {
     label: "Factory-to-Shop Transfers",
@@ -282,7 +318,7 @@ export const TIER_META: Record<
     priceInr: 50000,
     maxUsers: 5,
     maxBranches: 1,
-    summary: "Mobile/PC billing, 10 bill designs, GST bills, sales charts, GST exports & 1-click manual data download.",
+    summary: "Mobile/PC billing, 10 bill designs, GST bills, Dynamic Category Sizes, Visual Block Product Builder, sales charts & 1-click data download.",
   },
   tier_2: {
     name: "Tier 2 — Billing + Stock",
@@ -298,7 +334,7 @@ export const TIER_META: Record<
     priceInr: 150000,
     maxUsers: 10,
     maxBranches: 5,
-    summary: "Everything in Tier 2 plus Edit Old Bills & 1-Click Revert, 15-Day Trash Bin, automated daily cloud backups, suppliers, transfers & profit analytics.",
+    summary: "Everything in Tier 2 plus Free AI Physical Bill Scanner, Bill Photo Archive, Edit Old Bills & 15-Day Trash Bin, automated daily cloud backups, suppliers, transfers & profit analytics.",
   },
   tier_4: {
     name: "Tier 4 — Complete + Website & PDF",

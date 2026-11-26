@@ -4,6 +4,7 @@ import { canAccess } from "@/lib/auth/access";
 import { getBranchScope } from "@/lib/auth/active-branch";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
+import { resolveCategoryTemplates } from "@/lib/catalog/category-templates";
 import { resolveLedgerConfig } from "@/lib/ledger/defaults";
 import { loadPartyLedger, type PartyType } from "@/lib/ledger/party-ledger";
 import { PartyActionsBar, type PartyDetails } from "@/components/ledger/party-actions-bar";
@@ -92,6 +93,9 @@ export default async function PartyLedgerPage({
             .map((b) => ({ id: b.id, name: b.name })),
           catalog,
           ratioPresets,
+          categoryTemplates: resolveCategoryTemplates(ctx.tenant.brand_config, ctx.tenant.vertical_key),
+          aiScannerEnabled: ctx.enabledFeatures.ai_bill_scanner,
+          billPhotoEnabled: ctx.enabledFeatures.bill_photo_archive,
         }
       : null;
 

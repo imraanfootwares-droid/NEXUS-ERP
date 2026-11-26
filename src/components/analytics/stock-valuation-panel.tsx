@@ -11,8 +11,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Download, FileSpreadsheet, FileText } from "lucide-react";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
+import { DownloadMenu } from "@/components/ui/download-menu";
 import { Badge } from "@/components/ui/primitives";
 import { Segmented, StatTray, TrayCard } from "@/components/ui/spark";
 import type {
@@ -185,7 +185,7 @@ export function StockValuationPanel({
               onChange={setPeriod}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatTray
               label={`Sales (${period})`}
               value={inr(activePeriod.revenue)}
@@ -223,32 +223,11 @@ export function StockValuationPanel({
             Total stock on hand, investment cost, expected retail &amp; wholesale return across all products.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <a
-            href="/api/exports/stock-valuation?format=pdf"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#171717] px-2.5 text-xs font-medium text-white hover:bg-[#2a2a2a]"
-          >
-            <FileText className="h-3.5 w-3.5" /> Export PDF
-          </a>
-          <a
-            href="/api/exports/stock-valuation?format=xlsx"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
-          </a>
-          <a
-            href="/api/exports/stock-valuation?format=csv"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-          >
-            <Download className="h-3.5 w-3.5" /> CSV
-          </a>
-        </div>
+        <DownloadMenu baseUrl="/api/exports/stock-valuation" label="Download" align="right" />
       </div>
 
-      {/* KPI Summary Cards */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+      {/* KPI Summary Cards — spacious across mobile (1), tablet (2), 14"/16" laptop (3), and 24"/ultrawide (6) */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         <StatTray
           label="Total Stock"
           value={summary.totalUnits.toLocaleString("en-IN")}

@@ -11,7 +11,7 @@ import { getPresignedUploadUrl } from "@/lib/storage/s3-client";
 export const runtime = "nodejs";
 
 const presignSchema = z.object({
-  purpose: z.enum(["product_full", "product_thumb", "brand_logo"]),
+  purpose: z.enum(["product_full", "product_thumb", "brand_logo", "purchase_bill"]),
   hash: z.string().min(4).max(32),
   contentLength: z.number().int().positive(),
   contentType: z.enum(["image/webp", "image/png", "image/jpeg"]),
@@ -40,6 +40,19 @@ export async function POST(request: NextRequest) {
       assertAccess(ctx, "settings.tax_and_hsn", { isMutation: true });
       if (contentLength > 200 * 1024) {
         return NextResponse.json({ error: "Logo must be <= 200 KB." }, { status: 400 });
+      }
+    } else if (purpose === "purchase_bill") {
+      if (!ctx.enabledFeatures.bill_photo_archive) {
+        return NextResponse.json(
+          { error: "Physical Bill Photo Archive requires Tier 3+ or Platform Admin unlock." },
+          { status: 403 }
+        );
+      }
+      if (ctx.impersonation?.mode === "read") {
+        return NextResponse.json({ error: "Read-only support session." }, { status: 403 });
+      }
+      if (contentLength > 500 * 1024) {
+        return NextResponse.json({ error: "Bill photo must be <= 500 KB after optimization." }, { status: 400 });
       }
     } else {
       const canStock = canAccess(ctx, "stock.manage", { isMutation: true }).allowed;
@@ -102,6 +115,8 @@ export async function POST(request: NextRequest) {
   const key =
     purpose === "brand_logo"
       ? `public/${ctx.tenant.id}/branding/logo-${hash}.webp`
+      : purpose === "purchase_bill"
+      ? `public/${ctx.tenant.id}/purchase-bills/bill-${hash}.webp`
       : purpose === "product_thumb"
       ? `public/${ctx.tenant.id}/products/${hash}_thumb.webp`
       : `public/${ctx.tenant.id}/products/${hash}.webp`;

@@ -71,6 +71,55 @@ async function shortSha256Hex(blob: Blob): Promise<string> {
     .join("");
 }
 
+export async function compressBillImage(file: File): Promise<{ blob: Blob; hash: string }> {
+  const img = await loadImage(file);
+  let blob = await renderWebp(img, 1400, 0.78);
+  if (blob.size > 350 * 1024) {
+    blob = await renderWebp(img, 1200, 0.65);
+  }
+  if (blob.size > 500 * 1024) {
+    blob = await renderWebp(img, 960, 0.55);
+  }
+  const hash = await shortSha256Hex(blob);
+  return { blob, hash };
+}
+
+export async function uploadPurchaseBillImage(
+  file: File
+): Promise<{ key: string; previewUrl: string; sizeKb: number }> {
+  const { blob, hash } = await compressBillImage(file);
+  const presign = await fetch("/api/storage/presign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      purpose: "purchase_bill",
+      hash,
+      contentLength: blob.size,
+      contentType: blob.type,
+    }),
+  }).then((r) => r.json());
+
+  if (presign.error) throw new Error(presign.error);
+  if (presign.devFallback) {
+    return {
+      key: "",
+      previewUrl: URL.createObjectURL(blob),
+      sizeKb: Math.max(1, Math.round(blob.size / 1024)),
+    };
+  }
+  const putRes = await fetch(presign.uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": blob.type, "Cache-Control": IMAGE_CACHE_CONTROL },
+    body: blob,
+  });
+  if (!putRes.ok) throw new Error("Failed to upload bill photo to storage.");
+  return {
+    key: presign.key,
+    previewUrl: URL.createObjectURL(blob),
+    sizeKb: Math.max(1, Math.round(blob.size / 1024)),
+  };
+}
+
 export async function compressProductImage(file: File): Promise<CompressedImagePair> {
   const img = await loadImage(file);
   let fullBlob = await renderWebp(img, 1200, 0.8);

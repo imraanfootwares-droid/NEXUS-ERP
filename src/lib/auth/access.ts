@@ -195,7 +195,14 @@ export function canAccess(
   }
 
   const parentFeature = PERMISSION_PARENT_MAP[permissionKey];
-  if (!ctx.enabledFeatures[parentFeature]) {
+  const featureAllowed =
+    ctx.enabledFeatures[parentFeature] ||
+    (permissionKey === "suppliers.manage" &&
+      (ctx.enabledFeatures.ai_bill_scanner || ctx.enabledFeatures.bill_photo_archive)) ||
+    (permissionKey === "settings.catalog_schema" &&
+      (ctx.enabledFeatures.category_size_presets || ctx.enabledFeatures.visual_product_builder)) ||
+    (permissionKey === "stock.manage" && ctx.enabledFeatures.ai_bill_scanner);
+  if (!featureAllowed) {
     return { allowed: false, reason: "FEATURE_DISABLED" };
   }
 

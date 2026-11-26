@@ -114,24 +114,24 @@ export function StatTray({
   const hasChange = change !== undefined;
   const TrendIcon = !hasChange || change === null || Math.abs(change) < 0.05 ? Minus : change > 0 ? ArrowUpRight : ArrowDownRight;
   return (
-    <div className="ui-tray ui-rise">
-      <div className="ui-surface flex items-center justify-between gap-3 px-4 py-3.5">
-        <div className="min-w-0">
-          <p className="ui-eyebrow truncate">{label}</p>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="truncate font-mono text-[22px] font-semibold leading-none tracking-[-0.03em] text-[var(--ui-ink)] tabular-nums">
+    <div className="ui-tray ui-rise flex h-full flex-col">
+      <div className="ui-surface flex flex-1 items-center justify-between gap-2.5 px-3.5 py-3 sm:px-4 sm:py-3.5">
+        <div className="min-w-0 flex-1">
+          <p className="ui-eyebrow leading-snug">{label}</p>
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+            <span className="whitespace-nowrap font-mono text-[17px] sm:text-[19px] xl:text-[21px] font-semibold leading-tight tracking-[-0.025em] text-[var(--ui-ink)] tabular-nums">
               {value}
             </span>
-            {unit && <span className="truncate text-[11px] text-[var(--ui-muted)]">{unit}</span>}
+            {unit && <span className="whitespace-nowrap text-[11px] text-[var(--ui-muted)]">{unit}</span>}
           </div>
         </div>
         <MiniNeedles values={needles} meter={meter} />
       </div>
-      <div className="flex min-h-[28px] items-center justify-between gap-2 px-3 py-1 text-[11px]">
-        <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--ui-line-strong)] text-white">
+      <div className="flex min-h-[28px] items-center justify-between gap-2 px-3 py-1.5 text-[11px]">
+        <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-[var(--ui-line-strong)] text-white">
           {icon ?? <TrendIcon className="h-2.5 w-2.5" strokeWidth={2.6} />}
         </span>
-        <span className="min-w-0 truncate text-right text-[var(--ui-muted)]">
+        <span className="min-w-0 text-right leading-tight text-[var(--ui-muted)]">
           {hasChange ? <DeltaLabel change={change ?? null} suffix={changeSuffix} /> : footnote}
         </span>
       </div>

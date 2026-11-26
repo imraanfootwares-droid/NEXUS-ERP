@@ -40,7 +40,15 @@ import { BarcodeLabelSheet } from "@/components/stock/barcode-sheet";
 import { CustomFieldRenderer, HsnCombobox, VariantMatrixGrid } from "@/components/ui/dynamic-fields";
 import { KpiGrid } from "@/components/ui/kpi-grid";
 import { Form, Alert, Badge, Button, Card, CardContent, Dialog, Input, Label, Select, Switch } from "@/components/ui/primitives";
-import { resolveCategoryTemplates } from "@/lib/catalog/category-templates";
+import {
+  parseCommaList,
+  removeCategoryTemplate,
+  resolveCategoryTemplates,
+  resolveColoursForCategory,
+  resolveCustomFieldsForCategory,
+  resolveSizesForCategory,
+  upsertCategoryTemplate,
+} from "@/lib/catalog/category-templates";
 import { generateVariantCombinations } from "@/lib/catalog/verticals";
 import { uploadProductPhotoToStorage } from "@/lib/storage/image-compress";
 import type { BranchRow, CategoryTemplate, CustomFieldRow, HsnCodeRow, TenantRow, VariantAxisRow } from "@/types/database";
@@ -174,12 +182,16 @@ export function StockHubClient({
   const [newProdPhoto, setNewProdPhoto] = useState<File | null>(null);
   const [uploadingProdId, setUploadingProdId] = useState<string | null>(null);
 
-  // Product Categories & Default Pack Size (Sizes, Colours & Extra Details live in Settings -> Product Options)
+  // Product Categories & Category-Specific Sizes/Fields (synced with Settings -> Product Options)
   const [catTemplates, setCatTemplates] = useState<CategoryTemplate[]>(() =>
-    resolveCategoryTemplates(tenant.brand_config)
+    resolveCategoryTemplates(tenant.brand_config, tenant.vertical_key)
   );
   const [catManagerOpen, setCatManagerOpen] = useState(false);
+  const [editCatOrigName, setEditCatOrigName] = useState<string | null>(null);
   const [newCatName, setNewCatName] = useState("");
+  const [newCatSizes, setNewCatSizes] = useState("");
+  const [newCatColours, setNewCatColours] = useState("");
+  const [newCatFields, setNewCatFields] = useState("");
   const [newCatPack, setNewCatPack] = useState("20");
   const [savingCats, setSavingCats] = useState(false);
 
@@ -188,6 +200,14 @@ export function StockHubClient({
     const tpl = catTemplates.find((t) => t.category.toLowerCase() === catName.trim().toLowerCase());
     if (tpl) {
       setPiecesPerCarton(String(tpl.default_pieces_per_carton || 20));
+      if (tpl.default_sizes.length > 0) {
+        const allowed = new Set(tpl.default_sizes.map((s) => s.toLowerCase()));
+        setSelectedAxisVals((prev) => {
+          const curSizes = prev["Size"] ?? [];
+          const kept = curSizes.filter((v) => allowed.has(v.toLowerCase()));
+          return { ...prev, Size: kept };
+        });
+      }
     }
   };
 
@@ -1691,15 +1711,25 @@ export function StockHubClient({
             </div>
           </div>
 
-          {/* 4. Sizes, Colours & Options — Single Source of Truth from Settings -> Product Options */}
+          {/* 4. Sizes, Colours & Options — Dynamic per selected Category */}
           <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-slate-800">Sizes, Colours &amp; Options (from Product Options)</p>
+              <div>
+                <p className="text-xs font-semibold text-slate-800">
+                  Sizes, Colours &amp; Options
+                  {category.trim() ? ` — for ${category.trim()}` : ""}
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  {category.trim()
+                    ? `Tap the sizes and colours you have in stock for ${category.trim()}.`
+                    : "Pick a Category above first to see its exact sizes, or choose from general sizes below."}
+                </p>
+              </div>
               <Link
                 href="/dashboard/settings?tab=schema"
                 className="text-[11px] font-semibold text-[#171717] underline underline-offset-2 hover:text-[#52525b]"
               >
-                Add / Edit Options →
+                Edit Categories &amp; Sizes →
               </Link>
             </div>
             {(() => {
@@ -1707,10 +1737,19 @@ export function StockHubClient({
               const addPreset = (label: string, vals: string[]) => {
                 merged.set(label, Array.from(new Set([...(merged.get(label) ?? []), ...vals])));
               };
+              const sizeRes = resolveSizesForCategory(catTemplates, category, axes);
+              const colourRes = resolveColoursForCategory(catTemplates, category, axes);
+
+              if (sizeRes.sizes.length > 0 || (selectedAxisVals["Size"]?.length ?? 0) > 0) {
+                addPreset("Size", sizeRes.sizes);
+              }
+              if (colourRes.colours.length > 0 || (selectedAxisVals["Colour"]?.length ?? 0) > 0) {
+                addPreset("Colour", colourRes.colours);
+              }
               for (const a of axes) {
                 const norm = a.name.trim().toLowerCase();
-                const canonical = norm === "size" ? "Size" : norm === "colour" || norm === "color" ? "Colour" : a.name.trim();
-                addPreset(canonical, a.preset_values);
+                if (norm === "size" || norm === "sizes" || norm === "colour" || norm === "color") continue;
+                addPreset(a.name.trim(), a.preset_values);
               }
               for (const [k, vals] of Object.entries(selectedAxisVals)) {
                 if (merged.has(k)) addPreset(k, vals);
@@ -1718,9 +1757,9 @@ export function StockHubClient({
               if (merged.size === 0) {
                 return (
                   <p className="text-xs text-slate-500">
-                    No option groups set yet. You can save this as a single-variant product, or{" "}
+                    No sizes or options set for this category yet. You can save as a single item, or{" "}
                     <Link href="/dashboard/settings?tab=schema" className="font-semibold text-[#171717] underline">
-                      add Sizes &amp; Colours in Product Options
+                      add Category Sizes in Product Options
                     </Link>
                     .
                   </p>
@@ -1728,7 +1767,14 @@ export function StockHubClient({
               }
               return Array.from(merged.entries()).map(([axisName, presets]) => (
                 <div key={axisName} className="space-y-1.5">
-                  <Label>{axisName}</Label>
+                  <div className="flex items-center gap-2">
+                    <Label className="mb-0">{axisName}</Label>
+                    {axisName === "Size" && sizeRes.source === "category" && category.trim() && (
+                      <span className="rounded-full bg-[#171717]/10 px-2 py-0.5 text-[10px] font-semibold text-[#171717]">
+                        {category.trim()} sizes
+                      </span>
+                    )}
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
                     {presets.map((val) => {
                       const active = (selectedAxisVals[axisName] ?? []).includes(val);
@@ -1789,21 +1835,32 @@ export function StockHubClient({
             })()}
           </div>
 
-          {/* Extra Product Details — Single Source of Truth from Settings -> Product Options */}
-          {customFields.length > 0 && (
-            <div className="space-y-2.5 rounded-xl border border-slate-200 bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-slate-800">Extra Product Details</p>
-                <Link
-                  href="/dashboard/settings?tab=schema"
-                  className="text-[11px] font-semibold text-[#171717] underline underline-offset-2 hover:text-[#52525b]"
-                >
-                  Edit Fields →
-                </Link>
+          {/* Extra Product Details — Dynamic per selected Category */}
+          {(() => {
+            const catFields = resolveCustomFieldsForCategory(catTemplates, category, customFields);
+            if (catFields.fields.length === 0) return null;
+            return (
+              <div className="space-y-2.5 rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold text-slate-800">Extra Product Details</p>
+                    {catFields.isCategoryFiltered && category.trim() && (
+                      <span className="rounded-full bg-[#171717]/10 px-2 py-0.5 text-[10px] font-semibold text-[#171717]">
+                        Attached to {category.trim()}
+                      </span>
+                    )}
+                  </div>
+                  <Link
+                    href="/dashboard/settings?tab=schema"
+                    className="text-[11px] font-semibold text-[#171717] underline underline-offset-2 hover:text-[#52525b]"
+                  >
+                    Edit Fields →
+                  </Link>
+                </div>
+                <CustomFieldRenderer fields={catFields.fields} values={cfValues} onChange={setCfValues} />
               </div>
-              <CustomFieldRenderer fields={customFields} values={cfValues} onChange={setCfValues} />
-            </div>
-          )}
+            );
+          })()}
 
           {/* 5. Collapsible Optional Details (Brand & Default Pcs/Carton) */}
           <div className="rounded-xl border border-slate-200 bg-white">
@@ -1846,45 +1903,115 @@ export function StockHubClient({
         </Form>
       </Dialog>
 
-      {/* Simple Product Categories Manager Modal */}
+      {/* Dynamic Product Categories, Sizes & Fields Manager Modal */}
       <Dialog
         open={catManagerOpen}
         onClose={() => setCatManagerOpen(false)}
-        title="Product Categories"
-        maxWidth="max-w-xl"
+        title="Product Categories & Sizes"
+        maxWidth="max-w-2xl"
       >
         <div className="space-y-4 text-xs">
           <p className="text-slate-600">
-            Organize your products into categories like <strong>Slipper</strong>, <strong>Shoe</strong>, or <strong>Sandal</strong> with a default carton pack size.{" "}
+            Set up each category (like <strong>Men&apos;s Footwear</strong>, <strong>Women&apos;s Footwear</strong>,{" "}
+            <strong>Children&apos;s Footwear</strong>, <strong>Baby Footwear</strong>) with its own sizes and extra details.
+            You can also load full business presets in{" "}
             <Link href="/dashboard/settings?tab=schema" className="font-semibold text-[#171717] underline">
-              Sizes, Colours &amp; Extra Product Details
-            </Link>{" "}
-            are managed in one place under <strong>Profile &amp; Settings → Product Options</strong>.
+              Profile &amp; Settings → Product Options
+            </Link>
+            .
           </p>
 
-          <div className="max-h-56 space-y-2 overflow-y-auto">
+          <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
             {catTemplates.map((t, idx) => (
-              <div key={t.category + idx} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="font-semibold text-slate-900">
-                  {t.category} <Badge variant="default" className="ml-1.5">{t.default_pieces_per_carton} pcs/box</Badge>
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setCatTemplates((prev) => prev.filter((_, i) => i !== idx))}
-                  className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-md cursor-pointer"
-                  title="Remove category"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+              <div key={t.category + idx} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-semibold text-slate-900">
+                    {t.category} <Badge variant="default" className="ml-1.5">{t.default_pieces_per_carton} / box</Badge>
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditCatOrigName(t.category);
+                        setNewCatName(t.category);
+                        setNewCatSizes(t.default_sizes.join(", "));
+                        setNewCatColours(t.default_colours.join(", "));
+                        setNewCatFields(t.extra_fields.join(", "));
+                        setNewCatPack(String(t.default_pieces_per_carton || 20));
+                      }}
+                      className="px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-white rounded-md border border-slate-200 cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCatTemplates((prev) => removeCategoryTemplate(prev, t.category))}
+                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-md cursor-pointer"
+                      title="Remove category"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                {t.default_sizes.length > 0 && (
+                  <p className="text-[11px] text-slate-600">
+                    <strong>Sizes:</strong> {t.default_sizes.join(", ")}
+                  </p>
+                )}
+                {t.extra_fields.length > 0 && (
+                  <p className="text-[11px] text-slate-600">
+                    <strong>Fields:</strong> {t.extra_fields.join(", ")}
+                  </p>
+                )}
               </div>
             ))}
           </div>
 
-          <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
-            <p className="font-semibold text-slate-800">Add New Category</p>
+          <div className="space-y-2.5 rounded-xl border border-slate-200 bg-white p-3.5">
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-slate-800">
+                {editCatOrigName ? `Edit Category: ${editCatOrigName}` : "Add New Category"}
+              </p>
+              {editCatOrigName && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditCatOrigName(null);
+                    setNewCatName("");
+                    setNewCatSizes("");
+                    setNewCatColours("");
+                    setNewCatFields("");
+                    setNewCatPack("20");
+                  }}
+                  className="text-[11px] text-slate-500 hover:text-slate-800 cursor-pointer"
+                >
+                  Cancel edit
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                <Label>Category Name *</Label>
+                <Input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} placeholder="e.g. Men's Footwear, Baby Footwear" />
+              </div>
+              <div>
+                <Label>Pairs / Box</Label>
+                <Input type="text" inputMode="numeric" value={newCatPack} onChange={(e) => setNewCatPack(e.target.value.replace(/\D/g, ""))} placeholder="20" />
+              </div>
+            </div>
+            <div>
+              <Label>Sizes for this Category (comma-separated)</Label>
+              <Input value={newCatSizes} onChange={(e) => setNewCatSizes(e.target.value)} placeholder="e.g. 6, 7, 8, 9, 10, 11  or  0-3M, 3-6M, 6-12M" />
+            </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div><Label>Category Name *</Label><Input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} placeholder="e.g. Slipper, Sports Shoe" /></div>
-              <div><Label>Default Pcs per Carton / Box</Label><Input type="text" inputMode="numeric" value={newCatPack} onChange={(e) => setNewCatPack(e.target.value.replace(/\D/g, ""))} placeholder="20" /></div>
+              <div>
+                <Label>Colours (optional, comma-separated)</Label>
+                <Input value={newCatColours} onChange={(e) => setNewCatColours(e.target.value)} placeholder="e.g. Black, Brown, Tan" />
+              </div>
+              <div>
+                <Label>Attached Fields (optional, comma-separated)</Label>
+                <Input value={newCatFields} onChange={(e) => setNewCatFields(e.target.value)} placeholder="e.g. Sole Type, Heel Type" />
+              </div>
             </div>
             <Button
               type="button"
@@ -1895,16 +2022,21 @@ export function StockHubClient({
                 if (!name) return;
                 const entry: CategoryTemplate = {
                   category: name,
-                  default_sizes: [],
-                  default_colours: [],
+                  default_sizes: parseCommaList(newCatSizes),
+                  default_colours: parseCommaList(newCatColours),
                   default_pieces_per_carton: Math.max(1, Number(newCatPack || 20)),
-                  extra_fields: [],
+                  extra_fields: parseCommaList(newCatFields),
                 };
-                setCatTemplates((prev) => [...prev.filter((x) => x.category.toLowerCase() !== name.toLowerCase()), entry]);
+                setCatTemplates((prev) => upsertCategoryTemplate(prev, entry, editCatOrigName));
+                setEditCatOrigName(null);
                 setNewCatName("");
+                setNewCatSizes("");
+                setNewCatColours("");
+                setNewCatFields("");
+                setNewCatPack("20");
               }}
             >
-              <Plus className="h-3.5 w-3.5" /> Add Category to List
+              <Plus className="h-3.5 w-3.5" /> {editCatOrigName ? "Update in List" : "Add Category to List"}
             </Button>
           </div>
 
@@ -1917,7 +2049,7 @@ export function StockHubClient({
                 setSavingCats(true);
                 try {
                   await updateCategoryTemplatesAction(catTemplates);
-                  toast.success("Categories saved!");
+                  toast.success("Categories & sizes saved!");
                   setCatManagerOpen(false);
                   router.refresh();
                 } catch (err) {

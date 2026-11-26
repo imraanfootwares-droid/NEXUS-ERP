@@ -1,21 +1,23 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  Download,
+  ChevronDown,
+  ExternalLink,
   FileEdit,
-  FileSpreadsheet,
-  FileText,
   History,
+  Image as ImageIcon,
+  MoreHorizontal,
   Pencil,
   Plus,
   Settings,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { DownloadMenu } from "@/components/ui/download-menu";
 import {
   deleteManualPartyLedgerEntryAction,
   savePartyLedgerEntryAction,
@@ -68,6 +70,18 @@ export function PartyLedgerClient({
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editPurchaseId, setEditPurchaseId] = useState<string | null>(null);
+  const [billPhotoModal, setBillPhotoModal] = useState<{ url: string; title: string } | null>(null);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) setMoreMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [moreMenuOpen]);
   const [historyModal, setHistoryModal] = useState<{
     mode: "entity" | "activity";
     entityType: RevisionEntityType;
@@ -185,11 +199,11 @@ export function PartyLedgerClient({
         <div className="space-y-2">
           <div>
             <Link
-              href={`/dashboard/customers?tab=${party.type === "supplier" ? "suppliers" : "customers"}`}
+              href={party.type === "supplier" ? "/dashboard/suppliers" : "/dashboard/customers"}
               className="inline-flex min-h-[32px] items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-[#27272a] shadow-[0_1px_2px_rgba(0,0,0,.05),0_0_0_1px_rgba(0,0,0,.08)] transition-colors hover:bg-[#fafafa] hover:text-[#171717]"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Back to {party.type === "supplier" ? "Supplier" : "Customer"} Ledger
+              Back to {party.type === "supplier" ? "Suppliers" : "Customers"}
             </Link>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -207,63 +221,69 @@ export function PartyLedgerClient({
           {actions ? <div className="pt-1">{actions}</div> : null}
         </div>
 
+        {/* Simple, uncluttered secondary actions: single Download menu + single More menu */}
         <div className="flex flex-wrap items-center gap-2">
-          <a
-            href={`${exportBase}?format=pdf`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-          >
-            <FileText className="h-3.5 w-3.5" /> Export PDF
-          </a>
-          <a
-            href={`${exportBase}?format=xlsx`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
-          </a>
-          <a
-            href={`${exportBase}?format=csv`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-          >
-            <Download className="h-3.5 w-3.5" /> CSV
-          </a>
-          {canUseHistory && (
+          <DownloadMenu baseUrl={exportBase} label="Download" align="right" />
+
+          <div ref={moreMenuRef} className="relative inline-block">
             <button
               type="button"
-              onClick={() =>
-                setHistoryModal({
-                  mode: "activity",
-                  entityType: party.type === "supplier" ? "purchase" : "invoice",
-                  title:
-                    party.type === "supplier"
-                      ? "Purchase Bills — Change & Delete History"
-                      : "Customer Bills — Change & Delete History",
-                  canRevert: false,
-                })
-              }
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              title="View recent edits, reverts & deleted bills"
+              onClick={() => setMoreMenuOpen((v) => !v)}
+              aria-expanded={moreMenuOpen}
+              className="inline-flex min-h-[38px] cursor-pointer items-center gap-1.5 rounded-lg border border-[#d4d4d8] bg-white px-3 text-xs font-semibold text-[#171717] hover:bg-[#fafafa] transition-colors"
             >
-              <History className="h-3.5 w-3.5" /> Change History
+              <MoreHorizontal className="h-4 w-4" />
+              <span>More</span>
+              <ChevronDown className={`h-3.5 w-3.5 text-[#77777d] transition-transform ${moreMenuOpen ? "rotate-180" : ""}`} />
             </button>
-          )}
-          <Link
-            href="/dashboard/settings"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
-            title="Customize Ledger Fields"
-          >
-            <Settings className="h-3.5 w-3.5" /> Fields
-          </Link>
-          {canEdit && (
-            <Button size="sm" onClick={openAddManual}>
-              <Plus className="h-3.5 w-3.5" /> Add Entry
-            </Button>
-          )}
+            {moreMenuOpen && (
+              <div className="absolute right-0 z-30 mt-1.5 w-56 rounded-xl border border-[#e5e5e7] bg-white p-1.5 shadow-lg">
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreMenuOpen(false);
+                      openAddManual();
+                    }}
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[#171717] hover:bg-[#f4f4f6]"
+                  >
+                    <Plus className="h-3.5 w-3.5 text-[#52525b]" /> Add Manual Entry
+                  </button>
+                )}
+                {canUseHistory && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreMenuOpen(false);
+                      setHistoryModal({
+                        mode: "activity",
+                        entityType: party.type === "supplier" ? "purchase" : "invoice",
+                        title:
+                          party.type === "supplier"
+                            ? "Purchase Bills — Change & Delete History"
+                            : "Customer Bills — Change & Delete History",
+                        canRevert: false,
+                      });
+                    }}
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[#171717] hover:bg-[#f4f4f6]"
+                  >
+                    <History className="h-3.5 w-3.5 text-[#52525b]" /> View Change History
+                  </button>
+                )}
+                <Link
+                  href="/dashboard/settings"
+                  onClick={() => setMoreMenuOpen(false)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[#171717] hover:bg-[#f4f4f6]"
+                >
+                  <Settings className="h-3.5 w-3.5 text-[#52525b]" /> Customize Statement Columns
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTray label="Entries" value={rows.length} unit="Records" footnote="Bills, payments & adjustments" />
         <StatTray
           label="Total Debit"
@@ -392,6 +412,21 @@ export function PartyLedgerClient({
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
                         <div className="inline-flex items-center gap-1">
+                          {r.billImageUrl && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setBillPhotoModal({
+                                  url: r.billImageUrl!,
+                                  title: `Physical Bill Photo — ${r.voucherNo || r.particulars}`,
+                                })
+                              }
+                              className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100"
+                              title="View attached physical bill photo"
+                            >
+                              <ImageIcon className="h-3.5 w-3.5" /> Bill Photo
+                            </button>
+                          )}
                           {canUseHistory && r.sourceType === "invoice" && r.sourceId && (
                             <>
                               {canEdit && (
@@ -824,6 +859,40 @@ export function PartyLedgerClient({
               </Button>
             </div>
           </Form>
+        )}
+      </Dialog>
+
+      {/* Physical Bill Photo Lightbox Modal */}
+      <Dialog
+        open={Boolean(billPhotoModal)}
+        onClose={() => setBillPhotoModal(null)}
+        title={billPhotoModal?.title ?? "Physical Bill Photo"}
+        maxWidth="max-w-3xl"
+      >
+        {billPhotoModal && (
+          <div className="space-y-3">
+            <div className="max-h-[70vh] overflow-auto rounded-xl border border-[#e5e5e7] bg-[#fafafa] p-2 text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={billPhotoModal.url}
+                alt={billPhotoModal.title}
+                className="mx-auto max-w-full rounded-lg object-contain"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <a
+                href={billPhotoModal.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#171717] underline"
+              >
+                Open Full Image in New Tab <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+              <Button type="button" size="sm" variant="outline" onClick={() => setBillPhotoModal(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
         )}
       </Dialog>
     </div>

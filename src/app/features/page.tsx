@@ -31,23 +31,23 @@ const NEW_HIGHLIGHTS_BY_TIER: Record<
 > = {
   tier_1: [
     {
+      title: "Dynamic Category Sizes & 5 Vertical Presets",
+      detail: "Set category-wise sizes (Men's, Women's, Kids, Baby) or load 1-click Footwear, Apparel, Electronics, Grocery & Hardware presets.",
+      isNew: true,
+    },
+    {
+      title: "Visual Block Product Builder (Canvas)",
+      detail: "Connect Product → Categories → Sizes → Extra Fields visually on a dotted canvas, with a 1-click Normal / Visual toggle.",
+      isNew: true,
+    },
+    {
       title: "10 Creative Bill Designs (5 GST + 5 Normal)",
       detail: "Pick separate layouts for GST Tax Invoices and Normal Bills across A4, A5, 80mm & 58mm.",
       isNew: true,
     },
     {
-      title: "My Profile, Bank & GST Setup",
-      detail: "Save shop address, GST number, Bank Account/IFSC/UPI & Signatory once for every bill.",
-      isNew: true,
-    },
-    {
-      title: "Normal Bill / GST Bill Toggle + Ship-To",
-      detail: "Switch bill mode in 1 tap and print separate Billing & Delivery addresses.",
-      isNew: true,
-    },
-    {
-      title: "1-Click Manual Full Data Download",
-      detail: "Owners can download a complete copy of their business data anytime on demand.",
+      title: "My Profile, Bank & GST + 1-Click Data Export",
+      detail: "Save shop address, GST number & Bank/UPI once, plus download all business data anytime.",
     },
   ],
   tier_2: [
@@ -74,23 +74,23 @@ const NEW_HIGHLIGHTS_BY_TIER: Record<
   ],
   tier_3: [
     {
-      title: "Edit Old Bills + History & 1-Click Revert",
-      detail: "Fix finalized customer & supplier bills with Before → After history and auto stock/balance sync.",
+      title: "Free AI Physical Bill Scanner (₹0 AI Cost)",
+      detail: "Auto-builds a smart prompt for ChatGPT, Gemini, AI Studio or DeepSeek, previews items before saving & auto-creates new products.",
       isNew: true,
     },
     {
-      title: "15-Day Trash Bin & 1-Click Restore",
-      detail: "Accidentally deleted a bill, purchase, or expense? Restore it in 1 click within 15 days (auto-clears after 15 days).",
+      title: "Physical Bill Photo Archive (Optimized WebP)",
+      detail: "Auto-compresses supplier paper bill photos (~100 KB WebP) to R2 so you can inspect original bills anytime in the ledger.",
       isNew: true,
     },
     {
-      title: "Supplier Purchase Bills + Inline Add Product",
-      detail: "Create new products right inside a Supplier Purchase Bill so Stock & Supplier Due update in one step.",
+      title: "Edit Old Bills, History & 15-Day Trash Bin",
+      detail: "Fix finalized customer & supplier bills with Before → After diffs, 1-click revert & 15-day restore.",
       isNew: true,
     },
     {
       title: "Automated Daily Cloud Backups & Multi-Shop",
-      detail: "Nightly cloud backups (skips idle shops), branch-to-branch transfers & combined profit reports.",
+      detail: "Nightly cloud backups, unified Shops & Team command center, branch transfers & owner profit analytics.",
     },
   ],
   tier_4: [
@@ -121,6 +121,16 @@ const PREMIUM_ADMIN_ADDONS: Array<{
   resourceImpact: "Light DB" | "Medium DB" | "Cloud / R2" | "Heavy PDF / R2";
   adminNote: string;
 }> = [
+  {
+    key: "ai_bill_scanner",
+    resourceImpact: "Light DB",
+    adminNote: "Unlock the Zero-Cost AI Physical Bill Scanner (ChatGPT/Gemini/AI Studio/DeepSeek prompt + JSON stock import) on-demand for any Tier 1 or Tier 2 shop.",
+  },
+  {
+    key: "bill_photo_archive",
+    resourceImpact: "Cloud / R2",
+    adminNote: "Unlock Optimized Physical Bill Photo Archive (compressed WebP stored in R2 & viewable in ledger) on-demand for any Tier 1 or Tier 2 shop.",
+  },
   {
     key: "bill_edit_history",
     resourceImpact: "Medium DB",

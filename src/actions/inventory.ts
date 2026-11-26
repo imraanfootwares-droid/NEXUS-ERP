@@ -303,6 +303,7 @@ export async function updateSupplierAction(input: {
   );
   revalidatePath("/dashboard/operations");
   revalidatePath("/dashboard/customers");
+  revalidatePath("/dashboard/suppliers");
 }
 
 export async function deleteSupplierAction(supplierId: string) {
@@ -670,6 +671,7 @@ export async function createSupplierAction(input: {
   );
   revalidatePath("/dashboard/operations");
   revalidatePath("/dashboard/customers");
+  revalidatePath("/dashboard/suppliers");
 }
 
 export async function recordPurchaseAction(input: {
@@ -684,6 +686,8 @@ export async function recordPurchaseAction(input: {
   itcSgst: number;
   itcIgst: number;
   notes?: string;
+  /** Optional R2 key for the optimized physical bill photo. */
+  billImageKey?: string | null;
   items: Array<{ variant_id?: string | null; item_description: string; qty: number; unit_cost: number; gst_rate: number; line_total: number }>;
 }) {
   const ctx = await getServerSessionContext();
@@ -720,6 +724,11 @@ export async function recordPurchaseAction(input: {
         ]);
         if (!sup.rowCount) throw Object.assign(new Error("supplier"), { code: "23503" });
 
+        const cleanBillKey = input.billImageKey?.trim() || null;
+        const noteWithImg = cleanBillKey
+          ? [input.notes?.trim() || "", `[bill_img:${cleanBillKey}]`].filter(Boolean).join(" ")
+          : input.notes?.trim() || null;
+
         const res = await client.query<{ id: string }>("SELECT public.record_purchase_atomic($1, $2::jsonb) AS id", [
           ctx.tenant.id,
           JSON.stringify({
@@ -733,11 +742,17 @@ export async function recordPurchaseAction(input: {
             itc_sgst: input.itcSgst,
             itc_igst: input.itcIgst,
             paid_amount: paid,
-            notes: input.notes?.trim() || null,
+            notes: noteWithImg,
             created_by: ctx.user.id,
             items: cleanItems,
           }),
         ]);
+        if (cleanBillKey) {
+          await client.query("DELETE FROM public.pending_uploads WHERE key = $1 AND tenant_id = $2", [
+            cleanBillKey,
+            ctx.tenant.id,
+          ]);
+        }
         const id = res.rows[0].id;
         // The RPC already lowers the supplier due by the paid amount; record that money
         // as a payment row too so the supplier ledger shows it.
@@ -764,6 +779,7 @@ export async function recordPurchaseAction(input: {
     revalidatePath("/dashboard/operations");
     revalidatePath("/dashboard/stock");
     revalidatePath("/dashboard/customers");
+    revalidatePath("/dashboard/suppliers");
     revalidatePath(`/dashboard/customers/ledger/supplier/${input.supplierId}`);
     return { ok: true as const, purchaseId: poId, total: totalAmount };
   } catch (err) {
@@ -800,6 +816,7 @@ export async function recordSupplierPaymentAction(input: {
   );
   revalidatePath("/dashboard/operations");
   revalidatePath("/dashboard/customers");
+  revalidatePath("/dashboard/suppliers");
 }
 
 export async function getSupplierHistoryAction(supplierId: string) {

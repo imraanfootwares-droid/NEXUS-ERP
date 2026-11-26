@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MessageCircle, PackagePlus, Pencil, Trash2, Wallet } from "lucide-react";
+import { ChevronDown, MessageCircle, MoreHorizontal, PackagePlus, Pencil, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { deleteCustomerAction, deleteSupplierAction, updateCustomerAction, updateSupplierAction } from "@/actions/inventory";
 import { GstinInput } from "@/components/ui/dynamic-fields";
 import { Button, Dialog, Form, Input, Label, Select, friendlyErrorMessage } from "@/components/ui/primitives";
 import { INDIAN_STATES } from "@/lib/constants/saas";
+import type { CategoryTemplate } from "@/types/database";
 import { PartyMoneyDialog, type PartyMoneyTarget } from "./party-money-dialog";
 import { PurchaseBillDialog, type PurchaseCatalogVariant, type SizeRatioPreset } from "./purchase-bill-dialog";
 
@@ -63,6 +64,9 @@ export function PartyActionsBar({
     branches: Array<{ id: string; name: string }>;
     catalog: PurchaseCatalogVariant[];
     ratioPresets: SizeRatioPreset[];
+    categoryTemplates?: CategoryTemplate[];
+    aiScannerEnabled?: boolean;
+    billPhotoEnabled?: boolean;
   } | null;
 }) {
   const router = useRouter();
@@ -71,6 +75,17 @@ export function PartyActionsBar({
   const [editOpen, setEditOpen] = useState(false);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [menuOpen]);
 
   const [name, setName] = useState(details.name);
   const [phone, setPhone] = useState(details.phone ?? "");
@@ -121,45 +136,69 @@ export function PartyActionsBar({
           </a>
         )}
         {canEdit && (
-          <button type="button" onClick={() => setEditOpen(true)} className={`${btn} border border-slate-300 bg-white text-slate-800 hover:bg-slate-50`}>
-            <Pencil className="h-4 w-4" /> Edit Details
-          </button>
-        )}
-        {canEdit && (
-          <button
-            type="button"
-            disabled={deleting}
-            onClick={async () => {
-              const ok = confirm(
-                isSup
-                  ? `Delete supplier "${details.name}"? This cannot be undone.`
-                  : `Remove customer "${details.name}" from the list? Old bills stay safe.`
-              );
-              if (!ok) return;
-              setDeleting(true);
-              try {
-                if (isSup) {
-                  const res = await deleteSupplierAction(details.id);
-                  if (!res.ok) {
-                    toast.error(res.error);
-                    return;
-                  }
-                } else {
-                  await deleteCustomerAction(details.id);
-                }
-                toast.success(isSup ? "Supplier deleted." : "Customer removed.");
-                router.push(`/dashboard/customers?tab=${isSup ? "suppliers" : "customers"}`);
-                router.refresh();
-              } catch (err) {
-                toast.error(friendlyErrorMessage(err, "Could not delete. Please try again."));
-              } finally {
-                setDeleting(false);
-              }
-            }}
-            className={`${btn} border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 disabled:opacity-50`}
-          >
-            <Trash2 className="h-4 w-4" /> {isSup ? "Delete" : "Remove"}
-          </button>
+          <div ref={menuRef} className="relative inline-block">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              className={`${btn} border border-[#d4d4d8] bg-white text-[#171717] hover:bg-[#fafafa]`}
+              aria-expanded={menuOpen}
+              title="Edit or delete"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+              <span className="hidden sm:inline">Manage</span>
+              <ChevronDown className="h-3.5 w-3.5 text-[#77777d]" />
+            </button>
+            {menuOpen && (
+              <div className="absolute left-0 z-30 mt-1.5 w-48 rounded-xl border border-[#e5e5e7] bg-white p-1.5 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setEditOpen(true);
+                  }}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[#171717] hover:bg-[#f4f4f6]"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-[#52525b]" /> Edit {isSup ? "Supplier" : "Customer"} Details
+                </button>
+                <div className="my-1 border-t border-[#f1f1f3]" />
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={async () => {
+                    setMenuOpen(false);
+                    const ok = confirm(
+                      isSup
+                        ? `Delete supplier "${details.name}"? This cannot be undone.`
+                        : `Remove customer "${details.name}" from the list? Old bills stay safe.`
+                    );
+                    if (!ok) return;
+                    setDeleting(true);
+                    try {
+                      if (isSup) {
+                        const res = await deleteSupplierAction(details.id);
+                        if (!res.ok) {
+                          toast.error(res.error);
+                          return;
+                        }
+                      } else {
+                        await deleteCustomerAction(details.id);
+                      }
+                      toast.success(isSup ? "Supplier deleted." : "Customer removed.");
+                      router.push(isSup ? "/dashboard/suppliers" : "/dashboard/customers");
+                      router.refresh();
+                    } catch (err) {
+                      toast.error(friendlyErrorMessage(err, "Could not delete. Please try again."));
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> {isSup ? "Delete Supplier" : "Remove Customer"}
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -172,6 +211,9 @@ export function PartyActionsBar({
           branches={purchase.branches}
           catalog={purchase.catalog}
           ratioPresets={purchase.ratioPresets}
+          categoryTemplates={purchase.categoryTemplates}
+          aiScannerEnabled={purchase.aiScannerEnabled}
+          billPhotoEnabled={purchase.billPhotoEnabled}
         />
       )}
 

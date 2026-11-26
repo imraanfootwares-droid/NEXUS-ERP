@@ -2,10 +2,14 @@
 
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PackagePlus, Plus, Trash2 } from "lucide-react";
+import { Camera, PackagePlus, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { createProductWithVariantsAction, recordPurchaseAction } from "@/actions/inventory";
+import { PurchaseBillAiScanner } from "@/components/ledger/purchase-bill-ai-scanner";
 import { generateVariantCombinations } from "@/lib/catalog/verticals";
+import type { ParsedAiPurchaseBill } from "@/lib/ledger/purchase-bill-ai";
+import { uploadPurchaseBillImage } from "@/lib/storage/image-compress";
+import type { CategoryTemplate } from "@/types/database";
 import { Button, Dialog, Form, Input, Label, Select, friendlyErrorMessage } from "@/components/ui/primitives";
 
 export interface PurchaseCatalogVariant {
@@ -94,6 +98,9 @@ export function PurchaseBillDialog({
   branches,
   catalog,
   ratioPresets = [],
+  categoryTemplates = [],
+  aiScannerEnabled = true,
+  billPhotoEnabled = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -102,6 +109,9 @@ export function PurchaseBillDialog({
   branches: Array<{ id: string; name: string }>;
   catalog: PurchaseCatalogVariant[];
   ratioPresets?: SizeRatioPreset[];
+  categoryTemplates?: CategoryTemplate[];
+  aiScannerEnabled?: boolean;
+  billPhotoEnabled?: boolean;
 }) {
   const router = useRouter();
   const [branchId, setBranchId] = useState(branches[0]?.id ?? "");
@@ -124,6 +134,13 @@ export function PurchaseBillDialog({
   const [npHsn, setNpHsn] = useState("6403");
   const [npGst, setNpGst] = useState("5");
   const [npSaving, setNpSaving] = useState(false);
+
+  // Optimized Physical Bill Photo Attachment + Free AI Scanner state
+  const [billImgKey, setBillImgKey] = useState<string | null>(null);
+  const [billImgPreview, setBillImgPreview] = useState<string | null>(null);
+  const [billImgSizeKb, setBillImgSizeKb] = useState<number | null>(null);
+  const [billImgUploading, setBillImgUploading] = useState(false);
+  const [aiApplying, setAiApplying] = useState(false);
 
   const mergedCatalog = useMemo(() => {
     const byVariant = new Map<string, PurchaseCatalogVariant>();
@@ -180,6 +197,146 @@ export function PurchaseBillDialog({
     setPaid("");
     setPayMode("cash");
     setPicker("");
+    setBillImgKey(null);
+    setBillImgPreview(null);
+    setBillImgSizeKb(null);
+  };
+
+  const handleBillPhotoSelect = async (file: File | null) => {
+    if (!file) return;
+    setBillImgUploading(true);
+    try {
+      const uploaded = await uploadPurchaseBillImage(file);
+      setBillImgKey(uploaded.key || null);
+      setBillImgPreview(uploaded.previewUrl);
+      setBillImgSizeKb(uploaded.sizeKb);
+      toast.success(`Bill photo optimized (${uploaded.sizeKb} KB WebP) and attached!`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not attach bill photo.");
+    } finally {
+      setBillImgUploading(false);
+    }
+  };
+
+  const handleApplyParsedBill = async (parsed: ParsedAiPurchaseBill) => {
+    setAiApplying(true);
+    try {
+      if (parsed.bill_no) setBillNo(parsed.bill_no);
+      if (parsed.paid_amount > 0) setPaid(String(parsed.paid_amount));
+      setPayMode(parsed.payment_mode);
+
+      const newlyCreatedVariants: PurchaseCatalogVariant[] = [];
+      const nextBlocks: ProductBlock[] = [];
+      let createdCount = 0;
+
+      for (const item of parsed.items) {
+        let targetProductId = item.matchedProductId;
+        let targetVariants = targetProductId
+          ? mergedCatalog.filter((v) => v.product_id === targetProductId)
+          : [];
+
+        if (!targetProductId || targetVariants.length === 0) {
+          const sizeKeys = Object.keys(item.sizes).filter((k) => item.sizes[k] > 0);
+          const tpl = categoryTemplates.find(
+            (t) => t.category.toLowerCase() === item.category.trim().toLowerCase()
+          );
+          const finalSizes =
+            sizeKeys.length > 0
+              ? sizeKeys
+              : tpl && tpl.default_sizes.length > 0
+              ? tpl.default_sizes
+              : [];
+          const axesInput: Array<{ name: string; values: string[] }> = [];
+          if (finalSizes.length > 0) axesInput.push({ name: "size", values: finalSizes });
+          if (item.colour.trim()) axesInput.push({ name: "colour", values: [item.colour.trim()] });
+          const combinations = axesInput.length > 0 ? generateVariantCombinations(axesInput) : [{}];
+
+          const created = await createProductWithVariantsAction({
+            modelCode: item.model_code.trim() || `ITEM-${Date.now().toString().slice(-4)}`,
+            name: item.product_name.trim(),
+            category: item.category.trim() || undefined,
+            uom: "Pair",
+            hsnCode: item.hsn_code.trim() || "6403",
+            gstRate: item.gst_rate,
+            customFields: {},
+            costPrice: item.cost_price,
+            mrp: item.selling_price || item.cost_price,
+            sellingPrice: item.selling_price || item.cost_price,
+            wholesalePrice: item.selling_price || item.cost_price,
+            lowStockThreshold: 10,
+            combinations,
+            supplierId,
+          });
+          if (!created.ok) {
+            toast.error(`Could not create "${item.product_name}": ${created.error}`);
+            continue;
+          }
+          targetProductId = created.productId;
+          targetVariants = created.variants ?? [];
+          newlyCreatedVariants.push(...targetVariants);
+          createdCount += 1;
+        }
+
+        const sizeEntries = Object.entries(item.sizes).filter(([, q]) => q > 0);
+        const qtyMap: Record<string, string> = {};
+        if (sizeEntries.length > 0) {
+          for (const [sz, q] of sizeEntries) {
+            const matchedVar =
+              targetVariants.find(
+                (v) =>
+                  normSize(attr(v.attributes, ["size"])) === normSize(sz) &&
+                  (!item.colour.trim() ||
+                    attr(v.attributes, ["colour", "color"]).toLowerCase() === item.colour.trim().toLowerCase())
+              ) ??
+              targetVariants.find((v) => normSize(attr(v.attributes, ["size"])) === normSize(sz)) ??
+              targetVariants[0];
+            if (matchedVar) {
+              qtyMap[matchedVar.variant_id] = String(num(qtyMap[matchedVar.variant_id] ?? "0") + q);
+            }
+          }
+        }
+
+        const hasMappedSizes = Object.keys(qtyMap).length > 0;
+        nextBlocks.push({
+          key: nextKey(),
+          productId: targetProductId,
+          cost: item.cost_price > 0 ? String(item.cost_price) : "",
+          mode: hasMappedSizes ? "size" : "total",
+          qty: qtyMap,
+          total: hasMappedSizes ? "" : String(item.total_qty || ""),
+          cartons: "",
+          perCarton: "12",
+          colour: item.colour.trim(),
+          split: "equal",
+        });
+      }
+
+      if (newlyCreatedVariants.length > 0) {
+        setExtraCatalog((prev) => [...prev, ...newlyCreatedVariants]);
+      }
+      if (nextBlocks.length > 0) {
+        setBlocks((prev) => [...prev, ...nextBlocks]);
+      }
+      if (parsed.other_charges.length > 0) {
+        setOthers((prev) => [
+          ...prev,
+          ...parsed.other_charges.map((c) => ({
+            key: nextKey(),
+            name: c.name,
+            qty: String(c.qty),
+            rate: String(c.rate),
+          })),
+        ]);
+      }
+
+      toast.success(
+        `Loaded ${nextBlocks.length} product(s) into the bill${
+          createdCount > 0 ? ` (${createdCount} new product(s) created)` : ""
+        }. Review and click Save Purchase Bill!`
+      );
+    } finally {
+      setAiApplying(false);
+    }
   };
 
   const addProduct = (productId: string) => {
@@ -247,6 +404,7 @@ export function PurchaseBillDialog({
               itcCgst: 0,
               itcSgst: 0,
               itcIgst: 0,
+              billImageKey: billImgKey,
               items,
             });
             if (!res.ok) return void toast.error(res.error);
@@ -260,6 +418,88 @@ export function PurchaseBillDialog({
         }}
         className="space-y-4"
       >
+        {/* Free AI Physical Bill Scanner (Tier 3+ or Super Admin On-Demand Unlock) */}
+        {aiScannerEnabled ? (
+          <PurchaseBillAiScanner
+            supplierName={supplierName}
+            categoryTemplates={categoryTemplates}
+            existingProducts={products.map((p) => ({ id: p.id, name: p.name, code: p.code }))}
+            applying={aiApplying}
+            onApplyParsedBill={handleApplyParsedBill}
+          />
+        ) : (
+          <div className="rounded-xl border border-dashed border-[#d4d4d8] bg-[#fafafa] px-3.5 py-2.5 text-[11.5px] text-[#77777d]">
+            <strong className="text-[#171717]">Free AI Physical Bill Scanner</strong> is included on <strong>Tier 3 &amp; Tier 4</strong> (or ask Platform Admin to unlock it on your plan).
+          </div>
+        )}
+
+        {/* Attach Real Physical Bill Photo (Tier 3+ or Super Admin On-Demand Unlock) */}
+        {billPhotoEnabled ? (
+        <div className="rounded-xl border border-[#e5e5e7] bg-white p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {billImgPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={billImgPreview}
+                  alt="Attached physical bill"
+                  className="h-11 w-11 rounded-lg object-cover border border-[#e5e5e7] shrink-0"
+                />
+              ) : (
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#f4f4f6] text-[#52525b] shrink-0">
+                  <Camera className="h-4 w-4" />
+                </span>
+              )}
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-[#171717]">
+                  Attach Physical Bill Photo (Optional)
+                </p>
+                <p className="text-[11px] text-[#77777d]">
+                  {billImgPreview
+                    ? `Optimized & ready (${billImgSizeKb ?? "~120"} KB WebP) — saved with this bill so you can view it anytime.`
+                    : "Auto-compressed to crisp WebP (~100 KB) so you can view the original paper bill in the ledger anytime."}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#d4d4d8] bg-[#fafafa] px-2.5 py-1.5 text-[11.5px] font-semibold text-[#171717] hover:bg-[#f1f1f3]">
+                <Camera className="h-3.5 w-3.5" />
+                {billImgUploading ? "Optimizing..." : billImgPreview ? "Change Photo" : "Upload Bill Photo"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={billImgUploading}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    e.target.value = "";
+                    void handleBillPhotoSelect(f);
+                  }}
+                />
+              </label>
+              {billImgPreview && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBillImgKey(null);
+                    setBillImgPreview(null);
+                    setBillImgSizeKb(null);
+                  }}
+                  className="cursor-pointer rounded-lg border border-rose-200 p-1.5 text-rose-600 hover:bg-rose-50"
+                  title="Remove bill photo"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-[#d4d4d8] bg-[#fafafa] px-3.5 py-2 text-[11px] text-[#77777d]">
+            <strong className="text-[#171717]">Physical Bill Photo Archive</strong> is available on <strong>Tier 3+</strong> (or via Platform Admin unlock).
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label>Goods go into branch *</Label>

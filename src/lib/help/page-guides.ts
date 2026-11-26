@@ -75,12 +75,12 @@ export const PAGE_GUIDES: Array<{ match: (pathname: string) => boolean; guide: P
       title: "Stock & Products",
       whatItIs: "See all items in your shop, check remaining stock per size/colour, add products, and print barcodes.",
       steps: [
-        "Click + Add Product to add items already sitting in your shop (opening stock).",
+        "Click + Add Product, pick a Category (like Men's, Women's, Children's, or Baby Footwear) — the exact sizes and details for that category appear automatically.",
+        "Tap the sizes & colours you have in stock, enter how many pairs or cartons you have, and click Save Product.",
         "Click any product card to see stock per size/colour and add or remove stock manually.",
-        "Use the Low Stock tab to see items that are nearly finished and need reordering.",
-        "Use the Barcodes tab to print sticker labels for your shoe boxes or shelves.",
+        "Use the Low Stock tab to see items running low, or Barcodes to print sticker labels for shoe boxes.",
       ],
-      tip: "Bought new stock from a supplier? Enter it in Customers & Suppliers → Suppliers → + New Purchase Bill so both your Stock AND Supplier Balance update together!",
+      tip: "Want to change a category's sizes or add a new category? Click Manage next to Category, or open Profile & Settings → Product Options.",
     },
   },
   {
@@ -105,23 +105,36 @@ export const PAGE_GUIDES: Array<{ match: (pathname: string) => boolean; guide: P
       steps: [
         "Check the top summary to see Total Billed, Total Paid, and Balance Due.",
         "For a Customer: click Receive Payment when they pay Cash/UPI against their due.",
-        "For a Supplier: click + New Purchase Bill when new stock arrives, or Record Payment when you pay them.",
+        "For a Supplier: click + New Purchase Bill when new stock arrives (use 'Scan Physical Bill with Free AI' to copy a prompt for ChatGPT/Gemini/AI Studio/DeepSeek, attach the optimized bill photo, and review before saving), or Pay / Adjust ₹ when you pay them.",
         "Click Download PDF or Excel to share a clean statement on WhatsApp for matching accounts.",
       ],
       tip: "Need to fix an old entry? Use the Edit and History buttons right on any bill row.",
     },
   },
   {
+    match: (p) => p.startsWith("/dashboard/suppliers"),
+    guide: {
+      title: "Suppliers",
+      whatItIs: "Keep track of every company and factory you buy goods from, enter purchase bills, and record payments.",
+      steps: [
+        "Click + Add Supplier to save a vendor's name, phone, GSTIN, and the items they supply.",
+        "Click Open on any supplier to view their full Statement (Ledger), add a Purchase Bill, or record a payment.",
+        "Entering a Purchase Bill updates both your Stock and your Supplier Balance automatically.",
+      ],
+      tip: "Suppliers are right inside Daily Work so you can record incoming purchases anytime.",
+    },
+  },
+  {
     match: (p) => p.startsWith("/dashboard/customers"),
     guide: {
-      title: "Customers & Suppliers",
-      whatItIs: "Keep track of everyone who buys from you (Customers) and everyone you buy from (Suppliers).",
+      title: "Customers",
+      whatItIs: "Keep track of everyone who buys from you (retail & wholesale customers) and their pending dues (udhaar).",
       steps: [
-        "Use the Customers tab to see every customer's pending due (udhaar) and add new customers.",
-        "Switch to the Suppliers tab to see how much you owe each supplier and add new suppliers.",
-        "Click any Customer or Supplier name to open their full Statement (Ledger), record payments, or download PDF.",
+        "Click + Add Customer / Dealer to save a buyer's name, phone, GSTIN, and credit limit.",
+        "Check Receivable Due at the top to see the total money pending from customers.",
+        "Click any Customer name to open their full Statement (Ledger), record payments, or download PDF.",
       ],
-      tip: "You can save over 1,000 customers here — searching by name or phone number is instant.",
+      tip: "Looking for Suppliers? Open Daily Work → Suppliers in the left menu.",
     },
   },
   {
@@ -168,13 +181,14 @@ export const PAGE_GUIDES: Array<{ match: (pathname: string) => boolean; guide: P
     match: (p) => p.startsWith("/dashboard/organisation"),
     guide: {
       title: "Shops & Team",
-      whatItIs: "A simple visual map showing all your shops/branches and which staff work in each shop.",
+      whatItIs: "Manage all your shops/branches, staff logins, visual org map, and staff permissions from one place.",
       steps: [
-        "See all your shops (Factory, Godown, Retail Branches) at a glance.",
-        "Check which managers and cashiers are assigned to each shop.",
-        "To add a new shop or staff login, go to Profile & Settings → Shops or Staff.",
+        "Visual Map: See all your shops and which staff work in each shop, or click any card to inspect.",
+        "Shops tab: See how many shops you have and how many more you can add, with branch type, state, and GSTIN.",
+        "Staff tab: Create new Manager or Cashier logins, assign them to shops, reset passwords, or disable accounts.",
+        "Staff Access tab: Tick or untick exactly what Branch Admins and Counter Staff are allowed to do.",
       ],
-      tip: "Keep staff assigned only to their own shop so they don't accidentally bill from another shop's stock.",
+      tip: "Click + Add Branch / Shop or + Add Staff at the top right from any tab — your Visual Map updates immediately.",
     },
   },
   {
@@ -223,15 +237,14 @@ export const PAGE_GUIDES: Array<{ match: (pathname: string) => boolean; guide: P
     match: (p) => p.startsWith("/dashboard/settings"),
     guide: {
       title: "Profile & Settings",
-      whatItIs: "One-time setup for your shop details, GST rules, product options (sizes/colours), shops, staff, and backups.",
+      whatItIs: "One-time setup for your shop details, GST rules, product categories & visual builder, offline counters, and backups.",
       steps: [
         "My Profile, Bank & GST: Enter your shop address, GST number, bank account, and GST rules once.",
         "Shop Look: Upload your shop logo and choose your brand colour.",
-        "Product Options: Add or edit your Sizes, Colours, and Extra Product Details and test them live.",
-        "Shops & Staff: Add branches, create cashier logins, and control what staff are allowed to do.",
-        "Backups: Download a full copy of all your shop data to your computer anytime.",
+        "Product Options: Switch between Normal Builder and Visual Builder (connected block canvas) to pick a Business Preset or create Categories with their own Sizes, Colours, and Attached Fields.",
+        "Offline Counters & Backups: Manage offline billing devices and download a full copy of your shop data anytime.",
       ],
-      tip: "Anything you change in Product Options automatically updates Add Product, Website, and Bills everywhere.",
+      tip: "Looking for Shops, Staff, or Staff Permissions? They now live together under Business → Shops & Team!",
     },
   },
 ];

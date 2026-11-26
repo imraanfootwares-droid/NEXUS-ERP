@@ -167,6 +167,13 @@ export async function updateCategoryTemplatesAction(templates: CategoryTemplate[
   const ctx = await getServerSessionContext();
   if (!ctx || !ctx.tenant) throw new Error("Unauthorized");
   if (ctx.impersonation?.mode === "read") throw new Error("Read-only support session.");
+  if (
+    !ctx.enabledFeatures.category_size_presets &&
+    !ctx.enabledFeatures.visual_product_builder &&
+    !ctx.enabledFeatures.dynamic_stock_matrix
+  ) {
+    throw new Error("ACCESS_DENIED:FEATURE_DISABLED");
+  }
   if (ctx.user.role !== "owner" && ctx.user.role !== "branch_admin") {
     throw new Error("Only Owners and Branch Admins can manage product categories and fields.");
   }
@@ -366,6 +373,8 @@ export async function createBranchAction(input: {
     );
   });
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/organisation");
+  revalidatePath("/dashboard");
 }
 
 export async function createStaffAction(input: {
@@ -416,6 +425,7 @@ export async function createStaffAction(input: {
     }
   });
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/organisation");
 }
 
 export async function resetStaffPasswordAction(targetUserId: string, newPassword: string) {
@@ -454,6 +464,7 @@ export async function resetStaffPasswordAction(targetUserId: string, newPassword
     );
   });
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/organisation");
 }
 
 export async function updateTenantRolePermissionAction(
@@ -478,6 +489,7 @@ export async function updateTenantRolePermissionAction(
     );
   });
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/organisation");
 }
 
 export async function toggleDeviceActiveAction(deviceId: string, isActive: boolean) {
@@ -544,6 +556,8 @@ export async function updateBranchAction(input: {
     );
   });
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/organisation");
+  revalidatePath("/dashboard");
 }
 
 export async function deleteBranchAction(branchId: string) {
@@ -557,6 +571,8 @@ export async function deleteBranchAction(branchId: string) {
     );
   });
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/organisation");
+  revalidatePath("/dashboard");
 }
 
 export async function updateStaffAction(input: {
@@ -576,6 +592,7 @@ export async function updateStaffAction(input: {
     );
   });
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/organisation");
 }
 
 export async function toggleStaffActiveAction(userId: string, isActive: boolean) {
@@ -591,6 +608,7 @@ export async function toggleStaffActiveAction(userId: string, isActive: boolean)
     );
   });
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/organisation");
 }
 
 export async function deleteVariantAxisAction(axisId: string) {

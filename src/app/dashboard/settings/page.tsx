@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import type { CustomFieldRow, VariantAxisRow } from "@/types/database";
@@ -13,14 +14,17 @@ export default async function SettingsPage({
   const ctx = await getServerSessionContext();
   if (!ctx || !ctx.tenant) return null;
   const sp = await searchParams;
-  const validTabs = new Set(["profile", "brand", "schema", "branches", "staff", "permissions", "devices", "backups"]);
+  if (sp.tab === "branches" || sp.tab === "staff" || sp.tab === "permissions") {
+    redirect(`/dashboard/organisation?tab=${sp.tab}`);
+  }
+  const validTabs = new Set(["profile", "brand", "schema", "devices", "backups"]);
   const requestedTab = sp.tab === "tax" ? "profile" : sp.tab;
   const initialTab = requestedTab && validTabs.has(requestedTab) ? requestedTab : "profile";
 
   const data = await withTenantTx(
     { tenantId: ctx.tenant.id, isPlatformAdmin: ctx.user.is_platform_admin },
     async (client) => {
-      const [meRes, axes, fields, staff, resets, perms, devices, backups] = await Promise.all([
+      const [meRes, axes, fields, devices, backups] = await Promise.all([
         client.query<{
           id: string;
           full_name: string;
@@ -37,36 +41,6 @@ export default async function SettingsPage({
         ),
         client.query<CustomFieldRow>(
           "SELECT * FROM public.custom_field_definitions WHERE tenant_id = $1 ORDER BY sort_order, label",
-          [ctx.tenant!.id]
-        ),
-        client.query<{
-          id: string;
-          full_name: string;
-          username: string | null;
-          email: string | null;
-          role: "owner" | "branch_admin" | "worker";
-          is_active: boolean;
-        }>("SELECT id, full_name, username, email, role, is_active FROM public.profiles WHERE tenant_id = $1 ORDER BY role, full_name", [
-          ctx.tenant!.id,
-        ]),
-        client.query<{
-          id: string;
-          user_id: string;
-          identifier_submitted: string;
-          note: string | null;
-          created_at: string;
-          full_name: string | null;
-          role: string | null;
-        }>(
-          `SELECT r.id, r.user_id, r.identifier_submitted, r.note, r.created_at, p.full_name, p.role
-           FROM public.password_reset_requests r
-           JOIN public.profiles p ON p.id = r.user_id
-           WHERE r.tenant_id = $1 AND r.status = 'pending' AND p.role <> 'owner'
-           ORDER BY r.created_at DESC`,
-          [ctx.tenant!.id]
-        ),
-        client.query<{ role: "branch_admin" | "worker"; permission_key: string; allowed: boolean }>(
-          "SELECT role, permission_key, allowed FROM public.tenant_role_permissions WHERE tenant_id = $1 AND role IN ('branch_admin','worker')",
           [ctx.tenant!.id]
         ),
         client.query<{
@@ -101,9 +75,6 @@ export default async function SettingsPage({
         },
         axes: axes.rows,
         fields: fields.rows,
-        staff: staff.rows,
-        resets: resets.rows,
-        perms: perms.rows,
         devices: devices.rows,
         backups: backups.rows,
       };
@@ -115,7 +86,7 @@ export default async function SettingsPage({
       <div>
         <h1>Settings &amp; Profile</h1>
         <p className="mt-0.5 text-[12.5px] text-[#77777d]">
-          Set up your shop address, GST number, bank details, staff, and backups.
+          Set up your shop address, GST number, bank details, product options, and backups. Manage branches and staff under Shops &amp; Team.
         </p>
       </div>
       <SettingsHubClient
@@ -127,12 +98,11 @@ export default async function SettingsPage({
         permissions={ctx.permissions}
         axes={data.axes}
         fields={data.fields}
-        staff={data.staff}
-        resets={data.resets}
-        rolePermRows={data.perms}
         devices={data.devices}
         backups={data.backups}
         stockEnabled={ctx.enabledFeatures.dynamic_stock_matrix}
+        categoryPresetsEnabled={ctx.enabledFeatures.category_size_presets}
+        visualBuilderEnabled={ctx.enabledFeatures.visual_product_builder}
         backupsEnabled={ctx.enabledFeatures.daily_backups}
       />
     </div>

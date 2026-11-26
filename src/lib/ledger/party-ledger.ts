@@ -1,4 +1,16 @@
 import type { PoolClient } from "pg";
+import { getPublicAssetUrl } from "@/lib/storage/s3-client";
+
+const BILL_IMG_RE = /\[bill_img:([^\]]+)\]/i;
+
+export function splitBillImageNote(raw: string | null | undefined): { cleanNote: string | null; billImageUrl: string | null } {
+  if (!raw) return { cleanNote: null, billImageUrl: null };
+  const match = raw.match(BILL_IMG_RE);
+  if (!match) return { cleanNote: raw.trim() || null, billImageUrl: null };
+  const key = match[1].trim();
+  const cleanNote = raw.replace(BILL_IMG_RE, "").trim() || null;
+  return { cleanNote, billImageUrl: getPublicAssetUrl(key) };
+}
 
 export type PartyType = "customer" | "supplier";
 
@@ -30,6 +42,7 @@ export interface PartyLedgerRow {
   items: LedgerItemLine[];
   actorName: string | null;
   actorLogin: string | null;
+  billImageUrl?: string | null;
 }
 
 export interface PartySummary {
@@ -381,6 +394,7 @@ export async function loadPartyLedger(
 
     for (const po of poRes.rows) {
       const ov = overrideMap.get(`purchase:${po.id}`);
+      const { cleanNote, billImageUrl } = splitBillImageNote(po.notes);
       rawRows.push({
         key: `purchase:${po.id}`,
         entryId: ov?.id ?? null,
@@ -390,7 +404,7 @@ export async function loadPartyLedger(
         voucherNo: ov?.voucher_no || po.bill_number || "PO",
         particulars:
           ov?.particulars ||
-          po.notes ||
+          cleanNote ||
           `Purchase (${po.purchase_type.replace("_", " ")})${po.bill_number ? ` — B.No.: ${po.bill_number}` : ""}`,
         debit: Number(po.total_amount || 0),
         credit: 0,
@@ -402,6 +416,7 @@ export async function loadPartyLedger(
             : itemsByPo.get(po.id) ?? [],
         actorName: po.actor_name ?? ov?.actor_name ?? null,
         actorLogin: po.actor_login ?? ov?.actor_login ?? null,
+        billImageUrl,
       });
     }
 

@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Settings,
   Trash2,
+  Truck,
   Users,
   Wifi,
   WifiOff,
@@ -299,13 +300,14 @@ export function ErpShell({
         { href: "/dashboard/billing/new", label: "New Bill", icon: <Plus className="h-4 w-4" />, permission: "billing.create" },
         { href: "/dashboard/billing", label: "All Bills", icon: <Receipt className="h-4 w-4" />, permission: "billing.view" },
         { href: "/dashboard/stock", label: "Stock & Products", icon: <Boxes className="h-4 w-4" />, permission: "stock.view" },
+        { href: "/dashboard/suppliers", label: "Suppliers", icon: <Truck className="h-4 w-4" />, permission: "suppliers.manage" },
         { href: "/dashboard/operations", label: "Send Stock", icon: <PackageCheck className="h-4 w-4" />, permission: "transfers.receive" },
       ],
     },
     {
       title: "Customers",
       items: [
-        { href: "/dashboard/customers", label: "Customers & Suppliers", icon: <Users className="h-4 w-4" />, permission: "customers.view" },
+        { href: "/dashboard/customers", label: "Customers", icon: <Users className="h-4 w-4" />, permission: "customers.view" },
         { href: "/dashboard/enquiries", label: "Enquiries", icon: <Inbox className="h-4 w-4" />, permission: "enquiries.view" },
         { href: "/dashboard/storefront", label: "Website & Catalogue", icon: <Globe className="h-4 w-4" />, permission: "catalogue.export" },
       ],

@@ -46,6 +46,7 @@ export function CustomersClient({
   canManage,
   canManageSuppliers = false,
   initialTab = "customers",
+  mode = "both",
 }: {
   customers: CustomerWithStats[];
   suppliers?: SupplierLedgerRow[];
@@ -55,10 +56,11 @@ export function CustomersClient({
   canManage: boolean;
   canManageSuppliers?: boolean;
   initialTab?: "customers" | "suppliers";
+  mode?: "customers" | "suppliers" | "both";
   tenantName: string;
 }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<string>(initialTab);
+  const [activeTab, setActiveTab] = useState<string>(mode === "both" ? initialTab : mode);
 
   // Customer modal states
   const [addOpen, setAddOpen] = useState(false);
@@ -280,23 +282,27 @@ export function CustomersClient({
   const totalSupplierPayable = suppliers.reduce((s, sup) => s + Number(sup.current_due || 0), 0);
   const totalSupplierPurchased = suppliers.reduce((s, sup) => s + Number(sup.total_purchased || 0), 0);
 
+  const effectiveTab = mode === "both" ? activeTab : mode;
+
   return (
     <div className="space-y-4">
-      <Tabs
-        active={activeTab}
-        onChange={setActiveTab}
-        tabs={[
-          { id: "customers", label: "Customer Ledger", badge: customers.length },
-          { id: "suppliers", label: "Supplier Ledger", badge: suppliers.length },
-        ]}
-      />
+      {mode === "both" && (
+        <Tabs
+          active={activeTab}
+          onChange={setActiveTab}
+          tabs={[
+            { id: "customers", label: "Customer Ledger", badge: customers.length },
+            { id: "suppliers", label: "Supplier Ledger", badge: suppliers.length },
+          ]}
+        />
+      )}
 
-      {activeTab === "customers" ? (
+      {effectiveTab === "customers" ? (
         !customersEnabled ? (
           <TierLockOverlay featureKey="customer_crm" />
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <StatTray label="Customers" value={customers.length} unit="Active" footnote="Retail & wholesale dealers" />
               <StatTray
                 label="Receivable Due"
@@ -337,7 +343,7 @@ export function CustomersClient({
         <TierLockOverlay featureKey="supplier_and_production" />
       ) : (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <StatTray label="Suppliers" value={suppliers.length} unit="Vendors" footnote="Raw material & finished goods" />
             <StatTray
               label="Total Payable"
