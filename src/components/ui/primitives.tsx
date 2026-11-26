@@ -478,7 +478,15 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
                 data-tone={tone}
                 data-up={box.up || undefined}
                 className="ui-menu"
-                style={{ left: box.left, top: box.top, bottom: box.bottom, width: box.width, maxHeight: box.maxHeight }}
+                style={{
+                  left: box.left,
+                  top: box.top,
+                  bottom: box.bottom,
+                  width: box.width,
+                  maxHeight: box.maxHeight,
+                  backgroundColor: tone === "dark" ? "#18181b" : "#ffffff",
+                  zIndex: 10050,
+                }}
                 onKeyDown={onKeyDown}
               >
                 {searchable ? (

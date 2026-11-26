@@ -325,7 +325,7 @@ export function PartyLedgerClient({
               <tbody>
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-[#77777d]">
-                    No ledger entries yet. Record a bill, payment, or click &ldquo;+ Add Entry&rdquo; above.
+                    No ledger entries yet. {party.type === "supplier" ? 'Click "+ New Purchase Bill"' : "Record a bill"}, payment, or open &ldquo;More → Add Manual Entry&rdquo; above.
                   </td>
                 </tr>
               </tbody>

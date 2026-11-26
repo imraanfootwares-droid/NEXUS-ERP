@@ -25,6 +25,7 @@
     "@hookform/resolvers": "^4.1.0",
     "@neon/config": "^1.14.6",
     "@neon/env": "^2.1.9",
+    "@neondatabase/serverless": "^1.2.1",
     "@react-pdf/renderer": "^4.3.0",
     "@vinext/cloudflare": "latest",
     "@zxing/browser": "^0.1.5",

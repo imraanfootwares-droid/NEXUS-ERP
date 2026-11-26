@@ -1,4 +1,5 @@
 import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from "pg";
+import { Pool as NeonPool } from "@neondatabase/serverless";
 import { env, isConfigured } from "@/lib/env";
 import { createMockClient, mockQuery } from "@/lib/dev/mock-db";
 import { DEV_ROLE_COOKIE, isDevPreviewAllowed, parseDevPreviewRole } from "@/lib/dev/preview";
@@ -30,10 +31,19 @@ function createPool(max = 10): Pool {
   if (!env.DATABASE_URL) {
     throw new Error("DATABASE_URL is not configured.");
   }
+  if (isWorkersRuntime()) {
+    // Use Neon's WebSocket serverless driver on Cloudflare Workers so TLS runs natively
+    // in Cloudflare's network stack instead of burning JS CPU on pure-JS pg TCP+TLS handshakes.
+    return new NeonPool({
+      connectionString: env.DATABASE_URL,
+      max: 1,
+      connectionTimeoutMillis: 10_000,
+    }) as unknown as Pool;
+  }
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
     max,
-    idleTimeoutMillis: isWorkersRuntime() ? 5_000 : 20_000,
+    idleTimeoutMillis: 20_000,
     connectionTimeoutMillis: 10_000,
     ssl: env.DATABASE_URL.includes("localhost") || env.DATABASE_URL.includes("127.0.0.1")
       ? false

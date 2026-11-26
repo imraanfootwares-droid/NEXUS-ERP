@@ -332,10 +332,12 @@ export function ErpShell({
 
   const allNavItems = navGroups.flatMap((g) => g.items);
   // Longest match wins, so /billing/new highlights POS rather than Billing too.
-  const activeHref =
-    allNavItems
-      .filter((n) => pathname === n.href || (n.href !== "/dashboard" && pathname.startsWith(n.href + "/")))
-      .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? "/dashboard";
+  // Supplier ledger URLs live under /dashboard/customers/ledger/supplier/... but belong to Suppliers.
+  const activeHref = pathname.startsWith("/dashboard/customers/ledger/supplier")
+    ? "/dashboard/suppliers"
+    : allNavItems
+        .filter((n) => pathname === n.href || (n.href !== "/dashboard" && pathname.startsWith(n.href + "/")))
+        .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? "/dashboard";
   const currentSectionLabel = allNavItems.find((n) => n.href === activeHref)?.label ?? "Dashboard";
 
   const sidebarTone = uiStyle === "style_2" || uiStyle === "style_5" ? "dark" : "light";
@@ -368,6 +370,7 @@ export function ErpShell({
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               onClick={onClick}
               aria-current={active ? "page" : undefined}
               className={`flex min-h-[36px] items-center justify-between gap-2 rounded-[9px] px-2.5 py-[7px] text-[13px] transition-all duration-150 lg:min-h-[32px] ${

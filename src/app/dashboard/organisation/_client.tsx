@@ -119,6 +119,8 @@ export function DashboardOrganisationClient({
   } | null>(null);
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
   const [resetPw, setResetPw] = useState("");
+  const [optimisticPerms, setOptimisticPerms] = useState<Record<string, boolean>>({});
+  const [savingPermKey, setSavingPermKey] = useState<string | null>(null);
 
   const retailCount = branches.filter((b) => b.type === "retail").length;
   const factoryCount = branches.filter((b) => b.type === "factory").length;
@@ -686,19 +688,38 @@ export function DashboardOrganisationClient({
                           >
                             <span className="pr-2 font-medium text-[#171717]">{p.label}</span>
                             {(["branch_admin", "worker"] as const).map((role) => {
-                              const val = permLookup.get(`${role}:${p.key}`) ?? p[role];
+                              const permId = `${role}:${p.key}`;
+                              const val =
+                                permId in optimisticPerms
+                                  ? optimisticPerms[permId]
+                                  : permLookup.get(permId) ?? p[role];
+                              const isSavingThis = savingPermKey === permId;
                               return (
                                 <div key={role} className="flex justify-center">
                                   <button
                                     type="button"
-                                    disabled={!permissions["settings.staff_and_roles"]}
+                                    disabled={!permissions["settings.staff_and_roles"] || isSavingThis}
                                     role="checkbox"
                                     aria-checked={val}
                                     aria-label={`${p.label} for ${role === "branch_admin" ? "Branch Admin" : "Worker"}`}
                                     onClick={async () => {
-                                      await updateTenantRolePermissionAction(role, p.key, !val);
-                                      toast.success("Permission updated.");
-                                      router.refresh();
+                                      const nextVal = !val;
+                                      setOptimisticPerms((prev) => ({ ...prev, [permId]: nextVal }));
+                                      setSavingPermKey(permId);
+                                      try {
+                                        await updateTenantRolePermissionAction(role, p.key, nextVal);
+                                        toast.success("Permission updated.");
+                                        router.refresh();
+                                      } catch (err) {
+                                        setOptimisticPerms((prev) => {
+                                          const copy = { ...prev };
+                                          delete copy[permId];
+                                          return copy;
+                                        });
+                                        toast.error(err instanceof Error ? err.message : "Could not update permission.");
+                                      } finally {
+                                        setSavingPermKey(null);
+                                      }
                                     }}
                                     className={`inline-flex h-[18px] w-[18px] items-center justify-center rounded-[5px] cursor-pointer transition-all active:scale-90 disabled:opacity-50 ${
                                       val

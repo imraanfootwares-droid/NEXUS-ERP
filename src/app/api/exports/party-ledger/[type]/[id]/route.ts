@@ -1,15 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
-import * as XLSX from "xlsx";
 import { canAccess } from "@/lib/auth/access";
 import { getServerSessionContext } from "@/lib/auth/session";
 import { withTenantTx } from "@/lib/db";
 import { resolveLedgerConfig } from "@/lib/ledger/defaults";
 import { loadPartyLedger, type PartyType } from "@/lib/ledger/party-ledger";
-import { renderPartyLedgerPdfBuffer } from "@/lib/pdf/documents";
 import { fetchImageForPdf } from "@/lib/pdf/image-helper";
 import { getPublicAssetUrl } from "@/lib/storage/s3-client";
 
 export const runtime = "nodejs";
+
+function rowsToCsv(rows: Array<Record<string, string | number>>, fallbackHeaders: string[]): string {
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : fallbackHeaders;
+  const esc = (v: unknown) => {
+    const s = String(v ?? "");
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [headers.map(esc).join(",")];
+  for (const row of rows) {
+    lines.push(headers.map((h) => esc(row[h])).join(","));
+  }
+  return lines.join("\r\n");
+}
 
 export async function GET(
   request: NextRequest,
@@ -60,6 +71,7 @@ export async function GET(
       (rawLogoKey ? getPublicAssetUrl(rawLogoKey) : null);
     const pdfSafeLogo = await fetchImageForPdf(logoSource, { format: "png", maxDim: 160 });
 
+    const { renderPartyLedgerPdfBuffer } = await import("@/lib/pdf/documents");
     const pdf = await renderPartyLedgerPdfBuffer({
       tenantName: ctx.tenant.name,
       logoUrl: pdfSafeLogo,
@@ -142,30 +154,39 @@ export async function GET(
     }
   }
 
-  const wb = XLSX.utils.book_new();
-  const wsStatement = XLSX.utils.json_to_sheet(statementRows);
-  XLSX.utils.book_append_sheet(wb, wsStatement, "Ledger Statement");
-
-  if (format === "xlsx") {
-    if (itemRows.length > 0) {
-      const wsItems = XLSX.utils.json_to_sheet(itemRows);
-      XLSX.utils.book_append_sheet(wb, wsItems, "Item Breakdown");
-    }
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
-    return new NextResponse(new Uint8Array(buf), {
+  if (format === "csv") {
+    const csvHeaders = [
+      "Date & Time",
+      "Ch./Voc",
+      "Particulars",
+      ...activeHeaderFields.map((f) => f.label),
+      "Debit (INR)",
+      "Credit (INR)",
+      "Balance (INR)",
+      "Built By",
+    ];
+    const csv = rowsToCsv(statementRows, csvHeaders);
+    return new NextResponse(csv, {
       headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${fileBase}.xlsx"`,
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${fileBase}.csv"`,
       },
     });
   }
 
-  // CSV
-  const csv = XLSX.utils.sheet_to_csv(wsStatement);
-  return new NextResponse(csv, {
+  const XLSX = await import("xlsx");
+  const wb = XLSX.utils.book_new();
+  const wsStatement = XLSX.utils.json_to_sheet(statementRows);
+  XLSX.utils.book_append_sheet(wb, wsStatement, "Ledger Statement");
+  if (itemRows.length > 0) {
+    const wsItems = XLSX.utils.json_to_sheet(itemRows);
+    XLSX.utils.book_append_sheet(wb, wsItems, "Item Breakdown");
+  }
+  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  return new NextResponse(new Uint8Array(buf), {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${fileBase}.csv"`,
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${fileBase}.xlsx"`,
     },
   });
 }

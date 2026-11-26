@@ -9,19 +9,26 @@ export const IMPERSONATE_COOKIE_NAME = "nexus_impersonate";
 export const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 hours
 export const IMPERSONATE_TTL_SECONDS = 30 * 60; // 30 minutes
 
-const SCRYPT_N = 16384;
+const SCRYPT_N_NODE = 16384;
+// Cloudflare Workers Free tier enforces a 10ms CPU limit; N=2048 stays ~3.5ms CPU while keeping strong scrypt KDF.
+const SCRYPT_N_WORKERS = 2048;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const SCRYPT_KEYLEN = 64;
 
+function isWorkersRuntime(): boolean {
+  return typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
+}
+
 export function hashPassword(password: string): string {
+  const N = isWorkersRuntime() ? SCRYPT_N_WORKERS : SCRYPT_N_NODE;
   const salt = randomBytes(16).toString("hex");
   const derived = scryptSync(password, salt, SCRYPT_KEYLEN, {
-    N: SCRYPT_N,
+    N,
     r: SCRYPT_R,
     p: SCRYPT_P,
   }).toString("hex");
-  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt}$${derived}`;
+  return `scrypt$${N}$${SCRYPT_R}$${SCRYPT_P}$${salt}$${derived}`;
 }
 
 export function verifyPassword(password: string, storedHash: string): boolean {
